@@ -1,0 +1,211 @@
+"""
+SQLAlchemy ORM models.
+
+All date columns and foreign keys are indexed for query performance.
+JSON columns (secondary_muscles) use SQLAlchemy's JSON type, which stores
+as TEXT in SQLite and as jsonb in Postgres — no code change needed.
+"""
+from datetime import datetime, date
+from typing import Optional
+
+from sqlalchemy import (
+    Boolean, Date, DateTime, Float, ForeignKey,
+    Integer, JSON, String, Text, UniqueConstraint, Index,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db import Base
+
+
+# ---------------------------------------------------------------------------
+# Workout domain
+# ---------------------------------------------------------------------------
+
+class Exercise(Base):
+    __tablename__ = "exercise"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
+    primary_muscle: Mapped[Optional[str]] = mapped_column(String(100))
+    # Stored as a JSON array of strings, e.g. ["hamstrings", "glutes"]
+    secondary_muscles: Mapped[Optional[list]] = mapped_column(JSON, default=list)
+    equipment: Mapped[Optional[str]] = mapped_column(String(100))
+    is_custom: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+
+    # Relationships (back-populated for convenience)
+    routine_exercises: Mapped[list["RoutineExercise"]] = relationship(
+        back_populates="exercise"
+    )
+    session_exercises: Mapped[list["SessionExercise"]] = relationship(
+        back_populates="exercise"
+    )
+
+
+class Routine(Base):
+    __tablename__ = "routine"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    exercises: Mapped[list["RoutineExercise"]] = relationship(
+        back_populates="routine", cascade="all, delete-orphan",
+        order_by="RoutineExercise.position"
+    )
+    sessions: Mapped[list["Session"]] = relationship(back_populates="routine")
+
+
+class RoutineExercise(Base):
+    __tablename__ = "routine_exercise"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    routine_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("routine.id", ondelete="CASCADE"), index=True
+    )
+    exercise_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("exercise.id"), index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_sets: Mapped[int] = mapped_column(Integer, default=3)
+    target_rep_low: Mapped[int] = mapped_column(Integer, default=8)
+    target_rep_high: Mapped[int] = mapped_column(Integer, default=12)
+    rest_seconds: Mapped[int] = mapped_column(Integer, default=120)
+
+    routine: Mapped["Routine"] = relationship(back_populates="exercises")
+    exercise: Mapped["Exercise"] = relationship(back_populates="routine_exercises")
+
+
+class Session(Base):
+    """A single workout session (one gym visit)."""
+    __tablename__ = "session"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Nullable: an ad-hoc workout has no routine template
+    routine_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("routine.id"), index=True, nullable=True
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True
+    )
+    ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+
+    routine: Mapped[Optional["Routine"]] = relationship(back_populates="sessions")
+    exercises: Mapped[list["SessionExercise"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan",
+        order_by="SessionExercise.position"
+    )
+
+
+class SessionExercise(Base):
+    """An exercise slot within a live session."""
+    __tablename__ = "session_exercise"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    session_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("session.id", ondelete="CASCADE"), index=True
+    )
+    exercise_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("exercise.id"), index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    session: Mapped["Session"] = relationship(back_populates="exercises")
+    exercise: Mapped["Exercise"] = relationship(back_populates="session_exercises")
+    sets: Mapped[list["Set"]] = relationship(
+        back_populates="session_exercise", cascade="all, delete-orphan",
+        order_by="Set.set_number"
+    )
+
+
+class Set(Base):
+    """One set within a session exercise (e.g. 3rd set of bench press)."""
+    __tablename__ = "set"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    session_exercise_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("session_exercise.id", ondelete="CASCADE"), index=True
+    )
+    set_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    weight_kg: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    reps: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # RPE (Rate of Perceived Exertion) 1-10, optional
+    rpe: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    is_warmup: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    session_exercise: Mapped["SessionExercise"] = relationship(back_populates="sets")
+
+
+# ---------------------------------------------------------------------------
+# Health & nutrition (one row per date; upsert on re-import)
+# ---------------------------------------------------------------------------
+
+class WeightLog(Base):
+    __tablename__ = "weight_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    date: Mapped[date] = mapped_column(Date, unique=True, nullable=False, index=True)
+    weight_kg: Mapped[float] = mapped_column(Float, nullable=False)
+    # 'apple_health' | 'manual'
+    source: Mapped[str] = mapped_column(String(50), default="manual")
+
+
+class StepsLog(Base):
+    __tablename__ = "steps_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    date: Mapped[date] = mapped_column(Date, unique=True, nullable=False, index=True)
+    steps: Mapped[int] = mapped_column(Integer, nullable=False)
+    source: Mapped[str] = mapped_column(String(50), default="manual")
+
+
+class SleepLog(Base):
+    __tablename__ = "sleep_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    date: Mapped[date] = mapped_column(Date, unique=True, nullable=False, index=True)
+    asleep_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    in_bed_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    deep_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    rem_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    core_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    source: Mapped[str] = mapped_column(String(50), default="manual")
+
+
+class NutritionDay(Base):
+    __tablename__ = "nutrition_day"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    date: Mapped[date] = mapped_column(Date, unique=True, nullable=False, index=True)
+    calories: Mapped[float] = mapped_column(Float, nullable=False)
+    protein_g: Mapped[float] = mapped_column(Float, nullable=False)
+    carbs_g: Mapped[float] = mapped_column(Float, nullable=False)
+    fat_g: Mapped[float] = mapped_column(Float, nullable=False)
+    # 'yazio' | 'manual'
+    source: Mapped[str] = mapped_column(String(50), default="manual")
+
+
+# ---------------------------------------------------------------------------
+# App settings (single row, id=1 always)
+# ---------------------------------------------------------------------------
+
+class AppSettings(Base):
+    __tablename__ = "settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    calorie_target: Mapped[int] = mapped_column(Integer, default=2400)
+    protein_target_g: Mapped[int] = mapped_column(Integer, default=180)
+    fat_max_g: Mapped[int] = mapped_column(Integer, default=100)
+    # 'metric' | 'imperial'
+    unit_system: Mapped[str] = mapped_column(String(20), default="metric")
+    # Timestamp of last successful YAZIO sync
+    yazio_last_sync: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Timestamp of last YAZIO sync attempt that failed (for UI warning)
+    yazio_last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

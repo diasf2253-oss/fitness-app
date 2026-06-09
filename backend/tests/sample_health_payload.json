@@ -1,0 +1,45 @@
+{
+  "data": {
+    "metrics": [
+      {
+        "name": "step_count",
+        "units": "count",
+        "data": [
+          { "date": "2026-06-07 00:00:00 +0000", "qty": 8432 },
+          { "date": "2026-06-08 00:00:00 +0000", "qty": 11205 }
+        ]
+      },
+      {
+        "name": "weight_body_mass",
+        "units": "kg",
+        "data": [
+          { "date": "2026-06-07 07:30:00 +0000", "qty": 84.2 },
+          { "date": "2026-06-08 07:15:00 +0000", "qty": 84.0 }
+        ]
+      },
+      {
+        "name": "sleep_analysis",
+        "units": "min",
+        "data": [
+          {
+            "date": "2026-06-07 00:00:00 +0000",
+            "asleep": 427,
+            "inBed": 465,
+            "deep": 68,
+            "rem": 95,
+            "core": 264
+          },
+          {
+            "date": "2026-06-08 00:00:00 +0000",
+            "asleep": 398,
+            "inBed": 450,
+            "deep": 55,
+            "rem": 88,
+            "core": 255
+          }
+        ]
+      }
+    ],
+    "workouts": []
+  }
+}
