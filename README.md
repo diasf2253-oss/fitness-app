@@ -2,6 +2,15 @@
 
 A single-user fitness tracker with workout logging, Apple Health ingest, and YAZIO nutrition sync.
 
+## Status
+
+- **Phase 0** — Project skeleton (FastAPI + Vite/React + Alembic). ✅
+- **Phase 1** — Workout tracker: exercise library, routine templates, live session
+  logging with rest timer and prefill, history, and per-exercise progress charts
+  (estimated 1RM + volume) with PR detection. ✅
+- **Phase 2+** — Manual health/nutrition entry, dashboard, Apple Health ingest, YAZIO
+  sync. _Planned (endpoints below are scaffolding)._
+
 ---
 
 ## Prerequisites
@@ -38,6 +47,9 @@ pip install -r requirements.txt
 
 # Run database migrations (creates fitness.sqlite3 and all tables)
 alembic upgrade head
+
+# Seed the exercise library, routine templates, and default settings
+python -m app.seed
 
 # Start the API server (runs on http://localhost:8000)
 uvicorn app.main:app --reload --port 8000

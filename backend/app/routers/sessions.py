@@ -86,6 +86,24 @@ def start_session(
     return session
 
 
+@router.get("/active", response_model=Optional[SessionOut])
+def get_active_session(
+    db: DBSession = Depends(get_db),
+    _: None = Depends(require_auth),
+):
+    """
+    Return the most recent in-progress session (ended_at is NULL), or null.
+    The workout screen calls this on load so an interrupted workout resumes
+    after a browser refresh or tab close.
+    """
+    return (
+        db.query(Session)
+        .filter(Session.ended_at.is_(None))
+        .order_by(Session.started_at.desc())
+        .first()
+    )
+
+
 @router.get("", response_model=list[SessionSummary])
 def list_sessions(
     limit: int = Query(50, ge=1, le=200),

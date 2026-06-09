@@ -3,7 +3,9 @@ import { Routes, Route, NavLink } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Workout from './pages/Workout'
 import Routines from './pages/Routines'
+import Exercises from './pages/Exercises'
 import History from './pages/History'
+import ExerciseDetail from './pages/ExerciseDetail'
 import Settings from './pages/Settings'
 
 // Bottom navigation items
@@ -20,11 +22,13 @@ export default function App() {
     <>
       <div className="main-content">
         <Routes>
-          <Route path="/"         element={<Dashboard />} />
-          <Route path="/workout"  element={<Workout />} />
-          <Route path="/routines" element={<Routines />} />
-          <Route path="/history"  element={<History />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/"             element={<Dashboard />} />
+          <Route path="/workout"      element={<Workout />} />
+          <Route path="/routines"     element={<Routines />} />
+          <Route path="/exercises"    element={<Exercises />} />
+          <Route path="/history"      element={<History />} />
+          <Route path="/exercise/:id" element={<ExerciseDetail />} />
+          <Route path="/settings"     element={<Settings />} />
         </Routes>
       </div>
 

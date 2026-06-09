@@ -271,3 +271,21 @@ class SyncResult(BaseModel):
     days_synced: int
     rows_upserted: int
     message: str
+
+
+class PRHit(BaseModel):
+    """A PR achieved during a specific session."""
+    exercise_id: int
+    exercise_name: str
+    kind: str           # 'heaviest' | 'best_1rm' | 'best_volume'
+    value: float
+    previous_best: Optional[float] = None  # None if this is the first ever record
+
+
+class SessionSummaryStats(BaseModel):
+    """Computed summary shown when a workout is finished."""
+    session_id: int
+    duration_minutes: Optional[int] = None
+    total_volume_kg: float
+    completed_sets: int
+    prs_hit: list[PRHit] = []
