@@ -125,6 +125,7 @@ function StartScreen({ onStarted, setError, error }) {
 function ActiveSession({ session, setSession, refresh, onFinish, error, setError }) {
   const [showPicker, setShowPicker] = useState(false)
   const [restSeconds, setRestSeconds] = useState(null)   // active rest timer duration, or null
+  const [restKey, setRestKey] = useState(0)              // bumped only when a set completes, to (re)start the timer
   const [restByExercise, setRestByExercise] = useState({})  // exercise_id -> rest seconds (from routine)
   const [elapsed, setElapsed] = useState('')
   const navigate = useNavigate()
@@ -164,6 +165,13 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
 
   function restForExercise(exerciseId) {
     return restByExercise[exerciseId] ?? 120  // default 120s
+  }
+
+  // Start (or restart) the rest timer for a given exercise. Bumping restKey
+  // remounts the timer so it counts down from the full duration again.
+  function startRest(exerciseId) {
+    setRestSeconds(restForExercise(exerciseId))
+    setRestKey(k => k + 1)
   }
 
   // Add an exercise mid-workout
@@ -240,7 +248,7 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
             se={se}
             onChanged={refresh}
             onRemove={() => removeExercise(se.id)}
-            onSetCompleted={() => setRestSeconds(restForExercise(se.exercise_id))}
+            onSetCompleted={() => startRest(se.exercise_id)}
             setError={setError}
           />
         ))}
@@ -264,7 +272,7 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
 
       {restSeconds !== null && (
         <RestTimer
-          key={Date.now()}          // restart timer each time a set completes
+          key={restKey}             // stable across re-renders; only changes when a set completes
           seconds={restSeconds}
           onClose={() => setRestSeconds(null)}
         />
@@ -305,6 +313,15 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, setE
     }
   }
 
+  async function deleteSet(setId) {
+    try {
+      await apiFetch(`/api/sessions/${sessionId}/exercises/${se.id}/sets/${setId}`, { method: 'DELETE' })
+      onChanged()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   return (
     <div className="card" style={{ margin: 0 }}>
       <div className="row">
@@ -320,8 +337,9 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, setE
         <span style={{ width: 28, textAlign: 'center' }}>Set</span>
         <span style={{ flex: 1 }}>kg</span>
         <span style={{ flex: 1 }}>reps</span>
-        <span style={{ width: 52, textAlign: 'center' }}>RPE</span>
+        <span style={{ width: 48, textAlign: 'center' }}>RPE</span>
         <span style={{ width: 44, textAlign: 'center' }}>✓</span>
+        <span style={{ width: 30 }} />
       </div>
 
       <div className="col" style={{ gap: '0.4rem', marginTop: '0.25rem' }}>
@@ -334,6 +352,7 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, setE
             prev={prevFor(set.set_number)}
             onChanged={onChanged}
             onCompleted={onSetCompleted}
+            onDelete={() => deleteSet(set.id)}
             setError={setError}
           />
         ))}
@@ -350,7 +369,7 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, setE
 // Single set row — weight, reps, RPE, warmup, complete checkbox
 // ---------------------------------------------------------------------------
 
-function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, setError }) {
+function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, setError }) {
   // Local input state. Initialise from the set; if untouched (0) leave blank
   // so the previous-session value shows as a placeholder.
   const [weight, setWeight] = useState(set.weight_kg || '')
@@ -445,7 +464,7 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, setError }
         onBlur={saveField}
       />
       <input
-        style={{ width: 52, minHeight: 36, textAlign: 'center', padding: '0.3rem' }}
+        style={{ width: 48, minHeight: 36, textAlign: 'center', padding: '0.3rem' }}
         type="number" inputMode="decimal"
         placeholder="–"
         value={rpe}
@@ -461,6 +480,18 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, setError }
         }}
       >
         ✓
+      </button>
+      {/* Delete this set — muted and slim to avoid mis-taps next to ✓ */}
+      <button
+        onClick={onDelete}
+        title="Delete set"
+        style={{
+          width: 30, minWidth: 30, height: 36, minHeight: 36, padding: 0,
+          background: 'transparent', border: 'none',
+          color: 'var(--color-muted)', fontSize: '0.95rem',
+        }}
+      >
+        ✕
       </button>
     </div>
   )
