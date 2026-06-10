@@ -188,7 +188,7 @@ class NutritionDay(Base):
     protein_g: Mapped[float] = mapped_column(Float, nullable=False)
     carbs_g: Mapped[float] = mapped_column(Float, nullable=False)
     fat_g: Mapped[float] = mapped_column(Float, nullable=False)
-    # 'yazio' | 'manual'
+    # 'apple_health' | 'manual' (nutrition syncs in via Apple Health from Phase 3)
     source: Mapped[str] = mapped_column(String(50), default="manual")
 
 
@@ -205,7 +205,3 @@ class AppSettings(Base):
     fat_max_g: Mapped[int] = mapped_column(Integer, default=100)
     # 'metric' | 'imperial'
     unit_system: Mapped[str] = mapped_column(String(20), default="metric")
-    # Timestamp of last successful YAZIO sync
-    yazio_last_sync: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    # Timestamp of last YAZIO sync attempt that failed (for UI warning)
-    yazio_last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

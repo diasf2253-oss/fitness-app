@@ -15,8 +15,11 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.auth import require_auth
 from app.db import get_db
-from app.models import SleepLog, StepsLog, WeightLog
-from app.schemas import SleepLogCreate, SleepLogOut, StepsLogCreate, StepsLogOut, WeightLogCreate, WeightLogOut
+from app.models import NutritionDay, SleepLog, StepsLog, WeightLog
+from app.schemas import (
+    NutritionDayOut, SleepLogCreate, SleepLogOut,
+    StepsLogCreate, StepsLogOut, WeightLogCreate, WeightLogOut,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +27,12 @@ router = APIRouter(tags=["health"])
 
 
 # ---------------------------------------------------------------------------
-# Upsert helpers — idempotent: re-sending the same data changes nothing
+# Upsert helpers — idempotent: re-sending the same data changes nothing.
+#
+# Last-write-wins for now. Phase 3 hook: when the Apple Health ingest should
+# stop overwriting rows the user corrected by hand, branch here on the
+# existing row's source ('manual' beats 'apple_health') instead of always
+# overwriting — every writer funnels through these helpers.
 # ---------------------------------------------------------------------------
 
 def upsert_weight(db: DBSession, day: date, weight_kg: float, source: str) -> bool:
@@ -312,3 +320,20 @@ def log_sleep_manual(
     )
     db.commit()
     return db.query(SleepLog).filter(SleepLog.date == body.date).first()
+
+
+@router.get("/api/health/nutrition", response_model=list[NutritionDayOut])
+def get_nutrition_log(
+    days: int = Query(30, ge=1, le=365),
+    db: DBSession = Depends(get_db),
+    _: None = Depends(require_auth),
+):
+    """Same data as GET /api/nutrition, exposed under the /api/health/* scheme."""
+    from datetime import timedelta
+    since = date.today() - timedelta(days=days)
+    return (
+        db.query(NutritionDay)
+        .filter(NutritionDay.date >= since)
+        .order_by(NutritionDay.date)
+        .all()
+    )

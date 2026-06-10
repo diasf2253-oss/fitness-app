@@ -1,6 +1,7 @@
 # Personal Fitness & Health App
 
-A single-user fitness tracker with workout logging, Apple Health ingest, and YAZIO nutrition sync.
+A single-user life tracker: workout logging, health & nutrition dashboard,
+with Apple Health as the single source for all health data.
 
 ## Status
 
@@ -8,8 +9,13 @@ A single-user fitness tracker with workout logging, Apple Health ingest, and YAZ
 - **Phase 1** — Workout tracker: exercise library, routine templates, live session
   logging with rest timer and prefill, history, and per-exercise progress charts
   (estimated 1RM + volume) with PR detection. ✅
-- **Phase 2+** — Manual health/nutrition entry, dashboard, Apple Health ingest, YAZIO
-  sync. _Planned (endpoints below are scaffolding)._
+- **Phase 2** — Health & nutrition data layer + Dashboard v1: weight / steps /
+  sleep / nutrition tables with date-keyed upserts, manual logging UI,
+  one-call dashboard endpoint, sample-data utility. ✅
+- **Phase 3** — Apple Health ingest for everything: weight, steps, sleep, and
+  nutrition (calories, macros, micronutrients). YAZIO writes into Apple Health
+  on the phone, so **YAZIO is not integrated directly — and never will be**.
+  _Planned._
 
 ---
 
@@ -17,7 +23,7 @@ A single-user fitness tracker with workout logging, Apple Health ingest, and YAZ
 
 - Python 3.12+
 - Node.js 20+
-- (Optional) `cloudflared` or `ngrok` for Apple Health remote ingest
+- (Optional, Phase 3) `cloudflared` or `ngrok` for Apple Health remote ingest
 
 ---
 
@@ -30,7 +36,7 @@ cd fitness-app
 
 # Copy and fill in your secrets
 cp backend/.env.example backend/.env
-# Edit backend/.env: set APP_TOKEN, YAZIO_EMAIL, YAZIO_PASSWORD
+# Edit backend/.env: set APP_TOKEN
 ```
 
 ### 2. Backend
@@ -81,28 +87,76 @@ pytest tests/ -v
 
 ---
 
-## Apple Health ingest (Health Auto Export)
+## API overview
 
-### How it works
+All routes require `Authorization: Bearer <APP_TOKEN>` except `/api/ping`.
 
-Install the **Health Auto Export** iOS app (healthyapps.dev). Configure an automation to POST your Apple Health data to this backend.
+### Dashboard
 
-### Configuration steps
+| Route | Purpose |
+| --- | --- |
+| `GET /api/dashboard` | Everything the home screen needs in one call: weight (90 d series + 7-day moving average), steps (14 d), sleep (14 d), today's nutrition + targets, this week's training volume and recent PRs. Every section returns sensible empty values when no data exists. |
+
+### Health & nutrition (Phase 2)
+
+One row per date; POSTs are **idempotent upserts by date** (re-posting a date
+updates it). Manual entries write `source='manual'`; the Phase 3 Apple Health
+ingest writes `source='apple_health'`.
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/health/weight?days=N` | Weight series (default 90) |
+| `POST /api/health/weight` | Log/correct a day's weight |
+| `GET /api/health/steps?days=N` | Steps series (default 14) |
+| `POST /api/health/steps` | Log/correct a day's steps |
+| `GET /api/health/sleep?days=N` | Sleep series (default 14) |
+| `POST /api/health/sleep` | Log/correct a night's sleep |
+| `GET /api/health/nutrition?days=N` | Nutrition series (default 30) |
+| `GET /api/nutrition?days=N` / `POST /api/nutrition` | Same table, original route |
+
+### Sample data (dev utility)
+
+Preview the dashboard before real data exists. Rows are tagged
+`source='sample'`, so clearing never touches manual or synced data.
+The UI buttons live under **Settings → Developer**.
+
+```bash
+# Load ~30 days of realistic weight/steps/sleep/nutrition (idempotent)
+curl -X POST http://localhost:8000/api/dev/seed-sample-health \
+  -H "Authorization: Bearer changeme"
+
+# Remove exactly the seeded rows
+curl -X DELETE http://localhost:8000/api/dev/seed-sample-health \
+  -H "Authorization: Bearer changeme"
+```
+
+### Workouts (Phase 1)
+
+Exercises, routines, sessions, sets, and stats live under `/api/exercises`,
+`/api/routines`, `/api/sessions`, and `/api/stats/*` — see the routers in
+`backend/app/routers/` or the auto-generated docs at http://localhost:8000/docs.
+
+---
+
+## Apple Health ingest (Phase 3 — partial support already)
+
+All health **and nutrition** data arrives via Apple Health: YAZIO syncs food
+(including micronutrients) into Apple Health on the phone, Apple Health pushes
+to this backend. There is no YAZIO integration and no YAZIO credentials.
+
+A first version of the ingest endpoint already accepts steps, weight, and
+sleep from the **Health Auto Export** iOS app (healthyapps.dev); nutrition
+metrics land in Phase 3.
 
 1. Open Health Auto Export → Automations → Add Automation
 2. **Export format**: JSON
 3. **URL**: `http://<your-tunnel-url>/api/ingest/health`
 4. **Method**: POST
 5. **Headers**: `Authorization: Bearer <your APP_TOKEN from .env>`
-6. **Metrics to select** (at minimum):
-   - `step_count`
-   - `weight_body_mass`
-   - `sleep_analysis`
+6. **Metrics**: `step_count`, `weight_body_mass`, `sleep_analysis`
 7. **Schedule**: Daily (e.g. every morning)
 
-### Tunnel (so your phone can reach your Mac)
-
-Your phone and Mac must be reachable from the same URL. Use one of:
+Your phone must be able to reach your Mac:
 
 ```bash
 # Option A: cloudflared (free, no account needed for quick tunnels)
@@ -112,11 +166,8 @@ cloudflared tunnel --url http://localhost:8000
 ngrok http 8000
 ```
 
-Copy the generated HTTPS URL and use it as the base in Health Auto Export.
-
-### Test without your phone
-
-A sample payload is at `backend/tests/sample_health_payload.json`. Test with:
+Test without a phone using the sample payload (idempotent — re-running adds
+no duplicate rows):
 
 ```bash
 curl -X POST http://localhost:8000/api/ingest/health \
@@ -125,28 +176,8 @@ curl -X POST http://localhost:8000/api/ingest/health \
   -d @backend/tests/sample_health_payload.json
 ```
 
-Re-running the same curl should produce no duplicate rows (idempotent).
-
----
-
-## YAZIO sync
-
-With `YAZIO_EMAIL` and `YAZIO_PASSWORD` set in `.env`, trigger a manual sync:
-
-```bash
-# Sync last 3 days (default)
-curl -X POST http://localhost:8000/api/sync/yazio \
-  -H "Authorization: Bearer changeme"
-
-# Sync last 7 days
-curl -X POST "http://localhost:8000/api/sync/yazio?days=7" \
-  -H "Authorization: Bearer changeme"
-```
-
-An APScheduler job runs automatically at 23:30 local time each day, syncing the last 2 days.
-
 ---
 
 ## Environment variables
 
-See `backend/.env.example` for all required variables.
+See `backend/.env.example` — just `APP_TOKEN` and `DATABASE_URL`.

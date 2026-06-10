@@ -7,6 +7,7 @@ import Exercises from './pages/Exercises'
 import History from './pages/History'
 import ExerciseDetail from './pages/ExerciseDetail'
 import Settings from './pages/Settings'
+import Log from './pages/Log'
 
 // Crisp stroke icons (inherit currentColor → active tab turns orange for free)
 const Icon = {
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="/exercises"    element={<Exercises />} />
           <Route path="/history"      element={<History />} />
           <Route path="/exercise/:id" element={<ExerciseDetail />} />
+          <Route path="/log"          element={<Log />} />
           <Route path="/settings"     element={<Settings />} />
         </Routes>
       </div>

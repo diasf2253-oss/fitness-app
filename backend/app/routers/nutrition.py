@@ -1,6 +1,7 @@
 """
 Nutrition log endpoints (manual entry + read).
-YAZIO sync writes to the same table with source='yazio'.
+The Apple Health ingest (Phase 3) writes to the same table with
+source='apple_health' — YAZIO's data reaches us through Apple Health.
 
 GET  /api/nutrition          — last N days
 POST /api/nutrition          — upsert one day's macros

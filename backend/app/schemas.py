@@ -251,8 +251,6 @@ class AppSettingsOut(OrmBase):
     protein_target_g: int
     fat_max_g: int
     unit_system: str
-    yazio_last_sync: Optional[datetime] = None
-    yazio_last_error: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -265,12 +263,6 @@ class PRRecord(BaseModel):
     heaviest_weight_kg: float
     best_estimated_1rm: float
     best_set_volume: float  # weight × reps for one set
-
-
-class SyncResult(BaseModel):
-    days_synced: int
-    rows_upserted: int
-    message: str
 
 
 class PRHit(BaseModel):
@@ -289,3 +281,69 @@ class SessionSummaryStats(BaseModel):
     total_volume_kg: float
     completed_sets: int
     prs_hit: list[PRHit] = []
+
+
+# ---------------------------------------------------------------------------
+# Dashboard (Phase 2) — one payload for the whole home screen
+# ---------------------------------------------------------------------------
+
+class WeightPoint(BaseModel):
+    date: date
+    weight_kg: float
+
+
+class MovingAvgPoint(BaseModel):
+    date: date
+    avg_kg: float
+
+
+class DashboardWeight(BaseModel):
+    series: list[WeightPoint] = []
+    moving_avg_7d: list[MovingAvgPoint] = []
+
+
+class StepsPoint(BaseModel):
+    date: date
+    steps: int
+
+
+class SleepPoint(BaseModel):
+    date: date
+    asleep_hours: float
+
+
+class NutritionToday(BaseModel):
+    """Today's intake; `logged` is False when nothing was recorded yet."""
+    date: date
+    logged: bool
+    calories: float = 0.0
+    protein_g: float = 0.0
+    carbs_g: float = 0.0
+    fat_g: float = 0.0
+
+
+class DashboardTargets(BaseModel):
+    calorie_target: int
+    protein_target_g: int
+    fat_max_g: int
+    unit_system: str
+
+
+class RecentPR(PRHit):
+    """A PR hit, annotated with the session date it happened on."""
+    date: date
+
+
+class DashboardTraining(BaseModel):
+    week_volume_kg: float = 0.0
+    sessions_this_week: int = 0
+    recent_prs: list[RecentPR] = []
+
+
+class DashboardOut(BaseModel):
+    weight: DashboardWeight
+    steps: list[StepsPoint] = []
+    sleep: list[SleepPoint] = []
+    nutrition_today: NutritionToday
+    targets: DashboardTargets
+    training: DashboardTraining

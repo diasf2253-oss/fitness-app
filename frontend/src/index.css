@@ -70,6 +70,7 @@
   line-height: 1.55;
   color: var(--color-text);
   background: var(--color-bg);
+  color-scheme: dark; /* native widgets (date picker, scrollbars) match the theme */
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
