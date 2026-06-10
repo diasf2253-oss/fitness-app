@@ -12,10 +12,11 @@ with Apple Health as the single source for all health data.
 - **Phase 2** — Health & nutrition data layer + Dashboard v1: weight / steps /
   sleep / nutrition tables with date-keyed upserts, manual logging UI,
   one-call dashboard endpoint, sample-data utility. ✅
-- **Phase 3** — Apple Health ingest for everything: weight, steps, sleep, and
-  nutrition (calories, macros, micronutrients). YAZIO writes into Apple Health
-  on the phone, so **YAZIO is not integrated directly — and never will be**.
-  _Planned._
+- **Phase 3** — Full Apple Health ingest: weight, steps, sleep, and nutrition
+  down to micronutrients via Health Auto Export pushes, plus a one-time
+  export.zip history backfill. Manual corrections always beat synced data.
+  YAZIO writes into Apple Health on the phone, so **YAZIO is not integrated
+  directly — and never will be**. ✅
 
 ---
 
@@ -100,8 +101,12 @@ All routes require `Authorization: Bearer <APP_TOKEN>` except `/api/ping`.
 ### Health & nutrition (Phase 2)
 
 One row per date; POSTs are **idempotent upserts by date** (re-posting a date
-updates it). Manual entries write `source='manual'`; the Phase 3 Apple Health
-ingest writes `source='apple_health'`.
+updates it). Manual entries write `source='manual'`; the Apple Health ingest
+writes `source='apple_health'`. **Precedence:** a manually corrected day is
+only ever replaced by another manual write — syncs and sample data can't
+overwrite it (rule lives in the upsert helpers in `routers/health.py`).
+Nutrition rows carry a `micros` JSON column with canonical unit-suffixed
+keys (`fiber_g`, `sodium_mg`, `vitamin_d_ug`, …).
 
 | Route | Purpose |
 | --- | --- |
@@ -138,22 +143,27 @@ Exercises, routines, sessions, sets, and stats live under `/api/exercises`,
 
 ---
 
-## Apple Health ingest (Phase 3 — partial support already)
+## Apple Health ingest (Phase 3)
 
 All health **and nutrition** data arrives via Apple Health: YAZIO syncs food
 (including micronutrients) into Apple Health on the phone, Apple Health pushes
 to this backend. There is no YAZIO integration and no YAZIO credentials.
 
-A first version of the ingest endpoint already accepts steps, weight, and
-sleep from the **Health Auto Export** iOS app (healthyapps.dev); nutrition
-metrics land in Phase 3.
+### Daily push — Health Auto Export
+
+Set up the **Health Auto Export** iOS app (healthyapps.dev) once; the in-app
+instructions also live under Settings → Apple Health sync.
 
 1. Open Health Auto Export → Automations → Add Automation
 2. **Export format**: JSON
 3. **URL**: `http://<your-tunnel-url>/api/ingest/health`
 4. **Method**: POST
 5. **Headers**: `Authorization: Bearer <your APP_TOKEN from .env>`
-6. **Metrics**: `step_count`, `weight_body_mass`, `sleep_analysis`
+6. **Metrics**: `step_count`, `weight_body_mass`, `sleep_analysis`, plus the
+   dietary ones you track — `dietary_energy`, `protein`, `carbohydrates`,
+   `total_fat`, `fiber`, `sugar`, `sodium`, `cholesterol`, vitamins and
+   minerals (see `HAE_NUTRITION` in `backend/app/health_metrics.py` for the
+   full list). Units are normalized on ingest (kJ→kcal, g/mg/µg).
 7. **Schedule**: Daily (e.g. every morning)
 
 Your phone must be able to reach your Mac:
@@ -175,6 +185,21 @@ curl -X POST http://localhost:8000/api/ingest/health \
   -H "Content-Type: application/json" \
   -d @backend/tests/sample_health_payload.json
 ```
+
+### History backfill — export.zip
+
+Import your entire Apple Health history once: Health app → profile picture →
+**Export All Health Data**, then upload the resulting `export.zip` under
+Settings → Apple Health sync → History backfill (or POST it to
+`/api/ingest/health-export` as multipart `file`). The XML is stream-parsed,
+so multi-hundred-MB exports are fine.
+
+De-duplication: overlapping sources (iPhone + Watch both counting steps,
+multiple sleep writers) are totalled per source and the highest single
+source wins each day — no double counting. Weight takes the day's last
+reading; sleep intervals attribute to the wake-up morning; nutrition keeps
+the best source per day. Re-importing is idempotent, and manually corrected
+days are never overwritten.
 
 ---
 

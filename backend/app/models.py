@@ -188,7 +188,10 @@ class NutritionDay(Base):
     protein_g: Mapped[float] = mapped_column(Float, nullable=False)
     carbs_g: Mapped[float] = mapped_column(Float, nullable=False)
     fat_g: Mapped[float] = mapped_column(Float, nullable=False)
-    # 'apple_health' | 'manual' (nutrition syncs in via Apple Health from Phase 3)
+    # Micronutrients as {"fiber_g": 31.2, "sodium_mg": 2300, ...} — canonical
+    # keys carry their unit suffix so the UI never has to guess units.
+    micros: Mapped[Optional[dict]] = mapped_column(JSON, default=dict)
+    # 'apple_health' | 'manual' (nutrition syncs in via Apple Health)
     source: Mapped[str] = mapped_column(String(50), default="manual")
 
 
@@ -205,3 +208,5 @@ class AppSettings(Base):
     fat_max_g: Mapped[int] = mapped_column(Integer, default=100)
     # 'metric' | 'imperial'
     unit_system: Mapped[str] = mapped_column(String(20), default="metric")
+    # When the last successful Apple Health ingest ran (push or backfill)
+    health_last_ingest: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

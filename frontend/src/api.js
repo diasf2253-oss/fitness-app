@@ -50,3 +50,28 @@ export async function apiFetch(path, options = {}) {
 
   return response.json()
 }
+
+/**
+ * Multipart upload variant (file uploads). Same auth handling, but no
+ * Content-Type header — the browser must set the multipart boundary.
+ */
+export async function apiUpload(path, formData) {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${getToken()}` },
+    body: formData,
+  })
+
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`
+    try {
+      const err = await response.json()
+      detail = err.detail || JSON.stringify(err)
+    } catch (_) {
+      // ignore JSON parse errors on error responses
+    }
+    throw new Error(detail)
+  }
+
+  return response.json()
+}

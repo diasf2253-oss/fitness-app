@@ -75,6 +75,18 @@ def seed_sample_health(
             protein_g=protein,
             carbs_g=carbs,
             fat_g=fat,
+            # A plausible micronutrient spread (canonical unit-suffixed keys)
+            micros={
+                "fiber_g": rng.randint(22, 40),
+                "sugar_g": rng.randint(40, 90),
+                "sat_fat_g": rng.randint(15, 30),
+                "sodium_mg": rng.randint(1800, 3200),
+                "potassium_mg": rng.randint(2500, 4200),
+                "calcium_mg": rng.randint(700, 1300),
+                "iron_mg": round(rng.uniform(9, 19), 1),
+                "vitamin_c_mg": rng.randint(50, 160),
+                "vitamin_d_ug": round(rng.uniform(4, 16), 1),
+            },
             source=SAMPLE_SOURCE,
         ))
 

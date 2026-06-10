@@ -104,6 +104,7 @@ def get_dashboard(
         protein_g=nut_row.protein_g if nut_row else 0.0,
         carbs_g=nut_row.carbs_g if nut_row else 0.0,
         fat_g=nut_row.fat_g if nut_row else 0.0,
+        micros=(nut_row.micros or {}) if nut_row else {},
     )
 
     s = get_or_create_settings(db)

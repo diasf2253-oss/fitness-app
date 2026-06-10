@@ -221,6 +221,9 @@ class NutritionDayCreate(BaseModel):
     protein_g: float
     carbs_g: float
     fat_g: float
+    # Optional micronutrients; omitting it on a manual macro correction
+    # preserves whatever micros Apple Health already synced for that day
+    micros: Optional[dict] = None
     source: str = "manual"
 
 
@@ -231,6 +234,7 @@ class NutritionDayOut(OrmBase):
     protein_g: float
     carbs_g: float
     fat_g: float
+    micros: Optional[dict] = None
     source: str
 
 
@@ -251,6 +255,7 @@ class AppSettingsOut(OrmBase):
     protein_target_g: int
     fat_max_g: int
     unit_system: str
+    health_last_ingest: Optional[datetime] = None
 
 
 # ---------------------------------------------------------------------------
@@ -320,6 +325,7 @@ class NutritionToday(BaseModel):
     protein_g: float = 0.0
     carbs_g: float = 0.0
     fat_g: float = 0.0
+    micros: dict = {}
 
 
 class DashboardTargets(BaseModel):

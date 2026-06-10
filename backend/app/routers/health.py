@@ -1,20 +1,25 @@
 """
-Apple Health ingest endpoint + health data read endpoints.
+Apple Health ingest endpoints + health data read endpoints.
 
-POST /api/ingest/health      — receives Health Auto Export JSON, upserts rows
-GET  /api/health/weight      — weight log (paginated, date range)
-GET  /api/health/steps       — steps log
-GET  /api/health/sleep       — sleep log
+All health data — weight, steps, sleep, and nutrition including
+micronutrients — arrives through Apple Health (YAZIO feeds it on-phone).
+
+POST /api/ingest/health         — Health Auto Export JSON push (daily)
+POST /api/ingest/health-export  — export.zip/.xml upload (history backfill)
+GET  /api/health/weight|steps|sleep|nutrition — date-range series
+POST /api/health/weight|steps|sleep           — manual upserts
 """
 import logging
+from collections import defaultdict
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy.orm import Session as DBSession
 
 from app.auth import require_auth
 from app.db import get_db
+from app.health_metrics import HAE_NUTRITION, convert_amount, upsert_nutrition_partial
 from app.models import NutritionDay, SleepLog, StepsLog, WeightLog
 from app.schemas import (
     NutritionDayOut, SleepLogCreate, SleepLogOut,
@@ -29,15 +34,23 @@ router = APIRouter(tags=["health"])
 # ---------------------------------------------------------------------------
 # Upsert helpers — idempotent: re-sending the same data changes nothing.
 #
-# Last-write-wins for now. Phase 3 hook: when the Apple Health ingest should
-# stop overwriting rows the user corrected by hand, branch here on the
-# existing row's source ('manual' beats 'apple_health') instead of always
-# overwriting — every writer funnels through these helpers.
+# Source precedence (Phase 3): a day the user corrected by hand
+# (source='manual') is only ever overwritten by another manual write —
+# the correction exists precisely because the synced value was wrong.
+# apple_health and sample writes overwrite each other freely.
+# Every writer funnels through these helpers, so the rule lives here only.
 # ---------------------------------------------------------------------------
+
+def _manual_wins(row, source: str) -> bool:
+    """True when an existing manual row should block this write."""
+    return row is not None and row.source == "manual" and source != "manual"
+
 
 def upsert_weight(db: DBSession, day: date, weight_kg: float, source: str) -> bool:
     """Insert or update weight_log for a given date. Returns True if new row."""
     row = db.query(WeightLog).filter(WeightLog.date == day).first()
+    if _manual_wins(row, source):
+        return False
     if row:
         row.weight_kg = weight_kg
         row.source = source
@@ -48,6 +61,8 @@ def upsert_weight(db: DBSession, day: date, weight_kg: float, source: str) -> bo
 
 def upsert_steps(db: DBSession, day: date, steps: int, source: str) -> bool:
     row = db.query(StepsLog).filter(StepsLog.date == day).first()
+    if _manual_wins(row, source):
+        return False
     if row:
         row.steps = steps
         row.source = source
@@ -67,6 +82,8 @@ def upsert_sleep(
     source: str,
 ) -> bool:
     row = db.query(SleepLog).filter(SleepLog.date == day).first()
+    if _manual_wins(row, source):
+        return False
     if row:
         row.asleep_minutes = asleep_minutes
         row.in_bed_minutes = in_bed_minutes
@@ -87,6 +104,12 @@ def upsert_sleep(
     return True
 
 
+def touch_last_ingest(db: DBSession) -> None:
+    """Record the time of the last successful Apple Health ingest."""
+    from app.routers.settings import get_or_create_settings
+    get_or_create_settings(db).health_last_ingest = datetime.utcnow()
+
+
 # ---------------------------------------------------------------------------
 # Ingest
 # ---------------------------------------------------------------------------
@@ -104,16 +127,20 @@ def ingest_health(
     Each metric: {"name": "step_count", "units": "count", "data": [...points]}
     Each point has a "date" string and quantity fields.
 
-    Handles: step_count, weight_body_mass, sleep_analysis
+    Handles: step_count, weight_body_mass, sleep_analysis, and every
+    nutrition metric in health_metrics.HAE_NUTRITION (macros + micros).
     Unknown metrics are ignored (logged).
 
-    Re-sending the same payload is safe (idempotent upserts).
+    Re-sending the same payload is safe (idempotent upserts), and days
+    the user corrected manually are never overwritten.
     """
     start_ts = datetime.utcnow()
     metrics = payload.get("data", {}).get("metrics", [])
     upserted = 0
     handled_names = set()
     unknown_names = set()
+    # Nutrition accumulates across metrics; one upsert per day at the end
+    nutrition_acc: dict[date, dict[str, float]] = defaultdict(dict)
 
     for metric in metrics:
         name = metric.get("name", "")
@@ -154,7 +181,6 @@ def ingest_health(
             handled_names.add(name)
             # Health Auto Export sends per-stage intervals; aggregate per night.
             # The "night" is keyed to the calendar date the sleep started on.
-            from collections import defaultdict
             nights: dict[date, dict] = defaultdict(lambda: {
                 "asleep": 0, "in_bed": 0, "deep": 0, "rem": 0, "core": 0
             })
@@ -190,9 +216,30 @@ def ingest_health(
                 if new:
                     upserted += 1
 
+        elif name in HAE_NUTRITION:
+            handled_names.add(name)
+            key = HAE_NUTRITION[name]
+            for pt in data_points:
+                try:
+                    d = _parse_date(pt.get("date", ""))
+                    qty = float(pt.get("qty", pt.get("value", 0)))
+                    amount = convert_amount(qty, units, key)
+                    if amount is None:
+                        logger.warning("nutrition %s: unknown unit %r, skipped", name, units)
+                        continue
+                    day_values = nutrition_acc[d]
+                    day_values[key] = day_values.get(key, 0.0) + amount
+                except Exception as e:
+                    logger.warning("nutrition point parse error: %s — %s", pt, e)
+
         else:
             unknown_names.add(name)
 
+    for d, values in nutrition_acc.items():
+        if upsert_nutrition_partial(db, d, values, "apple_health"):
+            upserted += 1
+
+    touch_last_ingest(db)
     db.commit()
     elapsed = (datetime.utcnow() - start_ts).total_seconds()
 
@@ -232,6 +279,32 @@ def _parse_date(date_str: str) -> date:
             pass
     # Last resort: take just the date part
     return date.fromisoformat(s[:10])
+
+
+# ---------------------------------------------------------------------------
+# History backfill — Apple Health "Export All Health Data" upload
+# ---------------------------------------------------------------------------
+
+@router.post("/api/ingest/health-export")
+def ingest_health_export(
+    file: UploadFile = File(...),
+    db: DBSession = Depends(get_db),
+    _: None = Depends(require_auth),
+):
+    """
+    One-time history import. Accepts the export.zip produced by the
+    Health app (profile → "Export All Health Data") or a bare export.xml.
+    Stream-parsed, so multi-hundred-MB exports are fine. Idempotent, and
+    manually corrected days survive untouched.
+    """
+    from app.health_xml import import_export_file
+
+    result = import_export_file(file.file, file.filename or "", db)
+    if result.get("status") == "ok":
+        touch_last_ingest(db)
+        db.commit()
+    logger.info("Health export backfill: %s", result)
+    return result
 
 
 # ---------------------------------------------------------------------------

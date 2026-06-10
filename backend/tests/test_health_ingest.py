@@ -78,10 +78,13 @@ class TestHealthIngest:
         r = post_sample()
         assert r.status_code == 200
         data = r.json()
-        assert data["rows_upserted"] == 6  # 2 weight + 2 steps + 2 sleep
+        # 2 weight + 2 steps + 2 sleep + 2 nutrition days
+        assert data["rows_upserted"] == 8
         assert "step_count" in data["metrics_handled"]
         assert "weight_body_mass" in data["metrics_handled"]
         assert "sleep_analysis" in data["metrics_handled"]
+        assert "dietary_energy" in data["metrics_handled"]
+        assert "sodium" in data["metrics_handled"]
 
     def test_weight_stored_correctly(self):
         post_sample()

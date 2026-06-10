@@ -68,6 +68,75 @@ function MacroBar({ label, value, target, over }) {
 
 const PR_LABEL = { heaviest: 'Heaviest', best_1rm: 'Est. 1RM', best_volume: 'Set volume' }
 
+// Micronutrient display: canonical keys are unit-suffixed (sodium_mg).
+// Order roughly: fibre/sugars → fats → minerals → vitamins → misc.
+const MICRO_ORDER = [
+  'fiber', 'sugar', 'sat_fat', 'mono_fat', 'poly_fat', 'cholesterol',
+  'sodium', 'potassium', 'calcium', 'magnesium', 'iron', 'zinc',
+  'vitamin_a', 'vitamin_c', 'vitamin_d', 'vitamin_e', 'vitamin_k',
+  'vitamin_b6', 'vitamin_b12', 'thiamin', 'riboflavin', 'niacin',
+  'folate', 'caffeine', 'water',
+]
+const MICRO_NAMES = {
+  fiber: 'Fiber', sugar: 'Sugar', sat_fat: 'Saturated fat',
+  mono_fat: 'Monounsat. fat', poly_fat: 'Polyunsat. fat',
+  cholesterol: 'Cholesterol', sodium: 'Sodium', potassium: 'Potassium',
+  calcium: 'Calcium', magnesium: 'Magnesium', iron: 'Iron', zinc: 'Zinc',
+  vitamin_a: 'Vitamin A', vitamin_c: 'Vitamin C', vitamin_d: 'Vitamin D',
+  vitamin_e: 'Vitamin E', vitamin_k: 'Vitamin K', vitamin_b6: 'Vitamin B6',
+  vitamin_b12: 'Vitamin B12', thiamin: 'Thiamin', riboflavin: 'Riboflavin',
+  niacin: 'Niacin', folate: 'Folate', caffeine: 'Caffeine', water: 'Water',
+}
+const MICRO_UNITS = { g: 'g', mg: 'mg', ug: 'µg', ml: 'ml' }
+
+function microEntries(micros) {
+  return Object.entries(micros)
+    .map(([key, value]) => {
+      const idx = key.lastIndexOf('_')
+      const name = key.slice(0, idx)
+      return {
+        key,
+        label: MICRO_NAMES[name] || name.replace(/_/g, ' '),
+        unit: MICRO_UNITS[key.slice(idx + 1)] || '',
+        value,
+        order: MICRO_ORDER.indexOf(name),
+      }
+    })
+    .sort((a, b) => (a.order === -1 ? 99 : a.order) - (b.order === -1 ? 99 : b.order))
+}
+
+function MicroList({ micros }) {
+  const [open, setOpen] = useState(false)
+  const entries = microEntries(micros)
+  if (entries.length === 0) return null
+  return (
+    <div style={{ marginTop: '0.4rem' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          background: 'transparent', boxShadow: 'none', color: 'var(--color-muted)',
+          padding: '0.3rem 0', minHeight: 0, fontSize: '0.72rem',
+          letterSpacing: '0.1em', textTransform: 'uppercase',
+        }}
+      >
+        Micronutrients ({entries.length}) {open ? '▴' : '▾'}
+      </button>
+      {open && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.3rem 1.25rem', marginTop: '0.4rem' }}>
+          {entries.map(e => (
+            <div key={e.key} className="row" style={{ justifyContent: 'space-between', gap: '0.4rem' }}>
+              <span className="muted" style={{ fontSize: '0.78rem' }}>{e.label}</span>
+              <span className="tnum" style={{ fontSize: '0.78rem' }}>
+                {e.value} {e.unit}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -125,6 +194,7 @@ export default function Dashboard() {
                 <MacroBar label="Calories" value={nut.calories} target={targets.calorie_target} over={nut.calories > targets.calorie_target} />
                 <MacroBar label="Protein" value={nut.protein_g} target={targets.protein_target_g} />
                 <MacroBar label="Fat (cap)" value={nut.fat_g} target={targets.fat_max_g} over={nut.fat_g > targets.fat_max_g} />
+                <MicroList micros={nut.micros || {}} />
               </>
             ) : (
               <EmptyNote>Nothing logged today. <Link to="/log">Log manually ›</Link></EmptyNote>

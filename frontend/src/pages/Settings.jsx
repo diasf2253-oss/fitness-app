@@ -1,26 +1,76 @@
 /**
  * Settings page.
  * - API token config
- * - Health data: link to the manual Log page; Apple Health sync lands in
- *   Phase 3 (YAZIO feeds Apple Health, so no separate nutrition sync).
- * - Developer utilities: load/clear ~30 days of sample health data to
- *   preview the dashboard before real data exists.
+ * - Apple Health sync: last-sync status, Health Auto Export setup steps,
+ *   and the one-time export.zip history backfill upload
+ * - Manual log link
+ * - Developer utilities: load/clear sample health data
  */
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { apiFetch, setToken } from '../api'
+import { apiFetch, apiUpload, setToken } from '../api'
+
+function fmtTimestamp(iso) {
+  if (!iso) return null
+  // Backend stores naive UTC — mark it so the browser converts to local
+  return new Date(iso + 'Z').toLocaleString(undefined, {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  })
+}
 
 export default function Settings() {
   const [token, setTokenState] = useState(localStorage.getItem('app_token') || 'changeme')
   const [saved, setSaved] = useState(false)
+
+  const [lastIngest, setLastIngest] = useState(null)
+  const [importFile, setImportFile] = useState(null)
+  const [importBusy, setImportBusy] = useState(false)
+  const [importMsg, setImportMsg] = useState(null)
+  const fileRef = useRef(null)
+
   const [sampleBusy, setSampleBusy] = useState(false)
   const [sampleMsg, setSampleMsg] = useState(null)
+
+  useEffect(() => {
+    apiFetch('/api/settings')
+      .then(s => setLastIngest(s.health_last_ingest))
+      .catch(() => {})  // non-critical; card just shows "never"
+  }, [])
 
   function handleSave(e) {
     e.preventDefault()
     setToken(token)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  async function runImport() {
+    if (!importFile) return
+    setImportBusy(true)
+    setImportMsg(null)
+    try {
+      const form = new FormData()
+      form.append('file', importFile)
+      const r = await apiUpload('/api/ingest/health-export', form)
+      if (r.status === 'ok') {
+        const d = r.days
+        setImportMsg(
+          `Imported ${r.date_range.from ?? '—'} → ${r.date_range.to ?? '—'}: ` +
+          `${d.weight} weight, ${d.steps} step, ${d.sleep} sleep, ${d.nutrition} nutrition days ` +
+          `(${r.rows_created} new rows).`
+        )
+        const s = await apiFetch('/api/settings')
+        setLastIngest(s.health_last_ingest)
+      } else {
+        setImportMsg(`Error: ${r.detail || 'import failed'}`)
+      }
+      setImportFile(null)
+      if (fileRef.current) fileRef.current.value = ''
+    } catch (err) {
+      setImportMsg(`Error: ${err.message}`)
+    } finally {
+      setImportBusy(false)
+    }
   }
 
   async function loadSample() {
@@ -74,11 +124,63 @@ export default function Settings() {
       </div>
 
       <div className="card">
-        <h2>Health data</h2>
+        <div className="row" style={{ marginBottom: '0.5rem' }}>
+          <h2 style={{ margin: 0, flex: 1 }}>Apple Health sync</h2>
+          <span className={`badge${lastIngest ? ' success' : ''}`}>
+            {lastIngest ? `synced ${fmtTimestamp(lastIngest)}` : 'never synced'}
+          </span>
+        </div>
         <p className="muted">
-          Weight, steps, sleep and nutrition will sync automatically from
-          Apple Health in Phase 3 — YAZIO already writes into it. Until then,
-          add or correct days by hand.
+          Everything — weight, steps, sleep, and nutrition down to
+          micronutrients (YAZIO writes into Apple Health) — syncs from your
+          phone. Set up the <strong>Health Auto Export</strong> app once:
+        </p>
+        <ol className="muted" style={{ fontSize: '0.85rem', paddingLeft: '1.25rem', margin: '0.6rem 0' }}>
+          <li>Automations → new automation, format <strong>JSON</strong></li>
+          <li>URL: <code>{window.location.origin}/api/ingest/health</code> (use your tunnel URL from the phone)</li>
+          <li>Header: <code>Authorization: Bearer &lt;your token&gt;</code></li>
+          <li>Select metrics: steps, weight, sleep, plus the dietary ones</li>
+          <li>Schedule it daily</li>
+        </ol>
+
+        <hr />
+
+        <h3>History backfill</h3>
+        <p className="muted" style={{ marginBottom: '0.6rem' }}>
+          Import your full history once: Health app → profile picture →
+          “Export All Health Data”, then upload the <code>export.zip</code> here.
+          Days you corrected manually are never overwritten.
+        </p>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".zip,.xml"
+          style={{ display: 'none' }}
+          onChange={e => setImportFile(e.target.files?.[0] || null)}
+        />
+        <div className="row">
+          <button className="secondary" style={{ flex: 1 }} onClick={() => fileRef.current?.click()}>
+            {importFile ? importFile.name : 'Choose export.zip'}
+          </button>
+          <button onClick={runImport} disabled={!importFile || importBusy} style={{ minWidth: 110 }}>
+            {importBusy ? 'Importing…' : 'Import'}
+          </button>
+        </div>
+        {importBusy && (
+          <p className="muted" style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
+            Large exports can take a minute — leave this page open.
+          </p>
+        )}
+        {importMsg && (
+          <p className="muted" style={{ marginTop: '0.6rem', fontSize: '0.8rem' }}>{importMsg}</p>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Manual log</h2>
+        <p className="muted">
+          Add or correct individual days by hand — manual entries always win
+          over synced data.
         </p>
         <Link to="/log">
           <button className="secondary" style={{ width: '100%', marginTop: '0.75rem' }}>
