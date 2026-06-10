@@ -14,7 +14,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import dashboard, dev, exercises, health, nutrition, routines, sessions
+from app.routers import calendar, dashboard, dev, exercises, health, nutrition, routines, sessions
 from app.routers import settings as settings_router
 from app.routers import stats
 
@@ -62,5 +62,6 @@ app.include_router(stats.router)
 app.include_router(health.router)
 app.include_router(nutrition.router)
 app.include_router(dashboard.router)
+app.include_router(calendar.router)
 app.include_router(dev.router)
 app.include_router(settings_router.router)

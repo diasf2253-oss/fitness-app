@@ -353,3 +353,41 @@ class DashboardOut(BaseModel):
     nutrition_today: NutritionToday
     targets: DashboardTargets
     training: DashboardTraining
+
+
+# ---------------------------------------------------------------------------
+# Calendar + day detail (Phase 4) — desktop right rail
+# ---------------------------------------------------------------------------
+
+class CalendarDay(BaseModel):
+    """Markers for one day that has any data. Days without data are omitted."""
+    date: date
+    sessions: int = 0
+    steps: Optional[int] = None
+    has_weight: bool = False
+    has_sleep: bool = False
+    has_nutrition: bool = False
+
+
+class MonthCalendarOut(BaseModel):
+    year: int
+    month: int
+    days: list[CalendarDay] = []
+
+
+class DaySession(BaseModel):
+    """One workout on the selected day, summarized via Phase 1 stats."""
+    id: int
+    name: str
+    duration_minutes: Optional[int] = None
+    total_volume_kg: float
+    completed_sets: int
+
+
+class DayDetailOut(BaseModel):
+    date: date
+    sessions: list[DaySession] = []
+    weight_kg: Optional[float] = None
+    steps: Optional[int] = None
+    sleep: Optional[SleepLogOut] = None
+    nutrition: Optional[NutritionDayOut] = None

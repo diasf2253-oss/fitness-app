@@ -14,6 +14,7 @@ import {
 } from 'recharts'
 import { apiFetch } from '../api'
 import { Loading, ErrorBox } from '../components/States'
+import MonthCalendar from '../components/MonthCalendar'
 
 // Chart palette — mirrors the "Quiet Tracker" CSS tokens
 const GRID = 'rgba(236,233,224,0.07)'
@@ -67,6 +68,84 @@ function MacroBar({ label, value, target, over }) {
 }
 
 const PR_LABEL = { heaviest: 'Heaviest', best_1rm: 'Est. 1RM', best_volume: 'Set volume' }
+
+// Local calendar date (toISOString alone would shift near midnight)
+function localTodayIso() {
+  const d = new Date()
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+}
+
+/**
+ * DayDetail — everything recorded on the calendar-selected day.
+ * Lives in the dashboard rail under the month calendar.
+ */
+function DayDetail({ date }) {
+  const [detail, setDetail] = useState(null)
+
+  useEffect(() => {
+    setDetail(null)
+    apiFetch(`/api/day/${date}`)
+      .then(setDetail)
+      .catch(() => setDetail(null))
+  }, [date])
+
+  const title = new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+  })
+
+  const hasAnything = detail && (
+    detail.sessions.length > 0 || detail.weight_kg != null ||
+    detail.steps != null || detail.sleep || detail.nutrition
+  )
+
+  const Row = ({ label, children }) => (
+    <div className="row" style={{ justifyContent: 'space-between', padding: '0.22rem 0' }}>
+      <span className="muted" style={{ fontSize: '0.8rem' }}>{label}</span>
+      <span className="tnum" style={{ fontSize: '0.82rem' }}>{children}</span>
+    </div>
+  )
+
+  return (
+    <div className="card">
+      <div className="row" style={{ marginBottom: '0.4rem' }}>
+        <h3 style={{ margin: 0, flex: 1 }}>{title}</h3>
+        <Link to={`/log?date=${date}`} style={{ fontSize: '0.75rem' }}>Edit ›</Link>
+      </div>
+
+      {!detail && <p className="muted" style={{ fontSize: '0.8rem' }}>Loading…</p>}
+
+      {detail && detail.sessions.map(s => (
+        <div key={s.id} style={{ padding: '0.35rem 0', borderBottom: '1px solid var(--color-border)' }}>
+          <div style={{ fontSize: '0.88rem', fontWeight: 500 }}>{s.name}</div>
+          <div className="muted" style={{ fontSize: '0.75rem' }}>
+            {Math.round(s.total_volume_kg).toLocaleString()} kg · {s.completed_sets} sets
+            {s.duration_minutes != null && ` · ${s.duration_minutes} min`}
+          </div>
+        </div>
+      ))}
+
+      {detail && (
+        <div style={{ marginTop: '0.35rem' }}>
+          {detail.weight_kg != null && <Row label="Weight">{detail.weight_kg} kg</Row>}
+          {detail.steps != null && <Row label="Steps">{detail.steps.toLocaleString()}</Row>}
+          {detail.sleep && <Row label="Sleep">{Math.round(detail.sleep.asleep_minutes / 6) / 10} h</Row>}
+          {detail.nutrition && (
+            <Row label="Intake">
+              {Math.round(detail.nutrition.calories)} kcal · {Math.round(detail.nutrition.protein_g)}P
+              /{Math.round(detail.nutrition.carbs_g)}C/{Math.round(detail.nutrition.fat_g)}F
+            </Row>
+          )}
+        </div>
+      )}
+
+      {detail && !hasAnything && (
+        <p className="muted" style={{ fontSize: '0.8rem', padding: '0.4rem 0' }}>
+          Nothing recorded this day.
+        </p>
+      )}
+    </div>
+  )
+}
 
 // Micronutrient display: canonical keys are unit-suffixed (sodium_mg).
 // Order roughly: fibre/sugars → fats → minerals → vitamins → misc.
@@ -141,6 +220,7 @@ export default function Dashboard() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [selectedDay, setSelectedDay] = useState(localTodayIso())
 
   useEffect(() => {
     apiFetch('/api/dashboard')
@@ -166,7 +246,7 @@ export default function Dashboard() {
   const targets = data?.targets
 
   return (
-    <div className="page">
+    <div className="page wide">
       {/* Editorial hero — quiet, dated, personal */}
       <span className="badge dot">{dateLabel}</span>
       <h1 style={{ fontSize: '2.4rem', marginTop: '0.9rem' }}>
@@ -178,7 +258,8 @@ export default function Dashboard() {
       {loading && <Loading />}
 
       {data && (
-        <>
+        <div className="dash-grid">
+          <div className="dash-widgets">
           {/* ---- Nutrition today ---- */}
           <div className="card">
             <div className="row" style={{ marginBottom: '0.75rem' }}>
@@ -201,8 +282,44 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* ---- Weight trend ---- */}
+          {/* ---- Training ---- */}
           <div className="card">
+            <div className="row" style={{ marginBottom: '0.6rem' }}>
+              <h3 style={{ margin: 0, flex: 1 }}>Training</h3>
+              <WidgetLabel>last 7 days</WidgetLabel>
+            </div>
+            <div className="row" style={{ justifyContent: 'space-around', textAlign: 'center', marginBottom: '0.5rem' }}>
+              <div>
+                <div className="stat-num" style={{ fontSize: '1.8rem' }}>{Math.round(data.training.week_volume_kg).toLocaleString()}</div>
+                <WidgetLabel>kg volume</WidgetLabel>
+              </div>
+              <div>
+                <div className="stat-num" style={{ fontSize: '1.8rem' }}>{data.training.sessions_this_week}</div>
+                <WidgetLabel>sessions</WidgetLabel>
+              </div>
+            </div>
+            {data.training.recent_prs.length > 0 ? (
+              <>
+                <hr />
+                {data.training.recent_prs.map((pr, i) => (
+                  <div key={i} className="row" style={{ padding: '0.3rem 0' }}>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontSize: '0.9rem' }}>{pr.exercise_name}</span>
+                      <span className="muted" style={{ fontSize: '0.75rem', marginLeft: 6 }}>{PR_LABEL[pr.kind] || pr.kind}</span>
+                    </div>
+                    <span className="text-success tnum" style={{ fontWeight: 600, fontSize: '0.9rem' }}>{pr.value}</span>
+                  </div>
+                ))}
+              </>
+            ) : (
+              data.training.sessions_this_week === 0 && (
+                <EmptyNote>No workouts this week. <Link to="/workout">Start one ›</Link></EmptyNote>
+              )
+            )}
+          </div>
+
+          {/* ---- Weight trend ---- */}
+          <div className="card span-2">
             <div className="row" style={{ marginBottom: '0.5rem' }}>
               <h3 style={{ margin: 0, flex: 1 }}>Weight</h3>
               <WidgetLabel>90 days · 7-day avg</WidgetLabel>
@@ -265,42 +382,14 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* ---- Training ---- */}
-          <div className="card">
-            <div className="row" style={{ marginBottom: '0.6rem' }}>
-              <h3 style={{ margin: 0, flex: 1 }}>Training</h3>
-              <WidgetLabel>last 7 days</WidgetLabel>
-            </div>
-            <div className="row" style={{ justifyContent: 'space-around', textAlign: 'center', marginBottom: '0.5rem' }}>
-              <div>
-                <div className="stat-num" style={{ fontSize: '1.8rem' }}>{Math.round(data.training.week_volume_kg).toLocaleString()}</div>
-                <WidgetLabel>kg volume</WidgetLabel>
-              </div>
-              <div>
-                <div className="stat-num" style={{ fontSize: '1.8rem' }}>{data.training.sessions_this_week}</div>
-                <WidgetLabel>sessions</WidgetLabel>
-              </div>
-            </div>
-            {data.training.recent_prs.length > 0 ? (
-              <>
-                <hr />
-                {data.training.recent_prs.map((pr, i) => (
-                  <div key={i} className="row" style={{ padding: '0.3rem 0' }}>
-                    <div style={{ flex: 1 }}>
-                      <span style={{ fontSize: '0.9rem' }}>{pr.exercise_name}</span>
-                      <span className="muted" style={{ fontSize: '0.75rem', marginLeft: 6 }}>{PR_LABEL[pr.kind] || pr.kind}</span>
-                    </div>
-                    <span className="text-success tnum" style={{ fontWeight: 600, fontSize: '0.9rem' }}>{pr.value}</span>
-                  </div>
-                ))}
-              </>
-            ) : (
-              data.training.sessions_this_week === 0 && (
-                <EmptyNote>No workouts this week. <Link to="/workout">Start one ›</Link></EmptyNote>
-              )
-            )}
           </div>
-        </>
+
+          {/* ---- Right rail: calendar + selected-day detail ---- */}
+          <aside className="rail">
+            <MonthCalendar selected={selectedDay} onSelect={setSelectedDay} />
+            <DayDetail date={selectedDay} />
+          </aside>
+        </div>
       )}
     </div>
   )

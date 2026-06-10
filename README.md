@@ -17,6 +17,14 @@ with Apple Health as the single source for all health data.
   export.zip history backfill. Manual corrections always beat synced data.
   YAZIO writes into Apple Health on the phone, so **YAZIO is not integrated
   directly — and never will be**. ✅
+- **Phase 4** — Desktop experience: workspace sidebar at ≥1024px, dashboard
+  widget grid, right-rail month calendar with data markers and per-day
+  detail (`GET /api/calendar/{year}/{month}`, `GET /api/day/{date}`). Phone
+  layout unchanged; both devices share the same backend, so they are always
+  in sync. ✅ (4a/4b — desktop polish of remaining pages ongoing)
+- **Phase 5+** — Always-on deployment + installable PWA; more life-tracking
+  domains (habits, mood, journal, custom metrics); insights & correlations.
+  _Planned._
 
 ---
 

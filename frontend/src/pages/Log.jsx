@@ -6,7 +6,7 @@
  * automatically from Apple Health.
  */
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../api'
 import { ErrorBox } from '../components/States'
 
@@ -64,7 +64,9 @@ function Field({ label, children }) {
 
 export default function Log() {
   const navigate = useNavigate()
-  const [date, setDate] = useState(localToday())
+  // The dashboard calendar links here with ?date=YYYY-MM-DD ("Edit ›")
+  const [searchParams] = useSearchParams()
+  const [date, setDate] = useState(searchParams.get('date') || localToday())
 
   const [weight, setWeight] = useState('')
   const [steps, setSteps] = useState('')
