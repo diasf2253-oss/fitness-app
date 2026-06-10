@@ -72,35 +72,39 @@ export default function RestTimer({ seconds, onDone, onClose }) {
     <div
       style={{
         position: 'fixed',
-        bottom: 'calc(70px + env(safe-area-inset-bottom))',
-        left: 0,
-        right: 0,
+        bottom: 'calc(86px + env(safe-area-inset-bottom))',
+        left: 14,
+        right: 14,
+        maxWidth: 560,
+        margin: '0 auto',
         background: isDone ? 'var(--color-success)' : 'var(--color-primary)',
-        color: '#fff',
-        padding: '0.75rem 1rem',
+        color: 'var(--color-on-primary)',
+        padding: '0.55rem 0.6rem 0.55rem 1.2rem',
+        borderRadius: 'var(--radius-pill)',
         display: 'flex',
         alignItems: 'center',
-        gap: '0.5rem',
+        gap: '0.45rem',
         zIndex: 150,
-        boxShadow: '0 -2px 10px rgba(0,0,0,0.3)',
+        boxShadow: 'var(--shadow-lg)',
       }}
     >
-      <span style={{ fontSize: '1.4rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', minWidth: 64 }}>
-        {isDone ? 'Done!' : fmt(remaining)}
+      <span style={{ fontSize: '1.35rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', minWidth: 64 }}>
+        {isDone ? 'Done' : fmt(remaining)}
+      </span>
+      <span style={{ fontSize: '0.72rem', letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.65 }}>
+        rest
       </span>
       <span className="spacer" />
       {!isDone && (
         <>
           <button
-            className="secondary"
-            style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', minWidth: 56 }}
+            style={{ background: 'rgba(27,33,29,0.10)', color: 'var(--color-on-primary)', minWidth: 56, boxShadow: 'none' }}
             onClick={() => setRemaining(r => Math.max(0, r - 15))}
           >
             −15
           </button>
           <button
-            className="secondary"
-            style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', minWidth: 56 }}
+            style={{ background: 'rgba(27,33,29,0.10)', color: 'var(--color-on-primary)', minWidth: 56, boxShadow: 'none' }}
             onClick={() => setRemaining(r => r + 15)}
           >
             +15
@@ -108,8 +112,7 @@ export default function RestTimer({ seconds, onDone, onClose }) {
         </>
       )}
       <button
-        className="secondary"
-        style={{ background: 'rgba(0,0,0,0.25)', color: '#fff' }}
+        style={{ background: 'rgba(27,33,29,0.18)', color: 'var(--color-on-primary)', boxShadow: 'none' }}
         onClick={onClose}
       >
         {isDone ? 'Dismiss' : 'Skip'}

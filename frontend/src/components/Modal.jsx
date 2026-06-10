@@ -11,7 +11,9 @@ export default function Modal({ title, onClose, children }) {
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.7)',
+        background: 'rgba(10, 14, 12, 0.6)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
         display: 'flex',
         alignItems: 'flex-end',
         justifyContent: 'center',
@@ -22,14 +24,15 @@ export default function Modal({ title, onClose, children }) {
         onClick={e => e.stopPropagation()}  // don't close when clicking inside
         style={{
           background: 'var(--color-surface)',
-          borderTopLeftRadius: 16,
-          borderTopRightRadius: 16,
-          border: '1px solid var(--color-border)',
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+          border: '1px solid var(--color-border-str)',
           width: '100%',
           maxWidth: 680,
           maxHeight: '85dvh',
           overflowY: 'auto',
-          padding: '1rem',
+          padding: '1.1rem 1.1rem calc(1.1rem + env(safe-area-inset-bottom))',
+          boxShadow: 'var(--shadow-lg)',
         }}
       >
         <div className="row" style={{ marginBottom: '0.75rem' }}>

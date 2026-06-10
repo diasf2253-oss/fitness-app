@@ -94,8 +94,8 @@ export default function Exercises() {
                   </div>
                 </div>
                 {ex.is_custom && (
-                  <button className="danger" style={{ minWidth: 44, padding: '0.4rem 0.6rem' }} onClick={() => handleDelete(ex.id)}>
-                    🗑
+                  <button className="danger" style={{ minWidth: 44, padding: '0.4rem 0.6rem' }} onClick={() => handleDelete(ex.id)} title="Delete exercise">
+                    ✕
                   </button>
                 )}
               </div>

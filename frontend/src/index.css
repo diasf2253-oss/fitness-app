@@ -1,5 +1,10 @@
 /* =========================================================
-   Global styles — clean, mobile-first, no UI kit required
+   Design system — "Quiet Tracker"
+   Calm, editorial, premium. Deep green-charcoal base with a
+   soft sage mist, bone ink, serif display type with italic
+   accents, pill-shaped actions, hairline borders.
+   The opposite of a loud gym app: it speaks softly.
+   Mobile-first, no UI kit.
    ========================================================= */
 
 *, *::before, *::after {
@@ -9,96 +14,166 @@
 }
 
 :root {
-  --color-bg:         #0f0f0f;
-  --color-surface:    #1a1a1a;
-  --color-surface2:   #242424;
-  --color-border:     #333;
-  --color-text:       #f0f0f0;
-  --color-muted:      #888;
-  --color-primary:    #4f8ef7;
-  --color-primary-dk: #3a7ae0;
-  --color-success:    #3dba6f;
-  --color-danger:     #e05252;
-  --color-warning:    #e0a030;
+  /* ---- Surfaces (deep green-charcoal, never pure black) ---- */
+  --color-bg:       #151b18;
+  --color-surface:  #1d2521;   /* cards */
+  --color-surface2: #273029;   /* inputs, wells */
+  --color-elevated: #2f3a33;   /* hover / raised */
+
+  /* ---- Hairlines + ink ---- */
+  --color-border:     rgba(236, 233, 224, 0.08);
+  --color-border-str: rgba(236, 233, 224, 0.16);
+  --color-text:       #ece9e0;   /* bone */
+  --color-muted:      #9aa69b;   /* sage gray */
+
+  /* ---- Action + accent ----
+     The primary action is a bone/cream pill with dark ink —
+     calm and editorial — rather than a saturated brand color.
+     Sage is the quiet accent for links and active states. */
+  --color-primary:    #ece9e0;
+  --color-primary-dk: #dcd7c9;
+  --color-on-primary: #1b211d;
+  --color-accent:     #a8bfa1;
+  --color-success:    #8fb573;
+  --color-danger:     #cf8772;
+  --color-warning:    #d9b06b;
+
+  /* ---- Tinted fills (badges, completed rows, alerts) ---- */
+  --tint-primary: rgba(236, 233, 224, 0.10);
+  --tint-accent:  rgba(168, 191, 161, 0.16);
+  --tint-success: rgba(143, 181, 115, 0.16);
+  --tint-warning: rgba(217, 176, 107, 0.15);
+  --tint-danger:  rgba(207, 135, 114, 0.14);
+
+  /* ---- Radii (soft, pill-forward) ---- */
+  --radius-sm: 12px;
+  --radius:    16px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  /* ---- Elevation (low-contrast, airy) ---- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.22);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.26);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.42);
+
+  /* ---- Motion ---- */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Tap targets must be at least 44px for comfortable gym use */
   --tap-min: 44px;
 
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  font-family: var(--font-body);
   font-size: 16px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--color-text);
   background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 body {
   min-height: 100dvh;
   overflow-x: hidden;
+  /* Soft sage "mist" so the base reads atmospheric, never flat */
+  background:
+    radial-gradient(1100px 520px at 50% -8%, rgba(168, 191, 161, 0.10), transparent 60%),
+    radial-gradient(900px 480px at 92% 112%, rgba(168, 191, 161, 0.05), transparent 55%),
+    var(--color-bg);
+  background-attachment: fixed;
 }
 
 a {
-  color: var(--color-primary);
+  color: var(--color-accent);
   text-decoration: none;
+  transition: color 0.15s var(--ease);
 }
+a:hover { color: var(--color-text); }
+
+/* ---- Buttons ---- */
 
 button {
   cursor: pointer;
-  font-family: inherit;
-  font-size: 1rem;
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   border: none;
-  border-radius: 8px;
-  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius-pill);
+  padding: 0.6rem 1.3rem;
   min-height: var(--tap-min);
   background: var(--color-primary);
-  color: #fff;
-  transition: background 0.15s;
+  color: var(--color-on-primary);
+  box-shadow: var(--shadow-md);
+  transition: transform 0.12s var(--ease), background 0.15s var(--ease),
+    box-shadow 0.2s var(--ease), opacity 0.15s var(--ease);
 }
 
 button:hover { background: var(--color-primary-dk); }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:active { transform: scale(0.98); }
+button:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
 
 button.secondary {
-  background: var(--color-surface2);
+  background: rgba(236, 233, 224, 0.06);
   color: var(--color-text);
   border: 1px solid var(--color-border);
+  box-shadow: none;
 }
-button.secondary:hover { background: var(--color-border); }
+button.secondary:hover {
+  background: rgba(236, 233, 224, 0.10);
+  border-color: var(--color-border-str);
+}
 
+/* Quiet destructive style — tinted, not alarming */
 button.danger {
-  background: var(--color-danger);
+  background: var(--tint-danger);
+  color: var(--color-danger);
+  border: 1px solid rgba(207, 135, 114, 0.35);
+  box-shadow: none;
 }
+button.danger:hover { background: rgba(207, 135, 114, 0.22); }
+
+/* ---- Inputs ---- */
 
 input, select, textarea {
-  font-family: inherit;
+  font-family: var(--font-body);
   font-size: 1rem;
   background: var(--color-surface2);
   color: var(--color-text);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.8rem;
   min-height: var(--tap-min);
   width: 100%;
   outline: none;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
 }
+input::placeholder, textarea::placeholder { color: #66726a; }
 
 input:focus, select:focus, textarea:focus {
-  border-color: var(--color-primary);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--tint-accent);
 }
+
+::selection { background: rgba(168, 191, 161, 0.35); }
 
 /* ---- Layout helpers ---- */
 
 .page {
   max-width: 680px;
   margin: 0 auto;
-  padding: 1rem;
+  padding: 1.5rem 1.1rem 1rem;
 }
 
 .card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 1rem;
+  border-radius: var(--radius-lg);
+  padding: 1.15rem;
   margin-bottom: 1rem;
+  box-shadow: var(--shadow-sm);
 }
 
 .row {
@@ -117,51 +192,74 @@ input:focus, select:focus, textarea:focus {
 
 .muted { color: var(--color-muted); font-size: 0.875rem; }
 
+/* ---- Badge / pill (tiny, tracked-out, editorial) ---- */
+
 .badge {
-  display: inline-block;
-  padding: 0.2rem 0.5rem;
-  border-radius: 99px;
-  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.66rem;
   font-weight: 600;
-  background: var(--color-surface2);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: rgba(236, 233, 224, 0.07);
+  border: 1px solid var(--color-border);
   color: var(--color-muted);
 }
 
-.badge.success { background: #1a3a28; color: var(--color-success); }
-.badge.warning { background: #3a2a10; color: var(--color-warning); }
-.badge.primary { background: #1a2a4a; color: var(--color-primary); }
+/* Small sage status dot, like a quiet "live" indicator */
+.badge.dot::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.badge.success { background: var(--tint-success); color: var(--color-success); border-color: rgba(143, 181, 115, 0.3); }
+.badge.warning { background: var(--tint-warning); color: var(--color-warning); border-color: rgba(217, 176, 107, 0.3); }
+.badge.primary { background: var(--tint-accent);  color: var(--color-accent);  border-color: rgba(168, 191, 161, 0.3); }
 
 /* ---- Progress bar ---- */
 
 .progress-bar-wrap {
   background: var(--color-surface2);
-  border-radius: 99px;
-  height: 10px;
+  border-radius: var(--radius-pill);
+  height: 6px;
   overflow: hidden;
   width: 100%;
 }
 
 .progress-bar-fill {
   height: 100%;
-  background: var(--color-primary);
-  border-radius: 99px;
-  transition: width 0.3s;
+  background: linear-gradient(90deg, var(--color-accent), var(--color-success));
+  border-radius: var(--radius-pill);
+  transition: width 0.4s var(--ease);
 }
 
 .progress-bar-fill.over { background: var(--color-danger); }
 
-/* ---- Navigation bar ---- */
+/* ---- Navigation: floating pill bar ---- */
 
 .nav {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: var(--color-surface);
-  border-top: 1px solid var(--color-border);
+  left: 14px;
+  right: 14px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  max-width: 560px;
+  margin: 0 auto;
+  background: color-mix(in srgb, var(--color-surface) 86%, transparent);
+  backdrop-filter: saturate(130%) blur(16px);
+  -webkit-backdrop-filter: saturate(130%) blur(16px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-lg);
   display: flex;
   justify-content: space-around;
-  padding-bottom: env(safe-area-inset-bottom);
+  padding: 5px 6px;
   z-index: 100;
 }
 
@@ -169,21 +267,34 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 0.6rem 0.5rem;
-  min-width: 60px;
-  font-size: 0.7rem;
+  gap: 3px;
+  padding: 0.5rem 0.55rem 0.45rem;
+  min-width: 56px;
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
   color: var(--color-muted);
-  gap: 2px;
+  border-radius: var(--radius-pill);
+  transition: color 0.15s var(--ease), background 0.15s var(--ease);
 }
 
-.nav a.active { color: var(--color-primary); }
+.nav a.active {
+  color: var(--color-text);
+  background: rgba(236, 233, 224, 0.08);
+}
 
-.nav-icon { font-size: 1.4rem; line-height: 1; }
+.nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+}
+.nav-icon svg { width: 20px; height: 20px; display: block; }
 
-/* ---- Main content area (above bottom nav) ---- */
+/* ---- Main content area (above the floating nav) ---- */
 
 .main-content {
-  padding-bottom: calc(70px + env(safe-area-inset-bottom));
+  padding-bottom: calc(100px + env(safe-area-inset-bottom));
   min-height: 100dvh;
 }
 
@@ -193,15 +304,19 @@ input:focus, select:focus, textarea:focus {
   text-align: center;
   color: var(--color-muted);
   padding: 2rem;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.05rem;
 }
 
 .error-msg {
-  background: #3a1a1a;
-  color: var(--color-danger);
-  border: 1px solid var(--color-danger);
-  border-radius: 8px;
+  background: var(--tint-danger);
+  color: #e0a791;
+  border: 1px solid rgba(207, 135, 114, 0.35);
+  border-radius: var(--radius-sm);
   padding: 0.75rem 1rem;
   margin: 0.5rem 0;
+  font-size: 0.9rem;
 }
 
 /* ---- Forms ---- */
@@ -214,9 +329,11 @@ input:focus, select:focus, textarea:focus {
 }
 
 .form-group label {
-  font-size: 0.875rem;
+  font-size: 0.7rem;
   color: var(--color-muted);
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .form-row {
@@ -225,19 +342,48 @@ input:focus, select:focus, textarea:focus {
   gap: 0.75rem;
 }
 
-/* ---- Utility ---- */
+/* ---- Typography ----
+   Serif display headings, light weight, with italic <em>
+   accents — calm and editorial rather than shouty. */
 
-h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; }
-h2 { font-size: 1.2rem; font-weight: 600; margin-bottom: 0.4rem; }
-h3 { font-size: 1rem;   font-weight: 600; margin-bottom: 0.25rem; }
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 380;
+  letter-spacing: -0.01em;
+  line-height: 1.12;
+}
+h1 { font-size: 2.1rem;  margin-bottom: 0.5rem; }
+h2 { font-size: 1.35rem; margin-bottom: 0.4rem; }
+h3 { font-size: 1.08rem; margin-bottom: 0.3rem; font-weight: 450; }
+
+h1 em, h2 em, h3 em, .serif-italic {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* Numeric stats: light, airy, tabular (weights, reps, timers) */
+.stat-num, .tnum { font-variant-numeric: tabular-nums; }
+.stat-num {
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+}
 
 .text-success { color: var(--color-success); }
 .text-danger  { color: var(--color-danger); }
 .text-warning { color: var(--color-warning); }
-.text-primary { color: var(--color-primary); }
+.text-primary { color: var(--color-accent); }
 
 hr {
   border: none;
   border-top: 1px solid var(--color-border);
   margin: 0.75rem 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

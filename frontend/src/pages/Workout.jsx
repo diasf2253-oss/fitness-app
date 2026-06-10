@@ -97,7 +97,7 @@ function StartScreen({ onStarted, setError, error }) {
 
   return (
     <div className="page">
-      <h1>Start Workout</h1>
+      <h1>Start a <em>workout</em></h1>
       <ErrorBox error={error} />
 
       <button onClick={() => start(null)} style={{ width: '100%', marginBottom: '1rem' }}>
@@ -232,7 +232,7 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
       <div className="row">
         <div>
           <h1 style={{ margin: 0 }}>{session.name}</h1>
-          <span className="muted">⏱ {elapsed}</span>
+          <span className="muted tnum">{elapsed} elapsed</span>
         </div>
         <span className="spacer" />
         <button onClick={finishWorkout}>Finish</button>
@@ -424,13 +424,13 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
   }
 
   const rowBg = completed
-    ? 'rgba(61,186,111,0.12)'
+    ? 'var(--tint-success)'
     : 'transparent'
 
   return (
     <div
       className="row"
-      style={{ gap: '0.4rem', background: rowBg, borderRadius: 8, padding: '0.2rem 0.25rem' }}
+      style={{ gap: '0.4rem', background: rowBg, borderRadius: 10, padding: '0.2rem 0.25rem' }}
     >
       {/* Set number — tap to toggle warmup */}
       <button
@@ -476,7 +476,8 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
         style={{
           width: 44, minWidth: 44, height: 36, minHeight: 36, padding: 0,
           background: completed ? 'var(--color-success)' : 'var(--color-surface2)',
-          color: '#fff', fontSize: '1.1rem',
+          color: completed ? 'var(--color-on-primary)' : 'var(--color-text)',
+          fontSize: '1.05rem', boxShadow: 'none',
         }}
       >
         ✓
@@ -487,7 +488,7 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
         title="Delete set"
         style={{
           width: 30, minWidth: 30, height: 36, minHeight: 36, padding: 0,
-          background: 'transparent', border: 'none',
+          background: 'transparent', border: 'none', boxShadow: 'none',
           color: 'var(--color-muted)', fontSize: '0.95rem',
         }}
       >
@@ -507,28 +508,28 @@ function WorkoutSummary({ summary, onDone }) {
 
   return (
     <div className="page">
-      <h1>Workout Complete 🎉</h1>
+      <h1>Workout <em>complete</em></h1>
 
       <div className="card">
         <div className="row" style={{ justifyContent: 'space-around', textAlign: 'center' }}>
           <div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700 }}>{summary.duration_minutes ?? 0}</div>
-            <div className="muted">minutes</div>
+            <div className="stat-num" style={{ fontSize: '2.1rem' }}>{summary.duration_minutes ?? 0}</div>
+            <div className="muted" style={{ fontSize: '0.72rem', letterSpacing: '0.1em', textTransform: 'uppercase' }}>minutes</div>
           </div>
           <div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700 }}>{summary.total_volume_kg}</div>
-            <div className="muted">kg volume</div>
+            <div className="stat-num" style={{ fontSize: '2.1rem' }}>{summary.total_volume_kg}</div>
+            <div className="muted" style={{ fontSize: '0.72rem', letterSpacing: '0.1em', textTransform: 'uppercase' }}>kg volume</div>
           </div>
           <div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700 }}>{summary.completed_sets}</div>
-            <div className="muted">sets</div>
+            <div className="stat-num" style={{ fontSize: '2.1rem' }}>{summary.completed_sets}</div>
+            <div className="muted" style={{ fontSize: '0.72rem', letterSpacing: '0.1em', textTransform: 'uppercase' }}>sets</div>
           </div>
         </div>
       </div>
 
       {summary.prs_hit.length > 0 ? (
         <div className="card">
-          <h2>🏆 New PRs ({summary.prs_hit.length})</h2>
+          <h2>New PRs <em>({summary.prs_hit.length})</em></h2>
           <div className="col" style={{ gap: '0.5rem', marginTop: '0.5rem' }}>
             {summary.prs_hit.map((pr, i) => (
               <div key={i} className="row">
@@ -548,7 +549,7 @@ function WorkoutSummary({ summary, onDone }) {
         </div>
       ) : (
         <div className="card">
-          <p className="muted" style={{ textAlign: 'center' }}>No new PRs this session — keep grinding.</p>
+          <p className="muted" style={{ textAlign: 'center' }}>No new records this session — showing up is the win.</p>
         </div>
       )}
 

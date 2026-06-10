@@ -61,7 +61,7 @@ export default function History() {
                     : <span className="text-warning"> · in progress</span>}
                 </div>
               </div>
-              <span className="muted">{expandedId === s.id ? '▲' : '▼'}</span>
+              <span className="muted" style={{ fontSize: '0.7rem' }}>{expandedId === s.id ? '▲' : '▼'}</span>
             </div>
 
             {expandedId === s.id && <SessionDetail sessionId={s.id} />}

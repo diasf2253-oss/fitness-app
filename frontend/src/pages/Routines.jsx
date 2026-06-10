@@ -96,7 +96,7 @@ export default function Routines() {
             <div className="row" style={{ marginTop: '0.75rem', gap: '0.5rem' }}>
               <button onClick={() => startWorkout(r)} style={{ flex: 1 }}>Start</button>
               <button className="secondary" onClick={() => setEditing(r)}>Edit</button>
-              <button className="danger" onClick={() => handleDelete(r.id)}>🗑</button>
+              <button className="danger" onClick={() => handleDelete(r.id)} title="Delete routine" style={{ minWidth: 44, padding: '0.4rem 0.8rem' }}>✕</button>
             </div>
           </div>
         ))}
