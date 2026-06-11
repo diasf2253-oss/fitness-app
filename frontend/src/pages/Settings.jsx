@@ -6,9 +6,142 @@
  * - Manual log link
  * - Developer utilities: load/clear sample health data
  */
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch, apiUpload, setToken } from '../api'
+
+const TRACKER_KINDS = [
+  { value: 'habit', label: 'Habit — done / not done, with streaks' },
+  { value: 'number', label: 'Number — any metric with a unit' },
+  { value: 'scale', label: 'Scale — rate 1 to 5' },
+  { value: 'text', label: 'Text — a journal-style note' },
+]
+
+/**
+ * Manage the generic trackers that power the daily check-in.
+ * Archive keeps history but removes the tracker from the check-in;
+ * delete removes everything.
+ */
+function TrackersCard() {
+  const [trackers, setTrackers] = useState([])
+  const [name, setName] = useState('')
+  const [kind, setKind] = useState('habit')
+  const [unit, setUnit] = useState('')
+  const [error, setError] = useState(null)
+
+  const load = useCallback(() => {
+    apiFetch('/api/trackers?include_archived=true')
+      .then(setTrackers)
+      .catch(err => setError(err.message))
+  }, [])
+
+  useEffect(load, [load])
+
+  async function add(e) {
+    e.preventDefault()
+    setError(null)
+    try {
+      await apiFetch('/api/trackers', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: name.trim(),
+          kind,
+          unit: kind === 'number' && unit.trim() ? unit.trim() : null,
+        }),
+      })
+      setName('')
+      setUnit('')
+      load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function toggleArchive(t) {
+    try {
+      await apiFetch(`/api/trackers/${t.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_archived: !t.is_archived }),
+      })
+      load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function remove(t) {
+    if (!confirm(`Delete "${t.name}" and all of its history?`)) return
+    try {
+      await apiFetch(`/api/trackers/${t.id}`, { method: 'DELETE' })
+      load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2>Trackers</h2>
+      <p className="muted" style={{ marginBottom: '0.75rem' }}>
+        Anything worth tracking gets a tracker — habits, a 1–5 mood, numbers
+        like reading minutes, or a daily journal line. They appear in the
+        dashboard check-in and on the calendar.
+      </p>
+
+      {error && <p className="muted" style={{ color: 'var(--color-danger)' }}>{error}</p>}
+
+      <div className="col" style={{ gap: '0.4rem', marginBottom: '0.9rem' }}>
+        {trackers.map(t => (
+          <div key={t.id} className="row" style={{ opacity: t.is_archived ? 0.5 : 1 }}>
+            <span style={{ flex: 1, fontSize: '0.9rem' }}>
+              {t.name}
+              {t.unit && <span className="muted" style={{ fontSize: '0.75rem' }}> · {t.unit}</span>}
+            </span>
+            <span className="badge">{t.kind}</span>
+            <button
+              className="secondary"
+              style={{ minWidth: 76, padding: '0.3rem 0.6rem', minHeight: 36, fontSize: '0.75rem' }}
+              onClick={() => toggleArchive(t)}
+            >
+              {t.is_archived ? 'Restore' : 'Archive'}
+            </button>
+            <button
+              className="danger"
+              style={{ minWidth: 40, padding: '0.3rem 0.5rem', minHeight: 36 }}
+              onClick={() => remove(t)}
+              title="Delete tracker and history"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        {trackers.length === 0 && <p className="muted">No trackers yet.</p>}
+      </div>
+
+      <form onSubmit={add} className="col">
+        <div className="form-row">
+          <div className="form-group" style={{ margin: 0 }}>
+            <label>Name</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Meditate" />
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label>Type</label>
+            <select value={kind} onChange={e => setKind(e.target.value)}>
+              {TRACKER_KINDS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
+            </select>
+          </div>
+        </div>
+        {kind === 'number' && (
+          <div className="form-group" style={{ margin: 0 }}>
+            <label>Unit (optional)</label>
+            <input value={unit} onChange={e => setUnit(e.target.value)} placeholder="e.g. min, pages, mg" />
+          </div>
+        )}
+        <button type="submit" disabled={!name.trim()}>Add tracker</button>
+      </form>
+    </div>
+  )
+}
 
 function fmtTimestamp(iso) {
   if (!iso) return null
@@ -175,6 +308,8 @@ export default function Settings() {
           <p className="muted" style={{ marginTop: '0.6rem', fontSize: '0.8rem' }}>{importMsg}</p>
         )}
       </div>
+
+      <TrackersCard />
 
       <div className="card">
         <h2>Manual log</h2>

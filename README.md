@@ -27,8 +27,12 @@ with Apple Health as the single source for all health data.
   manifest + cairn icons + minimal service worker, Dockerfile, and deploy
   paths for a home Mac with Cloudflare Tunnel or Railway. See
   [docs/DEPLOY.md](docs/DEPLOY.md). ✅
-- **Phase 6+** — Desktop polish of remaining pages (4c); more life-tracking
-  domains (habits, mood, journal, custom metrics); insights & correlations.
+- **Phase 6** — Life domains: generic trackers (habit with streaks, 1–5
+  scale, number with unit, text) under `/api/trackers`, seeded Mood +
+  Journal, daily check-in card on the dashboard, management in Settings,
+  calendar + day-detail integration. ✅
+- **Phase 7+** — Desktop polish of remaining pages (4c); insights &
+  correlations (weekly review, sleep vs. volume, calories vs. weight).
   _Planned._
 
 ---

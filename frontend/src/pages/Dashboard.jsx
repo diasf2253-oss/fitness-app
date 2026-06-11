@@ -15,6 +15,7 @@ import {
 import { apiFetch } from '../api'
 import { Loading, ErrorBox } from '../components/States'
 import MonthCalendar from '../components/MonthCalendar'
+import CheckIn from '../components/CheckIn'
 
 // Chart palette — mirrors the "Quiet Tracker" CSS tokens
 const GRID = 'rgba(236,233,224,0.07)'
@@ -95,7 +96,8 @@ function DayDetail({ date }) {
 
   const hasAnything = detail && (
     detail.sessions.length > 0 || detail.weight_kg != null ||
-    detail.steps != null || detail.sleep || detail.nutrition
+    detail.steps != null || detail.sleep || detail.nutrition ||
+    (detail.trackers || []).length > 0
   )
 
   const Row = ({ label, children }) => (
@@ -135,6 +137,24 @@ function DayDetail({ date }) {
               /{Math.round(detail.nutrition.carbs_g)}C/{Math.round(detail.nutrition.fat_g)}F
             </Row>
           )}
+          {(detail.trackers || []).map(t => (
+            t.kind === 'text' ? (
+              <div key={t.name} style={{ padding: '0.3rem 0' }}>
+                <span className="muted" style={{ fontSize: '0.8rem' }}>{t.name}</span>
+                <div className="serif-italic" style={{ fontSize: '0.85rem', marginTop: 2 }}>
+                  {t.value_text}
+                </div>
+              </div>
+            ) : (
+              <Row key={t.name} label={t.name}>
+                {t.kind === 'habit'
+                  ? (t.value_num >= 1 ? '✓ done' : '—')
+                  : t.kind === 'scale'
+                    ? `${t.value_num}/5`
+                    : `${t.value_num}${t.unit ? ` ${t.unit}` : ''}`}
+              </Row>
+            )
+          ))}
         </div>
       )}
 
@@ -260,6 +280,9 @@ export default function Dashboard() {
       {data && (
         <div className="dash-grid">
           <div className="dash-widgets">
+          {/* ---- Daily check-in (trackers) ---- */}
+          <CheckIn />
+
           {/* ---- Nutrition today ---- */}
           <div className="card">
             <div className="row" style={{ marginBottom: '0.75rem' }}>

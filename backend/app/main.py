@@ -22,7 +22,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.config import settings
 from app.routers import calendar, dashboard, dev, exercises, health, nutrition, routines, sessions
 from app.routers import settings as settings_router
-from app.routers import stats
+from app.routers import stats, trackers
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -69,6 +69,7 @@ app.include_router(health.router)
 app.include_router(nutrition.router)
 app.include_router(dashboard.router)
 app.include_router(calendar.router)
+app.include_router(trackers.router)
 app.include_router(dev.router)
 app.include_router(settings_router.router)
 

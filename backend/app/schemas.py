@@ -356,6 +356,51 @@ class DashboardOut(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Trackers (Phase 6)
+# ---------------------------------------------------------------------------
+
+TRACKER_KINDS = ("habit", "scale", "number", "text")
+
+
+class TrackerCreate(BaseModel):
+    name: str
+    kind: str  # validated in the router against TRACKER_KINDS
+    unit: Optional[str] = None
+
+
+class TrackerUpdate(BaseModel):
+    name: Optional[str] = None
+    unit: Optional[str] = None
+    position: Optional[int] = None
+    is_archived: Optional[bool] = None
+
+
+class TrackerLogValue(BaseModel):
+    """Today's (or any day's) entry for a tracker."""
+    date: date
+    value_num: Optional[float] = None
+    value_text: Optional[str] = None
+
+
+class TrackerOut(OrmBase):
+    id: int
+    name: str
+    kind: str
+    unit: Optional[str] = None
+    position: int
+    is_archived: bool
+    # Enriched by the list endpoint for the daily check-in:
+    today: Optional[TrackerLogValue] = None
+    streak: Optional[int] = None  # habits only
+
+
+class TrackerLogOut(OrmBase):
+    date: date
+    value_num: Optional[float] = None
+    value_text: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
 # Calendar + day detail (Phase 4) — desktop right rail
 # ---------------------------------------------------------------------------
 
@@ -367,6 +412,7 @@ class CalendarDay(BaseModel):
     has_weight: bool = False
     has_sleep: bool = False
     has_nutrition: bool = False
+    trackers: int = 0  # tracker entries logged that day
 
 
 class MonthCalendarOut(BaseModel):
@@ -384,6 +430,15 @@ class DaySession(BaseModel):
     completed_sets: int
 
 
+class DayTracker(BaseModel):
+    """A tracker entry shown in the day-detail panel."""
+    name: str
+    kind: str
+    unit: Optional[str] = None
+    value_num: Optional[float] = None
+    value_text: Optional[str] = None
+
+
 class DayDetailOut(BaseModel):
     date: date
     sessions: list[DaySession] = []
@@ -391,3 +446,4 @@ class DayDetailOut(BaseModel):
     steps: Optional[int] = None
     sleep: Optional[SleepLogOut] = None
     nutrition: Optional[NutritionDayOut] = None
+    trackers: list[DayTracker] = []

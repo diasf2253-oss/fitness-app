@@ -196,6 +196,52 @@ class NutritionDay(Base):
 
 
 # ---------------------------------------------------------------------------
+# Trackers (Phase 6) — the generic "track anything" system.
+# A tracker is anything with a name and a kind; one log per day each.
+#   habit  → done/not-done (value_num 0|1), streaks
+#   scale  → 1–5 rating (e.g. the seeded Mood)
+#   number → any quantity with a unit (reading minutes, caffeine, …)
+#   text   → free text (e.g. the seeded Journal)
+# ---------------------------------------------------------------------------
+
+class Tracker(Base):
+    __tablename__ = "tracker"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    # 'habit' | 'scale' | 'number' | 'text'
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Display unit for kind='number' (e.g. 'min', 'mg', 'pages')
+    unit: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Archived trackers keep their history but leave the daily check-in
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    logs: Mapped[list["TrackerLog"]] = relationship(
+        back_populates="tracker", cascade="all, delete-orphan"
+    )
+
+
+class TrackerLog(Base):
+    """One tracker entry per day (upsert by tracker+date)."""
+    __tablename__ = "tracker_log"
+    __table_args__ = (UniqueConstraint("tracker_id", "date", name="uq_tracker_date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    tracker_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tracker.id", ondelete="CASCADE"), index=True
+    )
+    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    value_num: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    value_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    tracker: Mapped["Tracker"] = relationship(back_populates="logs")
+
+
+# ---------------------------------------------------------------------------
 # App settings (single row, id=1 always)
 # ---------------------------------------------------------------------------
 

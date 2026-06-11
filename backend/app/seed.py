@@ -200,6 +200,16 @@ def seed():
                 ))
             print(f"Seeded routine '{routine_name}' with {len(exercise_list)} exercises")
 
+        # ---- Default trackers (Phase 6) ----
+        # Only when the table is empty — renames/archives must stick.
+        from app.models import Tracker
+        if db.query(Tracker).count() == 0:
+            db.add(Tracker(name="Mood", kind="scale", position=0))
+            db.add(Tracker(name="Journal", kind="text", position=1))
+            print("Seeded default trackers: Mood, Journal")
+        else:
+            print("Trackers already exist — skipping")
+
         db.commit()
         print("\nSeed complete.")
     except Exception as e:

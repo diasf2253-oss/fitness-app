@@ -14,9 +14,12 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.auth import require_auth
 from app.db import get_db
-from app.models import NutritionDay, Session as WorkoutSession, SleepLog, StepsLog, WeightLog
+from app.models import (
+    NutritionDay, Session as WorkoutSession, SleepLog, StepsLog,
+    Tracker, TrackerLog, WeightLog,
+)
 from app.routers.stats import session_summary
-from app.schemas import CalendarDay, DayDetailOut, DaySession, MonthCalendarOut
+from app.schemas import CalendarDay, DayDetailOut, DaySession, DayTracker, MonthCalendarOut
 
 router = APIRouter(tags=["calendar"])
 
@@ -70,6 +73,8 @@ def month_calendar(
         day_of(row.date).has_sleep = True
     for row in db.query(NutritionDay).filter(NutritionDay.date.between(first, last)).all():
         day_of(row.date).has_nutrition = True
+    for row in db.query(TrackerLog).filter(TrackerLog.date.between(first, last)).all():
+        day_of(row.date).trackers += 1
 
     return MonthCalendarOut(
         year=year,
@@ -100,6 +105,21 @@ def day_detail(
     sleep = db.query(SleepLog).filter(SleepLog.date == day).first()
     nutrition = db.query(NutritionDay).filter(NutritionDay.date == day).first()
 
+    tracker_rows = (
+        db.query(Tracker, TrackerLog)
+        .join(TrackerLog, TrackerLog.tracker_id == Tracker.id)
+        .filter(TrackerLog.date == day)
+        .order_by(Tracker.position, Tracker.id)
+        .all()
+    )
+    trackers = [
+        DayTracker(
+            name=t.name, kind=t.kind, unit=t.unit,
+            value_num=log.value_num, value_text=log.value_text,
+        )
+        for t, log in tracker_rows
+    ]
+
     return DayDetailOut(
         date=day,
         sessions=sessions,
@@ -107,4 +127,5 @@ def day_detail(
         steps=steps.steps if steps else None,
         sleep=sleep,
         nutrition=nutrition,
+        trackers=trackers,
     )
