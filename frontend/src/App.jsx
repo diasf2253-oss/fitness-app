@@ -8,6 +8,7 @@ import History from './pages/History'
 import ExerciseDetail from './pages/ExerciseDetail'
 import Settings from './pages/Settings'
 import Log from './pages/Log'
+import Insights from './pages/Insights'
 
 // Crisp stroke icons (inherit currentColor → active state recolors for free)
 const Icon = {
@@ -31,6 +32,9 @@ const Icon = {
   ),
   log: (
     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z" />
+  ),
+  insights: (
+    <path d="M3 3v18h18 M7 14l4-4 3 3 5-6" />
   ),
 }
 
@@ -61,6 +65,7 @@ const SIDEBAR_SECTIONS = [
       { to: '/workout',  label: 'Workout',   icon: 'workout' },
       { to: '/routines', label: 'Routines',  icon: 'routines' },
       { to: '/history',  label: 'History',   icon: 'history' },
+      { to: '/insights', label: 'Insights',  icon: 'insights' },
     ],
   },
   {
@@ -112,6 +117,7 @@ export default function App() {
           <Route path="/history"      element={<History />} />
           <Route path="/exercise/:id" element={<ExerciseDetail />} />
           <Route path="/log"          element={<Log />} />
+          <Route path="/insights"     element={<Insights />} />
           <Route path="/settings"     element={<Settings />} />
         </Routes>
       </div>

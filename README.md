@@ -31,9 +31,12 @@ with Apple Health as the single source for all health data.
   scale, number with unit, text) under `/api/trackers`, seeded Mood +
   Journal, daily check-in card on the dashboard, management in Settings,
   calendar + day-detail integration. ✅
-- **Phase 7+** — Desktop polish of remaining pages (4c); insights &
-  correlations (weekly review, sleep vs. volume, calories vs. weight).
-  _Planned._
+- **Phase 7** — Insights: weekly review (this week vs last across training,
+  steps, sleep, nutrition, weight, scale trackers, habits), 90-day Pearson
+  correlations with scatter detail (pairs need ≥10 overlapping days), and
+  scale-tracker averages on training vs rest days. `/api/insights/*`. ✅
+- **Phase 8+** — Desktop polish of remaining pages (4c); whatever we decide
+  to track next. _Planned._
 
 ---
 

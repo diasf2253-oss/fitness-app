@@ -401,6 +401,70 @@ class TrackerLogOut(OrmBase):
 
 
 # ---------------------------------------------------------------------------
+# Insights (Phase 7)
+# ---------------------------------------------------------------------------
+
+class HabitWeek(BaseModel):
+    name: str
+    done: int
+    days: int
+
+
+class ScaleWeek(BaseModel):
+    name: str
+    avg: Optional[float] = None
+
+
+class WeekMetrics(BaseModel):
+    date_from: date
+    date_to: date
+    volume_kg: float = 0.0
+    sessions: int = 0
+    steps_avg: Optional[int] = None
+    sleep_avg_h: Optional[float] = None
+    calories_avg: Optional[int] = None
+    protein_avg_g: Optional[int] = None
+    # Last reading minus first reading inside the window (needs ≥2 readings)
+    weight_change_kg: Optional[float] = None
+    scales: list[ScaleWeek] = []
+    habits: list[HabitWeek] = []
+
+
+class WeeklyReviewOut(BaseModel):
+    current: WeekMetrics
+    previous: WeekMetrics
+
+
+class CorrelationPoint(BaseModel):
+    date: date
+    a: float
+    b: float
+
+
+class CorrelationPair(BaseModel):
+    label_a: str
+    label_b: str
+    r: float
+    n: int
+    points: list[CorrelationPoint] = []
+
+
+class TrainingSplit(BaseModel):
+    """Average of a scale tracker on training days vs rest days."""
+    name: str
+    with_avg: float
+    without_avg: float
+    n_with: int
+    n_without: int
+
+
+class CorrelationsOut(BaseModel):
+    window_days: int
+    pairs: list[CorrelationPair] = []
+    training_splits: list[TrainingSplit] = []
+
+
+# ---------------------------------------------------------------------------
 # Calendar + day detail (Phase 4) — desktop right rail
 # ---------------------------------------------------------------------------
 

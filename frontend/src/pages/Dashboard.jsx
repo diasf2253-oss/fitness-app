@@ -272,7 +272,9 @@ export default function Dashboard() {
       <h1 style={{ fontSize: '2.4rem', marginTop: '0.9rem' }}>
         Good <em>{greeting}</em>
       </h1>
-      <p className="muted" style={{ marginBottom: '1.5rem' }}>Here's where things stand.</p>
+      <p className="muted" style={{ marginBottom: '1.5rem' }}>
+        Here's where things stand. <Link to="/insights">Insights ›</Link>
+      </p>
 
       <ErrorBox error={error} />
       {loading && <Loading />}
