@@ -22,7 +22,12 @@ with Apple Health as the single source for all health data.
   detail (`GET /api/calendar/{year}/{month}`, `GET /api/day/{date}`). Phone
   layout unchanged; both devices share the same backend, so they are always
   in sync. ✅ (4a/4b — desktop polish of remaining pages ongoing)
-- **Phase 5+** — Always-on deployment + installable PWA; more life-tracking
+- **Phase 5** — Always-on + installable PWA: single-origin serving (FastAPI
+  hosts the built frontend — one URL for app, PWA, and Health Auto Export),
+  manifest + cairn icons + minimal service worker, Dockerfile, and deploy
+  paths for a home Mac with Cloudflare Tunnel or Railway. See
+  [docs/DEPLOY.md](docs/DEPLOY.md). ✅
+- **Phase 6+** — Desktop polish of remaining pages (4c); more life-tracking
   domains (habits, mood, journal, custom metrics); insights & correlations.
   _Planned._
 
