@@ -15,6 +15,7 @@ import {
 import { apiFetch } from '../api'
 import { Loading, ErrorBox } from '../components/States'
 import MonthCalendar from '../components/MonthCalendar'
+import WidgetLabel from '../components/WidgetLabel'
 import CheckIn from '../components/CheckIn'
 
 // Chart palette — mirrors the "Quiet Tracker" CSS tokens
@@ -39,15 +40,6 @@ function EmptyNote({ children }) {
     <p className="muted" style={{ textAlign: 'center', padding: '1.1rem 0' }}>
       {children || <>No data yet. <Link to="/log">Log manually ›</Link></>}
     </p>
-  )
-}
-
-// Uppercase tracked-out label used across widgets
-function WidgetLabel({ children }) {
-  return (
-    <span className="muted" style={{ fontSize: '0.72rem', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-      {children}
-    </span>
   )
 }
 

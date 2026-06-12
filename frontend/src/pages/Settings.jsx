@@ -237,13 +237,13 @@ export default function Settings() {
       <h1>Settings</h1>
 
       <div className="card">
-        <h2>API Token</h2>
+        <h2>API token</h2>
         <p className="muted" style={{ marginBottom: '0.75rem' }}>
           Must match the APP_TOKEN value in your backend <code>.env</code> file.
         </p>
         <form onSubmit={handleSave} className="col">
           <div className="form-group">
-            <label htmlFor="token-input">Bearer Token</label>
+            <label htmlFor="token-input">Bearer token</label>
             <input
               id="token-input"
               type="password"
@@ -252,7 +252,7 @@ export default function Settings() {
               placeholder="changeme"
             />
           </div>
-          <button type="submit">{saved ? '✓ Saved' : 'Save Token'}</button>
+          <button type="submit">{saved ? '✓ Saved' : 'Save token'}</button>
         </form>
       </div>
 

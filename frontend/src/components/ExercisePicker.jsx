@@ -52,7 +52,7 @@ export default function ExercisePicker({ onSelect, onClose }) {
   // workout/routine) so you don't have to find it in the list again.
   if (creating) {
     return (
-      <Modal title="New Exercise" onClose={onClose}>
+      <Modal title="New exercise" onClose={onClose}>
         <CreateExerciseForm
           initialName={search}
           onCancel={() => setCreating(false)}
@@ -63,7 +63,7 @@ export default function ExercisePicker({ onSelect, onClose }) {
   }
 
   return (
-    <Modal title="Add Exercise" onClose={onClose}>
+    <Modal title="Add exercise" onClose={onClose}>
       <div className="col" style={{ marginBottom: '0.75rem' }}>
         <input
           placeholder="Search exercises…"
@@ -164,7 +164,7 @@ function CreateExerciseForm({ initialName, onCancel, onCreated }) {
           </select>
         </div>
       </div>
-      <button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Create & Add'}</button>
+      <button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Create & add'}</button>
       <button type="button" className="secondary" onClick={onCancel}>Cancel</button>
     </form>
   )

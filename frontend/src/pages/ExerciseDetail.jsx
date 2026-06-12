@@ -59,7 +59,7 @@ export default function ExerciseDetail() {
       {/* PRs */}
       {pr ? (
         <div className="card">
-          <h2>Personal Records</h2>
+          <h2>Personal records</h2>
           <div className="row" style={{ justifyContent: 'space-around', textAlign: 'center', marginTop: '0.5rem' }}>
             <div>
               <div className="stat-num" style={{ fontSize: '1.8rem' }}>{pr.heaviest_weight_kg}</div>

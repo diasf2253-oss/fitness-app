@@ -13,6 +13,7 @@ import {
 } from 'recharts'
 import { apiFetch } from '../api'
 import { Loading, ErrorBox } from '../components/States'
+import WidgetLabel from '../components/WidgetLabel'
 
 const GRID = 'rgba(236,233,224,0.07)'
 const AXIS = '#9aa69b'
@@ -22,14 +23,6 @@ const TOOLTIP_STYLE = {
   border: '1px solid rgba(236,233,224,0.12)',
   borderRadius: 12,
   color: '#ece9e0',
-}
-
-function WidgetLabel({ children }) {
-  return (
-    <span className="muted" style={{ fontSize: '0.72rem', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-      {children}
-    </span>
-  )
 }
 
 // Neutral delta: direction without judgment

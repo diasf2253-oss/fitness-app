@@ -56,7 +56,7 @@ export default function Exercises() {
   return (
     <div className="page">
       <div className="row">
-        <h1>Exercise Library</h1>
+        <h1>Exercise library</h1>
         <span className="spacer" />
         <Link to="/routines"><button className="secondary">Routines</button></Link>
       </div>
@@ -150,7 +150,7 @@ function CreateExerciseModal({ onClose, onCreated }) {
   }
 
   return (
-    <Modal title="New Custom Exercise" onClose={onClose}>
+    <Modal title="New custom exercise" onClose={onClose}>
       <form onSubmit={handleSubmit} className="col">
         <ErrorBox error={error} />
         <div className="form-group">
@@ -175,7 +175,7 @@ function CreateExerciseModal({ onClose, onCreated }) {
           <label>Notes (optional)</label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
         </div>
-        <button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Create Exercise'}</button>
+        <button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Create exercise'}</button>
       </form>
     </Modal>
   )

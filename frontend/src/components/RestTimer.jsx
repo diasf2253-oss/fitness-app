@@ -86,6 +86,7 @@ export default function RestTimer({ seconds, onDone, onClose }) {
         gap: '0.45rem',
         zIndex: 150,
         boxShadow: 'var(--shadow-lg)',
+        animation: 'rise-in 0.22s var(--ease)',
       }}
     >
       <span style={{ fontSize: '1.35rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', minWidth: 64 }}>

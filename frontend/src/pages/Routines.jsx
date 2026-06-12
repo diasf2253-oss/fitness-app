@@ -71,7 +71,7 @@ export default function Routines() {
       </div>
 
       <button onClick={() => setEditing('new')} style={{ width: '100%', marginBottom: '1rem' }}>
-        + New Routine
+        + New routine
       </button>
 
       <ErrorBox error={error} />
@@ -186,7 +186,7 @@ function RoutineEditor({ routine, onSaved, onCancel }) {
   return (
     <div className="page">
       <div className="row">
-        <h1>{routine ? 'Edit Routine' : 'New Routine'}</h1>
+        <h1>{routine ? 'Edit routine' : 'New routine'}</h1>
         <span className="spacer" />
         <button className="secondary" onClick={onCancel}>Cancel</button>
       </div>
@@ -237,11 +237,11 @@ function RoutineEditor({ routine, onSaved, onCancel }) {
       </div>
 
       <button className="secondary" onClick={() => setShowPicker(true)} style={{ width: '100%', marginTop: '0.75rem' }}>
-        + Add Exercise
+        + Add exercise
       </button>
 
       <button onClick={handleSave} disabled={saving} style={{ width: '100%', marginTop: '1rem' }}>
-        {saving ? 'Saving…' : 'Save Routine'}
+        {saving ? 'Saving…' : 'Save routine'}
       </button>
 
       {showPicker && <ExercisePicker onSelect={addExercise} onClose={() => setShowPicker(false)} />}

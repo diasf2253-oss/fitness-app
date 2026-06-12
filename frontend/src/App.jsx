@@ -1,5 +1,6 @@
-import React from 'react'
-import { Routes, Route, NavLink } from 'react-router-dom'
+import React, { useEffect, useState } from 'react'
+import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { apiFetch } from './api'
 import Dashboard from './pages/Dashboard'
 import Workout from './pages/Workout'
 import Routines from './pages/Routines'
@@ -78,6 +79,43 @@ const SIDEBAR_SECTIONS = [
   },
 ]
 
+/**
+ * Quiet "is data flowing" line at the sidebar foot — last Apple Health
+ * ingest time, or a nudge when nothing has ever synced. Fails silent.
+ */
+function SyncStatus() {
+  const [last, setLast] = useState(undefined)
+
+  useEffect(() => {
+    apiFetch('/api/settings')
+      .then(s => setLast(s.health_last_ingest))
+      .catch(() => setLast(null))
+  }, [])
+
+  if (last === undefined) return null
+  const label = last
+    ? `Synced ${new Date(last + 'Z').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
+    : 'Not synced yet'
+  return (
+    <div className="sidebar-sync">
+      <span
+        className="sync-dot"
+        style={{ background: last ? 'var(--color-success)' : 'var(--color-muted)' }}
+      />
+      {label}
+    </div>
+  )
+}
+
+// Navigating to a new page should land at the top, not inherit scroll depth
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
+  return null
+}
+
 function Sidebar() {
   return (
     <aside className="sidebar">
@@ -99,6 +137,7 @@ function Sidebar() {
           ))}
         </nav>
       ))}
+      <SyncStatus />
     </aside>
   )
 }
@@ -106,6 +145,7 @@ function Sidebar() {
 export default function App() {
   return (
     <>
+      <ScrollToTop />
       <Sidebar />
 
       <div className="main-content">

@@ -101,7 +101,7 @@ function StartScreen({ onStarted, setError, error }) {
       <ErrorBox error={error} />
 
       <button onClick={() => start(null)} style={{ width: '100%', marginBottom: '1rem' }}>
-        + Start Empty Workout
+        + Start empty workout
       </button>
 
       <h3>Or start from a routine</h3>
@@ -229,10 +229,11 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
 
   return (
     <div className="page">
-      <div className="row">
+      {/* Sticky: name, clock and Finish stay reachable mid-session */}
+      <div className="workout-header">
         <div>
-          <h1 style={{ margin: 0 }}>{session.name}</h1>
-          <span className="muted tnum">{elapsed} elapsed</span>
+          <h1>{session.name}</h1>
+          <span className="muted tnum" style={{ fontSize: '0.78rem' }}>{elapsed} elapsed</span>
         </div>
         <span className="spacer" />
         <button onClick={finishWorkout}>Finish</button>
@@ -261,11 +262,11 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
       )}
 
       <button className="secondary" onClick={() => setShowPicker(true)} style={{ width: '100%', marginTop: '1rem' }}>
-        + Add Exercise
+        + Add exercise
       </button>
 
       <button className="danger" onClick={cancelWorkout} style={{ width: '100%', marginTop: '0.75rem' }}>
-        Discard Workout
+        Discard workout
       </button>
 
       {showPicker && <ExercisePicker onSelect={addExercise} onClose={() => setShowPicker(false)} />}
@@ -359,7 +360,7 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, setE
       </div>
 
       <button className="secondary" onClick={addSet} style={{ width: '100%', marginTop: '0.5rem', padding: '0.4rem' }}>
-        + Add Set
+        + Add set
       </button>
     </div>
   )
@@ -430,15 +431,15 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
   return (
     <div
       className="row"
-      style={{ gap: '0.4rem', background: rowBg, borderRadius: 10, padding: '0.2rem 0.25rem' }}
+      style={{ gap: '0.4rem', background: rowBg, borderRadius: 10, padding: '0.2rem 0.25rem', transition: 'background 0.2s var(--ease)' }}
     >
-      {/* Set number — tap to toggle warmup */}
+      {/* Set number — tap to toggle warmup. 44px controls: gym thumbs. */}
       <button
         onClick={toggleWarmup}
         title="Tap to toggle warm-up"
         className="secondary"
         style={{
-          width: 28, minWidth: 28, height: 36, minHeight: 36, padding: 0,
+          width: 28, minWidth: 28, height: 44, minHeight: 44, padding: 0,
           fontSize: '0.8rem',
           color: isWarmup ? 'var(--color-warning)' : 'var(--color-text)',
           background: 'transparent', border: 'none',
@@ -448,7 +449,7 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
       </button>
 
       <input
-        style={{ flex: 1, minHeight: 36, textAlign: 'center' }}
+        style={{ flex: 1, minHeight: 44, textAlign: 'center' }}
         type="number" inputMode="decimal"
         placeholder={prev ? String(prev.weight_kg) : '0'}
         value={weight}
@@ -456,7 +457,7 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
         onBlur={saveField}
       />
       <input
-        style={{ flex: 1, minHeight: 36, textAlign: 'center' }}
+        style={{ flex: 1, minHeight: 44, textAlign: 'center' }}
         type="number" inputMode="numeric"
         placeholder={prev ? String(prev.reps) : '0'}
         value={reps}
@@ -464,7 +465,7 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
         onBlur={saveField}
       />
       <input
-        style={{ width: 48, minHeight: 36, textAlign: 'center', padding: '0.3rem' }}
+        style={{ width: 48, minHeight: 44, textAlign: 'center', padding: '0.3rem' }}
         type="number" inputMode="decimal"
         placeholder="–"
         value={rpe}
@@ -473,11 +474,13 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
       />
       <button
         onClick={toggleComplete}
+        aria-label={completed ? 'Mark set incomplete' : 'Mark set complete'}
         style={{
-          width: 44, minWidth: 44, height: 36, minHeight: 36, padding: 0,
+          width: 44, minWidth: 44, height: 44, minHeight: 44, padding: 0,
           background: completed ? 'var(--color-success)' : 'var(--color-surface2)',
           color: completed ? 'var(--color-on-primary)' : 'var(--color-text)',
           fontSize: '1.05rem', boxShadow: 'none',
+          transition: 'background 0.18s var(--ease), color 0.18s var(--ease)',
         }}
       >
         ✓
@@ -486,8 +489,9 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
       <button
         onClick={onDelete}
         title="Delete set"
+        aria-label="Delete set"
         style={{
-          width: 30, minWidth: 30, height: 36, minHeight: 36, padding: 0,
+          width: 30, minWidth: 30, height: 44, minHeight: 44, padding: 0,
           background: 'transparent', border: 'none', boxShadow: 'none',
           color: 'var(--color-muted)', fontSize: '0.95rem',
         }}
@@ -554,7 +558,7 @@ function WorkoutSummary({ summary, onDone }) {
       )}
 
       <button onClick={() => { onDone(); navigate('/history') }} style={{ width: '100%' }}>
-        View History
+        View history
       </button>
       <button className="secondary" onClick={onDone} style={{ width: '100%', marginTop: '0.5rem' }}>
         Done
