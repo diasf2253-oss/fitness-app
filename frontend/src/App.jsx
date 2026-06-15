@@ -10,6 +10,7 @@ import ExerciseDetail from './pages/ExerciseDetail'
 import Settings from './pages/Settings'
 import Log from './pages/Log'
 import Insights from './pages/Insights'
+import Coach from './pages/Coach'
 
 // Crisp stroke icons (inherit currentColor → active state recolors for free)
 const Icon = {
@@ -37,6 +38,9 @@ const Icon = {
   insights: (
     <path d="M3 3v18h18 M7 14l4-4 3 3 5-6" />
   ),
+  coach: (
+    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z" />
+  ),
 }
 
 function NavIcon({ name }) {
@@ -52,7 +56,7 @@ function NavIcon({ name }) {
 const NAV_ITEMS = [
   { to: '/',        label: 'Home',     icon: 'home' },
   { to: '/workout', label: 'Workout',  icon: 'workout' },
-  { to: '/routines',label: 'Routines', icon: 'routines' },
+  { to: '/coach',   label: 'Coach',    icon: 'coach' },
   { to: '/history', label: 'History',  icon: 'history' },
   { to: '/settings',label: 'Settings', icon: 'settings' },
 ]
@@ -63,6 +67,7 @@ const SIDEBAR_SECTIONS = [
     label: 'General',
     items: [
       { to: '/',         label: 'Dashboard', icon: 'home' },
+      { to: '/coach',    label: 'Coach',     icon: 'coach' },
       { to: '/workout',  label: 'Workout',   icon: 'workout' },
       { to: '/routines', label: 'Routines',  icon: 'routines' },
       { to: '/history',  label: 'History',   icon: 'history' },
@@ -158,6 +163,7 @@ export default function App() {
           <Route path="/exercise/:id" element={<ExerciseDetail />} />
           <Route path="/log"          element={<Log />} />
           <Route path="/insights"     element={<Insights />} />
+          <Route path="/coach"        element={<Coach />} />
           <Route path="/settings"     element={<Settings />} />
         </Routes>
       </div>

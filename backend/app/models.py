@@ -144,6 +144,30 @@ class Set(Base):
 
 
 # ---------------------------------------------------------------------------
+# Plan items (Phase 8) — trackable day/study/workout plan, AI- or hand-drafted.
+# Many rows per date (unlike the one-per-date health logs). A time-blocked
+# to-do the user checks off; the AI Coach proposes them, the user approves.
+# ---------------------------------------------------------------------------
+
+class PlanItem(Base):
+    __tablename__ = "plan_item"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    # Optional time block, stored as zero-padded "HH:MM" so it sorts lexically
+    start_time: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
+    end_time: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    # 'workout' | 'study' | 'task' | 'meal' | 'other'
+    category: Mapped[str] = mapped_column(String(20), default="task", nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # 'coach' | 'manual'
+    source: Mapped[str] = mapped_column(String(50), default="manual", nullable=False)
+
+
+# ---------------------------------------------------------------------------
 # Health & nutrition (one row per date; upsert on re-import)
 # ---------------------------------------------------------------------------
 

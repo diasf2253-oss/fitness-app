@@ -35,7 +35,14 @@ with Apple Health as the single source for all health data.
   steps, sleep, nutrition, weight, scale trackers, habits), 90-day Pearson
   correlations with scatter detail (pairs need ≥10 overlapping days), and
   scale-tracker averages on training vs rest days. `/api/insights/*`. ✅
-- **Phase 8+** — Desktop polish of remaining pages (4c); whatever we decide
+- **Phase 8** — AI Coach (Claude): streaming chat plus one-tap planners
+  (next workout / day / study) that reason over your training, health, and
+  habits and return a proposal you approve before anything is saved —
+  workouts become routines, day/study plans become trackable plan items.
+  New `plan_item` domain (checkable, on the dashboard + calendar) and
+  `/api/coach/*` + `/api/plan/*`. Needs `ANTHROPIC_API_KEY`; without it the
+  Coach shows a setup note and the rest of the app is unaffected. ✅
+- **Phase 9+** — Desktop polish of remaining pages (4c); whatever we decide
   to track next. _Planned._
 
 ---

@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
-from app.routers import calendar, dashboard, dev, exercises, health, insights, nutrition, routines, sessions
+from app.routers import calendar, coach, dashboard, dev, exercises, health, insights, nutrition, plan, routines, sessions
 from app.routers import settings as settings_router
 from app.routers import stats, trackers
 
@@ -71,6 +71,8 @@ app.include_router(dashboard.router)
 app.include_router(calendar.router)
 app.include_router(trackers.router)
 app.include_router(insights.router)
+app.include_router(plan.router)
+app.include_router(coach.router)
 app.include_router(dev.router)
 app.include_router(settings_router.router)
 

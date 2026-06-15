@@ -15,11 +15,13 @@ from sqlalchemy.orm import Session as DBSession
 from app.auth import require_auth
 from app.db import get_db
 from app.models import (
-    NutritionDay, Session as WorkoutSession, SleepLog, StepsLog,
+    NutritionDay, PlanItem, Session as WorkoutSession, SleepLog, StepsLog,
     Tracker, TrackerLog, WeightLog,
 )
 from app.routers.stats import session_summary
-from app.schemas import CalendarDay, DayDetailOut, DaySession, DayTracker, MonthCalendarOut
+from app.schemas import (
+    CalendarDay, DayDetailOut, DaySession, DayTracker, MonthCalendarOut, PlanItemOut,
+)
 
 router = APIRouter(tags=["calendar"])
 
@@ -75,6 +77,8 @@ def month_calendar(
         day_of(row.date).has_nutrition = True
     for row in db.query(TrackerLog).filter(TrackerLog.date.between(first, last)).all():
         day_of(row.date).trackers += 1
+    for row in db.query(PlanItem).filter(PlanItem.date.between(first, last)).all():
+        day_of(row.date).plan_items += 1
 
     return MonthCalendarOut(
         year=year,
@@ -120,6 +124,13 @@ def day_detail(
         for t, log in tracker_rows
     ]
 
+    plan = (
+        db.query(PlanItem)
+        .filter(PlanItem.date == day)
+        .order_by(PlanItem.position, PlanItem.start_time, PlanItem.id)
+        .all()
+    )
+
     return DayDetailOut(
         date=day,
         sessions=sessions,
@@ -128,4 +139,5 @@ def day_detail(
         sleep=sleep,
         nutrition=nutrition,
         trackers=trackers,
+        plan=[PlanItemOut.model_validate(p) for p in plan],
     )

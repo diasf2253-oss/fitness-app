@@ -75,3 +75,42 @@ export async function apiUpload(path, formData) {
 
   return response.json()
 }
+
+/**
+ * Streaming POST — the backend replies with a text/plain stream (the AI
+ * Coach chat). Calls onChunk(text) for each chunk as it arrives.
+ * Returns the full concatenated text when the stream ends.
+ */
+export async function apiStream(path, body, onChunk) {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${getToken()}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`
+    try {
+      const err = await response.json()
+      detail = err.detail || JSON.stringify(err)
+    } catch (_) {
+      // ignore JSON parse errors on error responses
+    }
+    throw new Error(detail)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let full = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    const text = decoder.decode(value, { stream: true })
+    full += text
+    onChunk(text)
+  }
+  return full
+}

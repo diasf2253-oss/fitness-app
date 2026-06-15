@@ -477,6 +477,7 @@ class CalendarDay(BaseModel):
     has_sleep: bool = False
     has_nutrition: bool = False
     trackers: int = 0  # tracker entries logged that day
+    plan_items: int = 0  # planned items that day
 
 
 class MonthCalendarOut(BaseModel):
@@ -503,6 +504,48 @@ class DayTracker(BaseModel):
     value_text: Optional[str] = None
 
 
+# ---------------------------------------------------------------------------
+# Plan items (Phase 8)
+# ---------------------------------------------------------------------------
+
+PLAN_CATEGORIES = ("workout", "study", "task", "meal", "other")
+
+
+class PlanItemBase(BaseModel):
+    title: str
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    category: str = "task"
+    notes: Optional[str] = None
+
+
+class PlanItemCreate(PlanItemBase):
+    source: str = "manual"
+
+
+class PlanItemUpdate(BaseModel):
+    title: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    category: Optional[str] = None
+    notes: Optional[str] = None
+    is_done: Optional[bool] = None
+    position: Optional[int] = None
+
+
+class PlanItemOut(OrmBase):
+    id: int
+    date: date
+    title: str
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    category: str
+    notes: Optional[str] = None
+    is_done: bool
+    position: int
+    source: str
+
+
 class DayDetailOut(BaseModel):
     date: date
     sessions: list[DaySession] = []
@@ -511,3 +554,4 @@ class DayDetailOut(BaseModel):
     sleep: Optional[SleepLogOut] = None
     nutrition: Optional[NutritionDayOut] = None
     trackers: list[DayTracker] = []
+    plan: list[PlanItemOut] = []

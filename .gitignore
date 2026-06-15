@@ -22,3 +22,7 @@ dist/
 
 # Alembic
 backend/alembic/versions/*.pyc
+
+# Generated code map (graphify) — regenerable, local navigation aid
+graphify-out/
+.Rhistory

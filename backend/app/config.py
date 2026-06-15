@@ -19,6 +19,15 @@ class Settings(BaseSettings):
     # The Docker image overrides this to its baked-in copy.
     frontend_dist: str = "../frontend/dist"
 
+    # AI Coach (Claude). Empty key → coach endpoints return 503 and the rest
+    # of the app works unchanged; tests never need a real key.
+    anthropic_api_key: str = ""
+    coach_model: str = "claude-opus-4-8"
+
+    @property
+    def coach_enabled(self) -> bool:
+        return bool(self.anthropic_api_key)
+
     model_config = SettingsConfigDict(
         env_file=".env",        # looks for .env relative to the working directory
         env_file_encoding="utf-8",
