@@ -8,7 +8,74 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { QRCodeSVG } from 'qrcode.react'
 import { apiFetch, apiUpload, setToken } from '../api'
+
+/**
+ * A small "tap to copy" button. Shows a brief ✓ after copying.
+ */
+function CopyButton({ text, label = 'Copy' }) {
+  const [done, setDone] = useState(false)
+  return (
+    <button
+      type="button"
+      className="secondary"
+      style={{ minWidth: 70, padding: '0.3rem 0.7rem', minHeight: 36, fontSize: '0.78rem' }}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text)
+          setDone(true)
+          setTimeout(() => setDone(false), 1500)
+        } catch (_) { /* clipboard blocked (insecure origin) — ignore */ }
+      }}
+    >
+      {done ? '✓ Copied' : label}
+    </button>
+  )
+}
+
+/**
+ * "Add a device" — show a QR that encodes this origin plus the token, so
+ * scanning it on a phone opens the app already logged in (main.jsx adopts
+ * ?token= and strips it). One scan replaces typing the IP + the token.
+ */
+function AddDeviceCard() {
+  const origin = window.location.origin
+  const token = localStorage.getItem('app_token') || 'changeme'
+  const link = `${origin}/?token=${encodeURIComponent(token)}`
+  const onLocalhost = /localhost|127\.0\.0\.1/.test(origin)
+
+  return (
+    <div className="card">
+      <h2>Add a device</h2>
+      <p className="muted" style={{ marginBottom: '0.85rem' }}>
+        Scan this on your phone to open the app already signed in — then use
+        Share → Add to Home Screen. Both devices then sync automatically.
+      </p>
+
+      {onLocalhost ? (
+        <p className="muted" style={{ fontSize: '0.85rem' }}>
+          You're on <code>localhost</code>, which only this laptop can reach.
+          Open the app on the <strong>phone URL</strong> printed by
+          <code> ./start.sh</code> (or your tunnel URL), then come back here —
+          the QR will point somewhere your phone can actually open.
+        </p>
+      ) : (
+        <div className="col" style={{ alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ background: '#ece9e0', padding: 12, borderRadius: 14 }}>
+            <QRCodeSVG value={link} size={180} bgColor="#ece9e0" fgColor="#151b18" />
+          </div>
+          <div className="row" style={{ width: '100%', gap: '0.5rem' }}>
+            <code style={{ flex: 1, fontSize: '0.72rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {link}
+            </code>
+            <CopyButton text={link} label="Copy link" />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 const TRACKER_KINDS = [
   { value: 'habit', label: 'Habit — done / not done, with streaks' },
@@ -256,6 +323,8 @@ export default function Settings() {
         </form>
       </div>
 
+      <AddDeviceCard />
+
       <div className="card">
         <div className="row" style={{ marginBottom: '0.5rem' }}>
           <h2 style={{ margin: 0, flex: 1 }}>Apple Health sync</h2>
@@ -270,9 +339,19 @@ export default function Settings() {
         </p>
         <ol className="muted" style={{ fontSize: '0.85rem', paddingLeft: '1.25rem', margin: '0.6rem 0' }}>
           <li>Automations → new automation, format <strong>JSON</strong></li>
-          <li>URL: <code>{window.location.origin}/api/ingest/health</code> (use your tunnel URL from the phone)</li>
-          <li>Header: <code>Authorization: Bearer &lt;your token&gt;</code></li>
-          <li>Select metrics: steps, weight, sleep, plus the dietary ones</li>
+          <li style={{ marginTop: '0.4rem' }}>
+            <div className="row" style={{ gap: '0.5rem' }}>
+              <span style={{ flex: 1 }}>URL: <code style={{ fontSize: '0.72rem' }}>{window.location.origin}/api/ingest/health</code></span>
+              <CopyButton text={`${window.location.origin}/api/ingest/health`} />
+            </div>
+          </li>
+          <li style={{ marginTop: '0.4rem' }}>
+            <div className="row" style={{ gap: '0.5rem' }}>
+              <span style={{ flex: 1 }}>Header: <code style={{ fontSize: '0.72rem' }}>Authorization: Bearer {localStorage.getItem('app_token') || 'changeme'}</code></span>
+              <CopyButton text={`Bearer ${localStorage.getItem('app_token') || 'changeme'}`} />
+            </div>
+          </li>
+          <li style={{ marginTop: '0.4rem' }}>Select metrics: steps, weight, sleep, plus the dietary ones</li>
           <li>Schedule it daily</li>
         </ol>
 

@@ -55,6 +55,23 @@ with Apple Health as the single source for all health data.
 
 ---
 
+## Quick start
+
+For everyday use, one command builds the frontend, migrates + seeds the DB, and
+serves everything on one origin reachable by your phone:
+
+```bash
+./start.sh
+```
+
+It prints the laptop URL and the phone URL. Open the laptop URL, then
+**Settings → Add a device** to onboard your phone by scanning a QR (it opens
+already signed in). Full walkthrough: [docs/TUTORIAL.md](docs/TUTORIAL.md).
+
+The manual steps below are for first-time setup or development.
+
+---
+
 ## Setup
 
 ### 1. Clone & configure environment
