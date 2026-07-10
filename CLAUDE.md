@@ -31,6 +31,14 @@ Run backend commands from `backend/`, frontend commands from `frontend/`.
 - Build frontend: `npm run build` (the backend then serves the built output on one origin)
 - Run tests: `pytest`
 
+## Backups (production Postgres)
+Production runs on a Railway **Postgres** service (local dev still uses SQLite — Postgres is a `DATABASE_URL` swap). Two scripts under `scripts/` back that DB up and restore it. Full setup + the one-time Railway steps live in the README (*Database backups*).
+- `scripts/backup.sh` — `pg_dump` prod to `backups/fitness_prod_<ts>.dump` (custom format). One command: `./scripts/backup.sh`. The connection string comes from `PROD_DATABASE_URL` (env or the git-ignored `scripts/.env.backup`) — **never hardcode credentials**.
+- `scripts/restore.sh` — `pg_restore` the newest (or a given) dump into `LOCAL_DATABASE_URL` (default a `localhost` DB, created if missing). One command: `./scripts/restore.sh`.
+- **Restore can never touch production.** A host allowlist aborts unless the target is `localhost`/`127.0.0.1`/a `*staging*` host (extend via `STAGING_HOSTS`); it also refuses a target sharing `PROD_DATABASE_URL`'s host; then it makes you type the target DB name. No flag bypasses the host guard — this is a safety contract, keep it.
+- `backups/` and `scripts/.env.backup` are git-ignored (real personal data + the prod connection string). Never commit them.
+- Needs the Postgres client (`pg_dump`/`pg_restore`/`psql`) on PATH, client major version >= the Railway server's.
+
 ## Conventions — follow these
 - Auth is single-user bearer token. Every protected route depends on `require_auth`; new endpoints follow the same pattern.
 - Endpoints return Pydantic v2 schemas from `schemas.py` — never raw SQLAlchemy models.

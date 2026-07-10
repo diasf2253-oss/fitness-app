@@ -15,6 +15,11 @@ build/
 # Database
 *.sqlite3
 
+# Database backups — real personal training data + the prod connection string.
+# NEVER commit these.
+backups/
+scripts/.env.backup
+
 # Node
 node_modules/
 dist/

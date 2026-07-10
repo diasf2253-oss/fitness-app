@@ -247,6 +247,79 @@ days are never overwritten.
 
 ---
 
+## Database backups (production Postgres)
+
+Production runs on a Railway **Postgres** service (local dev still uses SQLite —
+see `backend/.env.example`). Two scripts back it up to a local file and restore
+that file into a **local or staging** Postgres. Credentials are never hardcoded:
+the connection string comes from the environment.
+
+```bash
+# 1. Dump production -> backups/fitness_prod_<timestamp>.dump
+./scripts/backup.sh
+
+# 2. Load the newest dump into your LOCAL Postgres (asks you to confirm)
+./scripts/restore.sh
+```
+
+### Configure
+
+Prefer a git-ignored secrets file so you don't export vars every shell:
+
+```bash
+cp scripts/.env.backup.example scripts/.env.backup
+# edit scripts/.env.backup — never commit it
+```
+
+| Variable | Used by | Meaning |
+| --- | --- | --- |
+| `PROD_DATABASE_URL` | backup | Railway **public** connection string (the `*.proxy.rlwy.net:PORT` one). |
+| `LOCAL_DATABASE_URL` | restore | Target DB. Default `postgresql://postgres:postgres@localhost:5432/fitness_local`. Created if missing. |
+| `STAGING_HOSTS` | restore | Optional comma-separated extra hosts allowed as restore targets. |
+| `BACKUP_DIR` | both | Where dumps live. Default `backups/` (git-ignored — dumps hold real personal data). |
+
+`scripts/backup.sh` writes a compressed `pg_dump` custom-format archive;
+`scripts/restore.sh` loads it with `pg_restore --clean --if-exists`.
+
+### restore.sh can never hit production
+
+Before it does anything, restore refuses unless the target **host** is
+`localhost`, `127.0.0.1`, or a `*staging*` host (extend via `STAGING_HOSTS`) —
+any remote host aborts with no prompt. It also refuses if the target shares a
+host with `PROD_DATABASE_URL`. Only then does it print a banner and require you
+to type the target database name. There is no flag to restore into production.
+
+### Prerequisites
+
+- The Postgres client tools on PATH: `pg_dump`, `pg_restore`, `psql`
+  (`brew install libpq` and add its `bin` to PATH, or `brew install postgresql@16`).
+  Use a client whose major version is **>= the Railway server's** (PG 16).
+- A local Postgres running for restore (e.g. `brew services start postgresql@16`).
+
+### What you must do in Railway (one-time)
+
+1. Open the Railway dashboard → your project → the **Postgres** service.
+2. Go to the **Variables** tab (or **Connect** → *Public Network*) and copy
+   `DATABASE_PUBLIC_URL` — the **public** string whose host is
+   `<name>.proxy.rlwy.net:<port>`. Do **not** use `DATABASE_URL` /
+   `postgres.railway.internal`; that host only resolves inside Railway and your
+   laptop can't reach it.
+3. If the string has no `?sslmode=`, append `?sslmode=require` (Railway serves
+   Postgres over TLS).
+4. Put it in `scripts/.env.backup` as `PROD_DATABASE_URL=...` (git-ignored) —
+   never commit it or paste it into the repo.
+5. **IP allowances: nothing to configure.** Railway's public Postgres proxy is
+   reachable from any IP and is protected only by the credentials in the URL, so
+   there is no allowlist to edit — just keep the URL secret. (Rotate it from the
+   Postgres service's settings if it ever leaks. If you later enable private
+   networking / restricted egress, that's the only case where you'd need to
+   permit your IP.)
+6. Confirm the Postgres major version (service → **Deployments**/metadata) and
+   install a matching-or-newer client locally so `pg_dump` won't refuse on a
+   version mismatch.
+
 ## Environment variables
 
-See `backend/.env.example` — just `APP_TOKEN` and `DATABASE_URL`.
+See `backend/.env.example` for the app (`APP_TOKEN`, `DATABASE_URL`,
+`ANTHROPIC_API_KEY`). Backup/restore vars live in `scripts/.env.backup.example`
+(see [Database backups](#database-backups-production-postgres) above).
