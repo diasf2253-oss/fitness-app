@@ -65,13 +65,20 @@ class TestCalendar:
                     json={"date": "2026-06-03", "steps": 9000}, headers=AUTH)
         client.post("/api/sessions", json={"name": "Push day"}, headers=AUTH)  # today
 
-        days = client.get("/api/calendar/2026/06", headers=AUTH).json()["days"]
-        by_date = {d["date"]: d for d in days}
+        june = client.get("/api/calendar/2026/06", headers=AUTH).json()["days"]
+        by_date = {d["date"]: d for d in june}
         assert by_date["2026-06-03"]["has_weight"] is True
         assert by_date["2026-06-03"]["steps"] == 9000
         assert by_date["2026-06-03"]["sessions"] == 0
-        today = date.today().isoformat()
-        assert by_date[today]["sessions"] == 1
+
+        # The session lands "today", which may be a different month than the
+        # fixed data above — query today's own month so this isn't June-only.
+        today = date.today()
+        this_month = client.get(
+            f"/api/calendar/{today.year}/{today.month}", headers=AUTH
+        ).json()["days"]
+        by_today = {d["date"]: d for d in this_month}
+        assert by_today[today.isoformat()]["sessions"] == 1
 
 
 class TestDayDetail:
