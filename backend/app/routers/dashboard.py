@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session as DBSession
 from app.auth import require_auth
 from app.db import get_db
 from app.models import NutritionDay, Session as WorkoutSession, SleepLog, StepsLog, WeightLog
+from app.routers.health import estimate_weight_for, real_weight_points
 from app.routers.settings import get_or_create_settings
 from app.routers.stats import session_summary
 from app.schemas import (
@@ -58,19 +59,41 @@ def get_dashboard(
 ):
     today = date.today()
 
-    # ---- Weight: 90-day series + moving average ----
+    # ---- Weight: 90-day series (untracked days filled with an interpolated
+    #      estimate, flagged) + moving average over the real readings ----
     weight_rows = (
         db.query(WeightLog)
         .filter(WeightLog.date >= today - timedelta(days=90))
         .order_by(WeightLog.date)
         .all()
     )
-    weight_series = [(r.date, r.weight_kg) for r in weight_rows]
+    by_date = {r.date: r for r in weight_rows}
+    real_series = [(r.date, r.weight_kg) for r in weight_rows if r.source != "estimated"]
+
+    series_points: list[WeightPoint] = []
+    if real_series:
+        # Interpolate from the full history so a reading just outside the
+        # window still anchors estimates near the window's leading edge.
+        basis = real_weight_points(db)
+        start = real_series[0][0]
+        for i in range((today - start).days + 1):
+            d = start + timedelta(days=i)
+            row = by_date.get(d)
+            if row is not None:
+                series_points.append(WeightPoint(
+                    date=d, weight_kg=row.weight_kg,
+                    estimated=(row.source == "estimated"),
+                ))
+                continue
+            est = estimate_weight_for(d, basis)
+            if est is not None:
+                series_points.append(WeightPoint(date=d, weight_kg=est[0], estimated=True))
+
     weight = DashboardWeight(
-        series=[WeightPoint(date=d, weight_kg=v) for d, v in weight_series],
+        series=series_points,
         moving_avg_7d=[
             MovingAvgPoint(date=d, avg_kg=v)
-            for d, v in moving_average_7d(weight_series)
+            for d, v in moving_average_7d(real_series)
         ],
     )
 

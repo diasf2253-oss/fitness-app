@@ -23,7 +23,7 @@ from app.health_metrics import HAE_NUTRITION, convert_amount, upsert_nutrition_p
 from app.models import NutritionDay, SleepLog, StepsLog, WeightLog
 from app.schemas import (
     NutritionDayOut, SleepLogCreate, SleepLogOut,
-    StepsLogCreate, StepsLogOut, WeightLogCreate, WeightLogOut,
+    StepsLogCreate, StepsLogOut, WeightEstimateOut, WeightLogCreate, WeightLogOut,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,22 +34,32 @@ router = APIRouter(tags=["health"])
 # ---------------------------------------------------------------------------
 # Upsert helpers — idempotent: re-sending the same data changes nothing.
 #
-# Source precedence (Phase 3): a day the user corrected by hand
-# (source='manual') is only ever overwritten by another manual write —
-# the correction exists precisely because the synced value was wrong.
-# apple_health and sample writes overwrite each other freely.
+# Source precedence: a day the user corrected by hand (source='manual') is
+# only ever overwritten by another manual write — the correction exists
+# precisely because the synced value was wrong. apple_health and sample
+# writes overwrite each other freely. 'estimated' is the lowest rank: an
+# interpolated guess never overwrites a real reading, and any real reading
+# (manual/apple_health/sample) overwrites an estimate.
 # Every writer funnels through these helpers, so the rule lives here only.
 # ---------------------------------------------------------------------------
 
-def _manual_wins(row, source: str) -> bool:
-    """True when an existing manual row should block this write."""
-    return row is not None and row.source == "manual" and source != "manual"
+def _write_blocked(row, source: str) -> bool:
+    """True when the existing row outranks this write and must be kept."""
+    if row is None:
+        return False
+    # A hand correction is only overridden by another hand correction.
+    if row.source == "manual" and source != "manual":
+        return True
+    # An estimate must never bury a real, tracked reading.
+    if source == "estimated" and row.source != "estimated":
+        return True
+    return False
 
 
 def upsert_weight(db: DBSession, day: date, weight_kg: float, source: str) -> bool:
     """Insert or update weight_log for a given date. Returns True if new row."""
     row = db.query(WeightLog).filter(WeightLog.date == day).first()
-    if _manual_wins(row, source):
+    if _write_blocked(row, source):
         return False
     if row:
         row.weight_kg = weight_kg
@@ -61,7 +71,7 @@ def upsert_weight(db: DBSession, day: date, weight_kg: float, source: str) -> bo
 
 def upsert_steps(db: DBSession, day: date, steps: int, source: str) -> bool:
     row = db.query(StepsLog).filter(StepsLog.date == day).first()
-    if _manual_wins(row, source):
+    if _write_blocked(row, source):
         return False
     if row:
         row.steps = steps
@@ -82,7 +92,7 @@ def upsert_sleep(
     source: str,
 ) -> bool:
     row = db.query(SleepLog).filter(SleepLog.date == day).first()
-    if _manual_wins(row, source):
+    if _write_blocked(row, source):
         return False
     if row:
         row.asleep_minutes = asleep_minutes
@@ -108,6 +118,53 @@ def touch_last_ingest(db: DBSession) -> None:
     """Record the time of the last successful Apple Health ingest."""
     from app.routers.settings import get_or_create_settings
     get_or_create_settings(db).health_last_ingest = datetime.utcnow()
+
+
+# ---------------------------------------------------------------------------
+# Weight interpolation — estimate a bodyweight for days with no reading.
+#
+# Used to fill gaps for display (dashboard chart, day detail) and to prefill
+# the manual-log field. Estimates are drawn only from *real* readings, never
+# from other estimates, so a guess never compounds on a guess.
+# ---------------------------------------------------------------------------
+
+def real_weight_points(db: DBSession) -> list[tuple[date, float]]:
+    """All non-estimated weigh-ins, date-ascending — the interpolation basis."""
+    rows = (
+        db.query(WeightLog)
+        .filter(WeightLog.source != "estimated")
+        .order_by(WeightLog.date)
+        .all()
+    )
+    return [(r.date, r.weight_kg) for r in rows]
+
+
+def estimate_weight_for(
+    day: date, points: list[tuple[date, float]]
+) -> Optional[tuple[float, str]]:
+    """
+    Estimate bodyweight for a day with no tracked reading, from the nearest
+    real weigh-ins on either side. Linear interpolation between the reading
+    before and the reading after; if only one side exists, carry that value
+    forward/back. `points` must be date-ascending. Returns (kg, method) or
+    None when there is nothing to estimate from.
+    """
+    prev = nxt = None
+    for d, kg in points:
+        if d < day:
+            prev = (d, kg)
+        elif d > day:
+            nxt = (d, kg)
+            break
+    if prev and nxt:
+        span = (nxt[0] - prev[0]).days
+        frac = (day - prev[0]).days / span
+        return round(prev[1] + (nxt[1] - prev[1]) * frac, 1), "interpolated"
+    if prev:
+        return round(prev[1], 1), "carried_forward"
+    if nxt:
+        return round(nxt[1], 1), "carried_back"
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -324,6 +381,31 @@ def get_weight_log(
         .filter(WeightLog.date >= since)
         .order_by(WeightLog.date)
         .all()
+    )
+
+
+@router.get("/api/health/weight/estimate", response_model=WeightEstimateOut)
+def estimate_weight(
+    day: date = Query(..., alias="date"),
+    db: DBSession = Depends(get_db),
+    _: None = Depends(require_auth),
+):
+    """
+    Weight to show/prefill for a date. If a real reading exists it's returned
+    as-is (estimated=False). Otherwise an interpolated estimate from the
+    surrounding weigh-ins is returned (estimated=True), or a null weight when
+    there's no data to estimate from.
+    """
+    row = db.query(WeightLog).filter(WeightLog.date == day).first()
+    if row is not None and row.source != "estimated":
+        return WeightEstimateOut(
+            date=day, weight_kg=row.weight_kg, estimated=False, source=row.source
+        )
+    est = estimate_weight_for(day, real_weight_points(db))
+    if est is None:
+        return WeightEstimateOut(date=day, weight_kg=None, estimated=False)
+    return WeightEstimateOut(
+        date=day, weight_kg=est[0], estimated=True, method=est[1], source="estimated"
     )
 
 

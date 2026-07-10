@@ -35,6 +35,16 @@ function fmtDay(iso) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+// Weight dots: solid for a real weigh-in, hollow ring for an interpolated
+// estimate on a day that wasn't tracked.
+function weightDot(props) {
+  const { cx, cy, payload, index } = props
+  if (cx == null || cy == null) return null
+  return payload.estimated
+    ? <circle key={index} cx={cx} cy={cy} r={2.2} fill="none" stroke={SAGE} strokeWidth={1} strokeOpacity={0.55} />
+    : <circle key={index} cx={cx} cy={cy} r={2} fill={SAGE} />
+}
+
 function EmptyNote({ children }) {
   return (
     <p className="muted" style={{ textAlign: 'center', padding: '1.1rem 0' }}>
@@ -167,7 +177,14 @@ function DayDetail({ date }) {
 
       {detail && (
         <div style={{ marginTop: '0.35rem' }}>
-          {detail.weight_kg != null && <Row label="Weight">{detail.weight_kg} kg</Row>}
+          {detail.weight_kg != null && (
+            <Row label="Weight">
+              {detail.weight_kg} kg
+              {detail.weight_estimated && (
+                <span className="muted" style={{ marginLeft: 5, fontSize: '0.7rem' }}>est.</span>
+              )}
+            </Row>
+          )}
           {detail.steps != null && <Row label="Steps">{detail.steps.toLocaleString()}</Row>}
           {detail.sleep && <Row label="Sleep">{Math.round(detail.sleep.asleep_minutes / 6) / 10} h</Row>}
           {detail.nutrition && (
@@ -297,9 +314,10 @@ export default function Dashboard() {
   const weightData = data
     ? data.weight.series.map(p => {
         const avg = data.weight.moving_avg_7d.find(a => a.date === p.date)
-        return { date: p.date, weight_kg: p.weight_kg, avg_kg: avg ? avg.avg_kg : null }
+        return { date: p.date, weight_kg: p.weight_kg, avg_kg: avg ? avg.avg_kg : null, estimated: p.estimated }
       })
     : []
+  const hasWeightEstimates = weightData.some(p => p.estimated)
 
   const nut = data?.nutrition_today
   const targets = data?.targets
@@ -389,16 +407,29 @@ export default function Dashboard() {
               <WidgetLabel>90 days · 7-day avg</WidgetLabel>
             </div>
             {weightData.length > 0 ? (
+              <>
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={weightData} margin={{ top: 8, right: 8, left: -14, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
                   <XAxis dataKey="date" stroke={AXIS} fontSize={10} tickLine={false} axisLine={false} tickFormatter={fmtDay} minTickGap={28} />
                   <YAxis stroke={AXIS} fontSize={10} domain={['auto', 'auto']} tickLine={false} axisLine={false} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={fmtDay} />
-                  <Line type="monotone" dataKey="weight_kg" name="kg" stroke={SAGE} strokeWidth={1.5} dot={{ r: 2, fill: SAGE, strokeWidth: 0 }} />
+                  <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    labelFormatter={fmtDay}
+                    formatter={(value, name, item) =>
+                      name === 'kg' && item?.payload?.estimated ? [`${value} (est.)`, name] : [value, name]
+                    }
+                  />
+                  <Line type="monotone" dataKey="weight_kg" name="kg" stroke={SAGE} strokeWidth={1.5} dot={weightDot} />
                   <Line type="monotone" dataKey="avg_kg" name="7d avg" stroke={BONE} strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls />
                 </LineChart>
               </ResponsiveContainer>
+              {hasWeightEstimates && (
+                <p className="muted" style={{ fontSize: '0.72rem', marginTop: 2, textAlign: 'center' }}>
+                  Hollow points are interpolated estimates for days you didn't weigh in.
+                </p>
+              )}
+              </>
             ) : (
               <EmptyNote />
             )}

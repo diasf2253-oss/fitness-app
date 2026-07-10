@@ -181,6 +181,17 @@ class WeightLogOut(OrmBase):
     source: str
 
 
+class WeightEstimateOut(BaseModel):
+    """Weight to prefill for a date: a real reading, or an interpolated
+    estimate from surrounding weigh-ins (estimated=True). weight_kg is null
+    when there is no weight data to estimate from at all."""
+    date: date
+    weight_kg: Optional[float] = None
+    estimated: bool = False
+    method: Optional[str] = None   # interpolated | carried_forward | carried_back
+    source: Optional[str] = None
+
+
 class StepsLogCreate(BaseModel):
     date: date
     steps: int
@@ -295,6 +306,7 @@ class SessionSummaryStats(BaseModel):
 class WeightPoint(BaseModel):
     date: date
     weight_kg: float
+    estimated: bool = False   # interpolated fill for an untracked day
 
 
 class MovingAvgPoint(BaseModel):
@@ -550,6 +562,7 @@ class DayDetailOut(BaseModel):
     date: date
     sessions: list[DaySession] = []
     weight_kg: Optional[float] = None
+    weight_estimated: bool = False   # weight_kg is an interpolated estimate
     steps: Optional[int] = None
     sleep: Optional[SleepLogOut] = None
     nutrition: Optional[NutritionDayOut] = None
