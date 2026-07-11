@@ -568,3 +568,37 @@ class DayDetailOut(BaseModel):
     nutrition: Optional[NutritionDayOut] = None
     trackers: list[DayTracker] = []
     plan: list[PlanItemOut] = []
+
+
+# ---------------------------------------------------------------------------
+# Sync (Phase 9) — device-to-device pull/push
+# ---------------------------------------------------------------------------
+
+class SyncTableInfo(BaseModel):
+    rows: int
+    last_updated: Optional[datetime] = None
+
+
+class SyncManifestOut(BaseModel):
+    """Cheap 'anything new since my last sync?' check."""
+    server_time: datetime
+    tables: dict[str, SyncTableInfo]
+
+
+class SyncPullOut(BaseModel):
+    server_time: datetime
+    since: Optional[datetime] = None
+    # table name -> payload rows (uuid-keyed entities / date-keyed health)
+    tables: dict[str, list[dict]]
+
+
+class SyncPushIn(BaseModel):
+    tables: dict[str, list[dict]]
+
+
+class SyncPushOut(BaseModel):
+    status: str = "ok"
+    server_time: datetime
+    # table -> {received, inserted, updated, skipped_older, ...}
+    counts: dict[str, dict[str, int]]
+    warnings: list[str] = []

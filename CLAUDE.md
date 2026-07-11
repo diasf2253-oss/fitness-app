@@ -10,7 +10,8 @@ Single-user personal fitness and health tracker. FastAPI + SQLite backend that s
 
 ## Layout
 - `backend/app/main.py` — app entry point; mounts routers and serves the built frontend (single-origin SPA).
-- `backend/app/routers/` — endpoints: calendar, coach, dashboard, dev, exercises, health, insights, nutrition, plan, routines, sessions, settings, stats, trackers.
+- `backend/app/routers/` — endpoints: calendar, coach, dashboard, dev, exercises, health, insights, nutrition, plan, routines, sessions, settings, stats, sync, trackers.
+- `backend/app/sync.py` — device-to-device sync engine (Phase 9): entity tables sync by `uuid`, health tables by `date`, merge is last-write-wins by `updated_at` with health source precedence. No tombstones yet (deletes don't propagate).
 - `backend/app/coach_context.py` — builds the data brief (training/health/nutrition/trackers/plan) the Coach plans from. `plan_item` is the trackable day/study/workout domain (many rows per date, checkable); the Coach proposes, the user approves, accept endpoints commit (workout→routine, day→plan items).
 - `backend/app/models.py` — SQLAlchemy models. `schemas.py` — Pydantic v2 request/response models. `db.py` — engine + session. `config.py` — settings loaded from `.env`. `auth.py` — bearer-token auth. `stats.py` — 1RM / PR math. `seed.py` — sample data.
 - `backend/alembic/` — migrations (`alembic/versions/`).

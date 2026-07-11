@@ -4,9 +4,15 @@ SQLAlchemy ORM models.
 All date columns and foreign keys are indexed for query performance.
 JSON columns (secondary_muscles) use SQLAlchemy's JSON type, which stores
 as TEXT in SQLite and as jsonb in Postgres — no code change needed.
+
+Sync (multi-device): entity tables carry a `uuid` (globally unique identity —
+integer PKs are device-local and collide across devices) and `updated_at`
+(last-write-wins merge). Date-keyed health tables merge on `date`, so they
+carry `updated_at` only. See app/sync.py.
 """
 from datetime import datetime, date
 from typing import Optional
+from uuid import uuid4
 
 from sqlalchemy import (
     Boolean, Date, DateTime, Float, ForeignKey,
@@ -17,11 +23,32 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
 
 
+def _new_uuid() -> str:
+    return str(uuid4())
+
+
+class SyncMixin:
+    """Global identity + merge timestamp for tables that sync across devices."""
+    uuid: Mapped[str] = mapped_column(
+        String(36), default=_new_uuid, unique=True, index=True, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
+class UpdatedAtMixin:
+    """Merge timestamp for date-keyed / singleton tables (no uuid needed)."""
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
 # ---------------------------------------------------------------------------
 # Workout domain
 # ---------------------------------------------------------------------------
 
-class Exercise(Base):
+class Exercise(SyncMixin, Base):
     __tablename__ = "exercise"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -42,7 +69,7 @@ class Exercise(Base):
     )
 
 
-class Routine(Base):
+class Routine(SyncMixin, Base):
     __tablename__ = "routine"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -59,7 +86,7 @@ class Routine(Base):
     sessions: Mapped[list["Session"]] = relationship(back_populates="routine")
 
 
-class RoutineExercise(Base):
+class RoutineExercise(SyncMixin, Base):
     __tablename__ = "routine_exercise"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -79,7 +106,7 @@ class RoutineExercise(Base):
     exercise: Mapped["Exercise"] = relationship(back_populates="routine_exercises")
 
 
-class Session(Base):
+class Session(SyncMixin, Base):
     """A single workout session (one gym visit)."""
     __tablename__ = "session"
 
@@ -102,7 +129,7 @@ class Session(Base):
     )
 
 
-class SessionExercise(Base):
+class SessionExercise(SyncMixin, Base):
     """An exercise slot within a live session."""
     __tablename__ = "session_exercise"
 
@@ -123,7 +150,7 @@ class SessionExercise(Base):
     )
 
 
-class Set(Base):
+class Set(SyncMixin, Base):
     """One set within a session exercise (e.g. 3rd set of bench press)."""
     __tablename__ = "set"
 
@@ -149,7 +176,7 @@ class Set(Base):
 # to-do the user checks off; the AI Coach proposes them, the user approves.
 # ---------------------------------------------------------------------------
 
-class PlanItem(Base):
+class PlanItem(SyncMixin, Base):
     __tablename__ = "plan_item"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -171,7 +198,7 @@ class PlanItem(Base):
 # Health & nutrition (one row per date; upsert on re-import)
 # ---------------------------------------------------------------------------
 
-class WeightLog(Base):
+class WeightLog(UpdatedAtMixin, Base):
     __tablename__ = "weight_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -181,7 +208,7 @@ class WeightLog(Base):
     source: Mapped[str] = mapped_column(String(50), default="manual")
 
 
-class StepsLog(Base):
+class StepsLog(UpdatedAtMixin, Base):
     __tablename__ = "steps_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -190,7 +217,7 @@ class StepsLog(Base):
     source: Mapped[str] = mapped_column(String(50), default="manual")
 
 
-class SleepLog(Base):
+class SleepLog(UpdatedAtMixin, Base):
     __tablename__ = "sleep_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -203,7 +230,7 @@ class SleepLog(Base):
     source: Mapped[str] = mapped_column(String(50), default="manual")
 
 
-class NutritionDay(Base):
+class NutritionDay(UpdatedAtMixin, Base):
     __tablename__ = "nutrition_day"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -228,7 +255,7 @@ class NutritionDay(Base):
 #   text   → free text (e.g. the seeded Journal)
 # ---------------------------------------------------------------------------
 
-class Tracker(Base):
+class Tracker(SyncMixin, Base):
     __tablename__ = "tracker"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -249,7 +276,7 @@ class Tracker(Base):
     )
 
 
-class TrackerLog(Base):
+class TrackerLog(SyncMixin, Base):
     """One tracker entry per day (upsert by tracker+date)."""
     __tablename__ = "tracker_log"
     __table_args__ = (UniqueConstraint("tracker_id", "date", name="uq_tracker_date"),)
@@ -269,7 +296,7 @@ class TrackerLog(Base):
 # App settings (single row, id=1 always)
 # ---------------------------------------------------------------------------
 
-class AppSettings(Base):
+class AppSettings(UpdatedAtMixin, Base):
     __tablename__ = "settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
