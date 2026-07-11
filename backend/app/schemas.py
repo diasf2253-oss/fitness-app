@@ -23,6 +23,8 @@ class OrmBase(BaseModel):
 class ExerciseBase(BaseModel):
     name: str
     primary_muscle: Optional[str] = None
+    # Canonical taxonomy for Ranks/analytics; auto-tagged when omitted
+    primary_muscle_group: Optional[str] = None
     secondary_muscles: list[str] = []
     equipment: Optional[str] = None
     notes: Optional[str] = None
@@ -258,6 +260,8 @@ class AppSettingsUpdate(BaseModel):
     protein_target_g: Optional[int] = None
     fat_max_g: Optional[int] = None
     unit_system: Optional[str] = None
+    sex: Optional[str] = None
+    rank_config: Optional[dict] = None
 
 
 class AppSettingsOut(OrmBase):
@@ -266,6 +270,8 @@ class AppSettingsOut(OrmBase):
     protein_target_g: int
     fat_max_g: int
     unit_system: str
+    sex: str = "male"
+    rank_config: Optional[dict] = None
     health_last_ingest: Optional[datetime] = None
 
 

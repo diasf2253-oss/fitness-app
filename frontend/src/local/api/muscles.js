@@ -1,0 +1,42 @@
+/**
+ * Muscle-group taxonomy + name-based auto-tagging, local-first — mirrors
+ * backend/app/muscles.py. Only PRIMARY muscle groups count anywhere.
+ */
+
+export const MUSCLE_GROUPS = [
+  'Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps',
+  'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Abs',
+]
+
+// Ordered (specific → general): first matching rule wins, so "leg curl"
+// hits Hamstrings before "curl" hits Biceps.
+const NAME_RULES = [
+  [['calf', 'calve'], 'Calves'],
+  [['hamstring', 'leg curl', 'lying curl', 'romanian', 'rdl', 'good morning', 'nordic'], 'Hamstrings'],
+  [['glute', 'hip thrust', 'pull-through', 'pull through', 'kickback'], 'Glutes'],
+  [['quad', 'squat', 'leg press', 'leg extension', 'lunge', 'split squat', 'hack', 'sissy', 'step-up', 'step up'], 'Quads'],
+  [['tricep', 'pushdown', 'push-down', 'skull', 'close-grip', 'close grip', 'jm press', 'overhead extension', 'dip'], 'Triceps'],
+  [['bicep', 'curl', 'chin-up', 'chin up', 'chinup', 'preacher'], 'Biceps'],
+  [['lateral raise', 'side raise', 'rear delt', 'reverse fly', 'reverse flye', 'face pull', 'overhead press', 'shoulder press', 'military press', 'arnold', 'upright row', 'delt'], 'Shoulders'],
+  [['row', 'pulldown', 'pull-down', 'pull-up', 'pull up', 'pullup', 'pullover', 'deadlift', 'lat ', 'back extension', 'shrug'], 'Back'],
+  [['bench', 'chest', 'fly', 'flye', 'pec', 'push-up', 'push up', 'pushup', 'incline', 'decline'], 'Chest'],
+  [['abs', 'ab ', 'crunch', 'plank', 'leg raise', 'knee raise', 'sit-up', 'sit up', 'rollout', 'hollow', 'russian twist', 'core', 'oblique'], 'Abs'],
+]
+
+const LEGACY_MAP = {
+  chest: 'Chest', back: 'Back', shoulders: 'Shoulders',
+  biceps: 'Biceps', triceps: 'Triceps', quads: 'Quads',
+  hamstrings: 'Hamstrings', glutes: 'Glutes', calves: 'Calves',
+  core: 'Abs', abs: 'Abs',
+}
+
+/** Best-guess primary muscle group from an exercise name — mirrors
+ * muscles.suggest_muscle_group. Returns null when nothing matches. */
+export function suggestMuscleGroup(name, legacyPrimary = null) {
+  const n = (name || '').toLowerCase()
+  for (const [keywords, group] of NAME_RULES) {
+    if (keywords.some(k => n.includes(k))) return group
+  }
+  if (legacyPrimary) return LEGACY_MAP[legacyPrimary.trim().toLowerCase()] || null
+  return null
+}

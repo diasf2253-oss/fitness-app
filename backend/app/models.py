@@ -54,6 +54,10 @@ class Exercise(SyncMixin, Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
     primary_muscle: Mapped[Optional[str]] = mapped_column(String(100))
+    # Canonical muscle-group taxonomy (muscles.MUSCLE_GROUPS) — drives the
+    # Ranks body map. Auto-tagged from the name; the legacy free-text
+    # primary_muscle is kept as the fallback hint.
+    primary_muscle_group: Mapped[Optional[str]] = mapped_column(String(20), index=True)
     # Stored as a JSON array of strings, e.g. ["hamstrings", "glutes"]
     secondary_muscles: Mapped[Optional[list]] = mapped_column(JSON, default=list)
     equipment: Mapped[Optional[str]] = mapped_column(String(100))
@@ -305,5 +309,9 @@ class AppSettings(UpdatedAtMixin, Base):
     fat_max_g: Mapped[int] = mapped_column(Integer, default=100)
     # 'metric' | 'imperial'
     unit_system: Mapped[str] = mapped_column(String(20), default="metric")
+    # 'male' | 'female' — scales the Ranks strength references
+    sex: Mapped[str] = mapped_column(String(10), default="male")
+    # Rank-ladder overrides (standards / female multiplier / agg); null ⇒ defaults
+    rank_config: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     # When the last successful Apple Health ingest ran (push or backfill)
     health_last_ingest: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

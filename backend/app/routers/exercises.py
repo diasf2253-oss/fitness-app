@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.auth import require_auth
 from app.db import get_db
 from app.models import Exercise
+from app.muscles import suggest_muscle_group
 from app.schemas import ExerciseCreate, ExerciseOut, ExerciseUpdate
 
 router = APIRouter(prefix="/api/exercises", tags=["exercises"])
@@ -42,11 +43,15 @@ def create_exercise(
     db: Session = Depends(get_db),
     _: None = Depends(require_auth),
 ):
-    """Create a new custom exercise."""
+    """Create a new custom exercise. The canonical muscle group is auto-tagged
+    from the name when not provided, so custom exercises feed the Ranks map."""
     existing = db.query(Exercise).filter(Exercise.name == body.name).first()
     if existing:
         raise HTTPException(status_code=409, detail="Exercise name already exists")
-    ex = Exercise(**body.model_dump())
+    data = body.model_dump()
+    if not data.get("primary_muscle_group"):
+        data["primary_muscle_group"] = suggest_muscle_group(body.name, body.primary_muscle)
+    ex = Exercise(**data)
     db.add(ex)
     db.commit()
     db.refresh(ex)

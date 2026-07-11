@@ -15,7 +15,7 @@ const MAX_RECENT_PRS = 5
 
 const DEFAULT_SETTINGS = {
   id: 1, calorie_target: 2400, protein_target_g: 180, fat_max_g: 100,
-  unit_system: 'metric', health_last_ingest: null,
+  unit_system: 'metric', sex: 'male', rank_config: null, health_last_ingest: null,
 }
 
 async function getSettings() {

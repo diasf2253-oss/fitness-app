@@ -5,6 +5,7 @@
  * reps>0, weight>0).
  */
 import { db, newUuid, nowIso } from '../db'
+import { suggestMuscleGroup } from './muscles'
 import { LocalApiError, isoWeekKey, naiveIso, notFound, round } from './util'
 
 // ---------------------------------------------------------------------------
@@ -35,6 +36,7 @@ async function exerciseByUuid(uuid) {
 const presentExercise = (ex) => ({
   id: ex.uuid, name: ex.name,
   primary_muscle: ex.primary_muscle ?? null,
+  primary_muscle_group: ex.primary_muscle_group ?? null,
   secondary_muscles: ex.secondary_muscles || [],
   equipment: ex.equipment ?? null,
   notes: ex.notes ?? null,
@@ -227,6 +229,9 @@ export const workoutRoutes = [
       const row = stamp({
         uuid: newUuid(), name: body.name,
         primary_muscle: body.primary_muscle ?? null,
+        // Auto-tag so custom exercises feed the Ranks map — mirrors exercises.py
+        primary_muscle_group: body.primary_muscle_group
+          || suggestMuscleGroup(body.name, body.primary_muscle),
         secondary_muscles: body.secondary_muscles || [],
         equipment: body.equipment ?? null, notes: body.notes ?? null,
         is_custom: body.is_custom ?? true,

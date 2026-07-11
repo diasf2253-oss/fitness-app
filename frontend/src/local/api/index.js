@@ -15,6 +15,7 @@
 import { healthRoutes } from './health'
 import { overviewRoutes } from './overview'
 import { planRoutes } from './plan'
+import { rankRoutes } from './ranks'
 import { trackerRoutes } from './trackers'
 import { workoutRoutes } from './workout'
 
@@ -25,6 +26,7 @@ const ROUTES = [
   ...workoutRoutes,
   ...trackerRoutes,
   ...planRoutes,
+  ...rankRoutes,
   ...overviewRoutes,
 ]
 
