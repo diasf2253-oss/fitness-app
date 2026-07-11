@@ -18,7 +18,7 @@ from app.models import (
     NutritionDay, PlanItem, Session as WorkoutSession, SleepLog, StepsLog,
     Tracker, TrackerLog, WeightLog,
 )
-from app.routers.health import estimate_weight_for, real_weight_points
+from app.routers.health import DERIVED_SOURCES, real_weight_points, resolved_weight_for
 from app.routers.stats import session_summary
 from app.schemas import (
     CalendarDay, DayDetailOut, DaySession, DayTracker, MonthCalendarOut, PlanItemOut,
@@ -68,7 +68,12 @@ def month_calendar(
     ):
         day_of(started_at.date()).sessions += 1
 
-    for row in db.query(WeightLog).filter(WeightLog.date.between(first, last)).all():
+    for row in (
+        db.query(WeightLog)
+        .filter(WeightLog.date.between(first, last),
+                WeightLog.source.notin_(DERIVED_SOURCES))
+        .all()
+    ):
         day_of(row.date).has_weight = True
     for row in db.query(StepsLog).filter(StepsLog.date.between(first, last)).all():
         day_of(row.date).steps = row.steps
@@ -106,16 +111,9 @@ def day_detail(
         ))
 
     weight_row = db.query(WeightLog).filter(WeightLog.date == day).first()
-    if weight_row is not None and weight_row.source != "estimated":
-        weight_kg, weight_estimated = weight_row.weight_kg, False
-    else:
-        est = estimate_weight_for(day, real_weight_points(db))
-        if est is not None:
-            weight_kg, weight_estimated = est[0], True
-        else:
-            # No basis to estimate from; fall back to a saved estimate if any.
-            weight_kg = weight_row.weight_kg if weight_row else None
-            weight_estimated = weight_row is not None
+    weight_kg, weight_estimated, _ = resolved_weight_for(
+        day, weight_row, real_weight_points(db)
+    )
 
     steps = db.query(StepsLog).filter(StepsLog.date == day).first()
     sleep = db.query(SleepLog).filter(SleepLog.date == day).first()

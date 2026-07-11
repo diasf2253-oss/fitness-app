@@ -155,3 +155,58 @@ class TestSurfaced:
         r = client.get("/api/day/2026-06-03", headers=AUTH).json()
         assert r["weight_estimated"] is False
         assert r["weight_kg"] == 84.0
+
+
+class TestSampleTreatedAsInterpolation:
+    """Demo 'sample' data is non-authoritative: it never buries a real reading,
+    and where real weigh-ins exist it is replaced by an interpolation of them."""
+
+    def test_sample_day_shows_interpolation_not_its_value(self):
+        log_weight("2026-06-01", 78.0, source="apple_health")
+        log_weight("2026-06-11", 77.0, source="apple_health")
+        log_weight("2026-06-06", 84.0, source="sample")   # pollution, empty day
+        r = estimate("2026-06-06")
+        assert r["estimated"] is True
+        assert r["method"] == "interpolated"
+        assert r["weight_kg"] == pytest.approx(77.5, abs=0.1)   # midway, not 84
+
+    def test_sample_cannot_overwrite_real_reading(self):
+        log_weight("2026-06-01", 78.0, source="apple_health")
+        log_weight("2026-06-01", 84.0, source="sample")         # blocked
+        db = TestingSession()
+        row = db.query(WeightLog).filter(WeightLog.date == date(2026, 6, 1)).first()
+        db.close()
+        assert row.weight_kg == 78.0
+        assert row.source == "apple_health"
+
+    def test_real_reading_overwrites_sample(self):
+        log_weight("2026-06-01", 84.0, source="sample")
+        log_weight("2026-06-01", 78.0, source="apple_health")   # allowed
+        db = TestingSession()
+        row = db.query(WeightLog).filter(WeightLog.date == date(2026, 6, 1)).first()
+        db.close()
+        assert row.weight_kg == 78.0
+        assert row.source == "apple_health"
+
+    def test_dashboard_replaces_sample_with_estimate(self):
+        today = date.today()
+        log_weight((today - timedelta(days=4)).isoformat(), 78.0, source="apple_health")
+        log_weight(today.isoformat(), 77.0, source="apple_health")
+        log_weight((today - timedelta(days=2)).isoformat(), 84.0, source="sample")
+        series = client.get("/api/dashboard", headers=AUTH).json()["weight"]["series"]
+        by_date = {p["date"]: p for p in series}
+        mid = (today - timedelta(days=2)).isoformat()
+        assert by_date[mid]["estimated"] is True
+        assert by_date[mid]["weight_kg"] == pytest.approx(77.5, abs=0.1)   # not 84
+
+    def test_pure_demo_database_still_shows_sample(self):
+        """With no real readings at all (seed-only DB), sample must still show
+        so the seeder's preview isn't blanked."""
+        log_weight("2026-06-01", 84.0, source="sample")
+        log_weight("2026-06-02", 83.6, source="sample")
+        r = estimate("2026-06-01")
+        assert r["weight_kg"] == 84.0
+        assert r["estimated"] is False
+        assert r["source"] == "sample"
+        series = client.get("/api/dashboard", headers=AUTH).json()["weight"]["series"]
+        assert any(p["weight_kg"] == 84.0 and p["estimated"] is False for p in series)

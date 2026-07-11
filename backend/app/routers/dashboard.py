@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session as DBSession
 from app.auth import require_auth
 from app.db import get_db
 from app.models import NutritionDay, Session as WorkoutSession, SleepLog, StepsLog, WeightLog
-from app.routers.health import estimate_weight_for, real_weight_points
+from app.routers.health import DERIVED_SOURCES, real_weight_points, resolved_weight_for
 from app.routers.settings import get_or_create_settings
 from app.routers.stats import session_summary
 from app.schemas import (
@@ -59,8 +59,10 @@ def get_dashboard(
 ):
     today = date.today()
 
-    # ---- Weight: 90-day series (untracked days filled with an interpolated
-    #      estimate, flagged) + moving average over the real readings ----
+    # ---- Weight: 90-day series. Real weigh-ins show as-is; untracked days
+    #      and days carrying only demo/estimate data are shown as interpolated
+    #      estimates of the surrounding real readings (flagged). Moving average
+    #      runs over the real readings only. ----
     weight_rows = (
         db.query(WeightLog)
         .filter(WeightLog.date >= today - timedelta(days=90))
@@ -68,26 +70,19 @@ def get_dashboard(
         .all()
     )
     by_date = {r.date: r for r in weight_rows}
-    real_series = [(r.date, r.weight_kg) for r in weight_rows if r.source != "estimated"]
+    real_series = [(r.date, r.weight_kg) for r in weight_rows if r.source not in DERIVED_SOURCES]
 
     series_points: list[WeightPoint] = []
-    if real_series:
+    if weight_rows:
         # Interpolate from the full history so a reading just outside the
         # window still anchors estimates near the window's leading edge.
         basis = real_weight_points(db)
-        start = real_series[0][0]
+        start = weight_rows[0].date
         for i in range((today - start).days + 1):
             d = start + timedelta(days=i)
-            row = by_date.get(d)
-            if row is not None:
-                series_points.append(WeightPoint(
-                    date=d, weight_kg=row.weight_kg,
-                    estimated=(row.source == "estimated"),
-                ))
-                continue
-            est = estimate_weight_for(d, basis)
-            if est is not None:
-                series_points.append(WeightPoint(date=d, weight_kg=est[0], estimated=True))
+            wkg, estimated, _ = resolved_weight_for(d, by_date.get(d), basis)
+            if wkg is not None:
+                series_points.append(WeightPoint(date=d, weight_kg=wkg, estimated=estimated))
 
     weight = DashboardWeight(
         series=series_points,

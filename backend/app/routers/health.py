@@ -31,15 +31,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["health"])
 
 
+# Non-authoritative weight sources: our own interpolated fills ('estimated')
+# and dev/demo seed data ('sample'). Neither is a real tracked reading, so
+# weight interpolation ignores them (a day carrying only one of these is
+# treated as untracked and shown as an estimate), and neither may overwrite
+# a real reading. Real sources today are 'manual' and 'apple_health'.
+DERIVED_SOURCES = ("estimated", "sample")
+
+
 # ---------------------------------------------------------------------------
 # Upsert helpers — idempotent: re-sending the same data changes nothing.
 #
 # Source precedence: a day the user corrected by hand (source='manual') is
 # only ever overwritten by another manual write — the correction exists
-# precisely because the synced value was wrong. apple_health and sample
-# writes overwrite each other freely. 'estimated' is the lowest rank: an
-# interpolated guess never overwrites a real reading, and any real reading
-# (manual/apple_health/sample) overwrites an estimate.
+# precisely because the synced value was wrong. apple_health overwrites
+# apple_health freely. A DERIVED_SOURCES write (interpolated estimate or
+# demo seed) never buries a real reading, and any real reading overwrites
+# derived data.
 # Every writer funnels through these helpers, so the rule lives here only.
 # ---------------------------------------------------------------------------
 
@@ -50,8 +58,8 @@ def _write_blocked(row, source: str) -> bool:
     # A hand correction is only overridden by another hand correction.
     if row.source == "manual" and source != "manual":
         return True
-    # An estimate must never bury a real, tracked reading.
-    if source == "estimated" and row.source != "estimated":
+    # Derived data (estimate/demo) must never bury a real, tracked reading.
+    if source in DERIVED_SOURCES and row.source not in DERIVED_SOURCES:
         return True
     return False
 
@@ -124,19 +132,45 @@ def touch_last_ingest(db: DBSession) -> None:
 # Weight interpolation — estimate a bodyweight for days with no reading.
 #
 # Used to fill gaps for display (dashboard chart, day detail) and to prefill
-# the manual-log field. Estimates are drawn only from *real* readings, never
-# from other estimates, so a guess never compounds on a guess.
+# the manual-log field. Estimates are drawn only from *real* readings (never
+# from estimates or demo seed data), so a guess never compounds on a guess
+# and stale sample data is replaced by an interpolation of your real weigh-ins.
 # ---------------------------------------------------------------------------
 
 def real_weight_points(db: DBSession) -> list[tuple[date, float]]:
-    """All non-estimated weigh-ins, date-ascending — the interpolation basis."""
+    """Real weigh-ins only (excludes estimate/demo), date-ascending — the
+    interpolation basis."""
     rows = (
         db.query(WeightLog)
-        .filter(WeightLog.source != "estimated")
+        .filter(WeightLog.source.notin_(DERIVED_SOURCES))
         .order_by(WeightLog.date)
         .all()
     )
     return [(r.date, r.weight_kg) for r in rows]
+
+
+def resolved_weight_for(
+    day: date, row, basis: list[tuple[date, float]]
+) -> tuple[Optional[float], bool, Optional[str]]:
+    """
+    The weight to show for a day, as (weight_kg, estimated, method).
+
+    - A real reading (row present, source not derived) → its value, not
+      estimated.
+    - Otherwise (no row, or a derived sample/estimate row) → an interpolation
+      of the surrounding real weigh-ins, flagged estimated.
+    - If there is no real reading to interpolate from at all, fall back to the
+      stored derived value if one exists (e.g. a pure demo/seed database), else
+      nothing.
+    """
+    if row is not None and row.source not in DERIVED_SOURCES:
+        return row.weight_kg, False, None
+    est = estimate_weight_for(day, basis)
+    if est is not None:
+        return est[0], True, est[1]
+    if row is not None:
+        return row.weight_kg, False, None
+    return None, False, None
 
 
 def estimate_weight_for(
@@ -391,21 +425,21 @@ def estimate_weight(
     _: None = Depends(require_auth),
 ):
     """
-    Weight to show/prefill for a date. If a real reading exists it's returned
-    as-is (estimated=False). Otherwise an interpolated estimate from the
-    surrounding weigh-ins is returned (estimated=True), or a null weight when
-    there's no data to estimate from.
+    Weight to show/prefill for a date. A real reading is returned as-is
+    (estimated=False). A day with only demo/estimate data — or no data — is
+    interpolated from the surrounding real weigh-ins (estimated=True), or
+    returns a null weight when there's nothing to estimate from.
     """
     row = db.query(WeightLog).filter(WeightLog.date == day).first()
-    if row is not None and row.source != "estimated":
-        return WeightEstimateOut(
-            date=day, weight_kg=row.weight_kg, estimated=False, source=row.source
-        )
-    est = estimate_weight_for(day, real_weight_points(db))
-    if est is None:
+    wkg, est, method = resolved_weight_for(day, row, real_weight_points(db))
+    if wkg is None:
         return WeightEstimateOut(date=day, weight_kg=None, estimated=False)
+    if est:
+        return WeightEstimateOut(
+            date=day, weight_kg=wkg, estimated=True, method=method, source="estimated"
+        )
     return WeightEstimateOut(
-        date=day, weight_kg=est[0], estimated=True, method=est[1], source="estimated"
+        date=day, weight_kg=wkg, estimated=False, source=(row.source if row else None)
     )
 
 
