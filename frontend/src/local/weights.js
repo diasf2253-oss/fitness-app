@@ -112,30 +112,9 @@ export function buildWeightSeries(rows, todayIso, windowDays = 90) {
 // IndexedDB glue — what the UI calls in local-first mode
 // ---------------------------------------------------------------------------
 
-export async function allWeights() {
-  return db.weight_log.toArray()
-}
-
-/**
- * Upsert one day's weight, honoring source precedence. Marks the row dirty
- * for the next sync push. Returns true if the write was applied.
- */
-export async function upsertWeight(dateIso, kg, source = 'manual') {
-  const existing = await db.weight_log.get(dateIso)
-  if (writeBlocked(existing, source)) return false
-  await db.weight_log.put({
-    date: dateIso,
-    weight_kg: kg,
-    source,
-    updated_at: new Date().toISOString().replace('Z', ''),
-    _dirty: 1,
-  })
-  return true
-}
-
 /** Weight to prefill for a date — local mirror of GET /api/health/weight/estimate. */
 export async function weightEstimateFor(dateIso) {
-  const rows = await allWeights()
+  const rows = await db.weight_log.toArray()
   const row = rows.find(r => r.date === dateIso) || null
   const resolved = resolvedWeightFor(dateIso, row, realWeightPoints(rows))
   if (!resolved) return { date: dateIso, weight_kg: null, estimated: false }
@@ -146,9 +125,4 @@ export async function weightEstimateFor(dateIso) {
     method: resolved.method,
     source: resolved.estimated ? 'estimated' : (row ? row.source : null),
   }
-}
-
-/** Dashboard weight payload from local data — same shape as /api/dashboard. */
-export async function localWeightDashboard(todayIso) {
-  return buildWeightSeries(await allWeights(), todayIso)
 }

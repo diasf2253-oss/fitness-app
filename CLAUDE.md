@@ -17,6 +17,7 @@ Single-user personal fitness and health tracker. FastAPI + SQLite backend that s
 - `backend/alembic/` — migrations (`alembic/versions/`).
 - `backend/tests/` — Pytest suite.
 - `frontend/src/` — React app. `frontend/public/` — PWA assets. `vite.config.js`, `index.html`.
+- `frontend/src/local/` — local-first layer (phone independence): `db.js` IndexedDB via Dexie (rows mirror the sync payload), `local/api/` the on-device twin of the REST API (apiFetch dispatches here in local-first mode; Coach/ingest/sync/dev fall through to the network), `sync.js` sync-on-open client, `weights.js` weight math. Mode flag: `localStorage.local_first='1'` or `VITE_LOCAL_FIRST=1` build; default off (laptop unchanged). Ported JS math mirrors the backend 1:1 and is tested in vitest (`npm test` from `frontend/`).
 - `.env` (not committed) holds the auth token and database URL.
 
 ## Commands

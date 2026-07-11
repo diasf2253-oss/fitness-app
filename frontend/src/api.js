@@ -10,6 +10,9 @@
 
 // The token is stored in localStorage so it survives page reloads.
 // The user sets it once on the Settings page (or we default to 'changeme' for dev).
+import { dispatchLocal } from './local/api'
+import { isLocalFirst } from './local/mode'
+
 function getToken() {
   return localStorage.getItem('app_token') || 'changeme'
 }
@@ -23,8 +26,20 @@ export function setToken(token) {
  * - Adds Authorization header automatically
  * - Sets Content-Type: application/json when a body is provided
  * - Throws an Error with the response detail on non-2xx responses
+ *
+ * Local-first mode: requests are offered to the on-device API first
+ * (IndexedDB-backed twin of the backend). Matched routes never touch the
+ * network; unmatched ones (Coach, ingest, sync, dev) fall through to it.
  */
 export async function apiFetch(path, options = {}) {
+  if (isLocalFirst()) {
+    const { handled, result } = await dispatchLocal(path, options)
+    if (handled) return result
+  }
+  return networkFetch(path, options)
+}
+
+async function networkFetch(path, options = {}) {
   const headers = {
     'Authorization': `Bearer ${getToken()}`,
     ...(options.body ? { 'Content-Type': 'application/json' } : {}),

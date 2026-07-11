@@ -11,7 +11,7 @@
  * in the background on the next online open, old caches are dropped on
  * activate, and the following launch runs the new version.
  */
-const VERSION = 'tracker-1.0.1'
+const VERSION = 'tracker-1.0.2'
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

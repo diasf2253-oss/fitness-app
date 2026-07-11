@@ -1,7 +1,7 @@
 /**
- * Sync client (P2 slice) — talks to the laptop's /api/sync endpoints when
- * it can reach them; silently does nothing when it can't. Called on app
- * open, so being near the laptop is all it takes to stay in sync.
+ * Sync client — talks to the laptop's /api/sync endpoints when it can
+ * reach them; silently does nothing when it can't. Called on app open,
+ * so being near the laptop is all it takes to stay in sync.
  *
  * Protocol (see backend/app/routers/sync.py + app/sync.py):
  *   1. GET  /api/sync/manifest — cheap reachability probe (short timeout)
@@ -11,13 +11,37 @@
  *      on the laptop; merge into IndexedDB with the same rules
  *   4. Remember the server_time for the next incremental pull
  *
- * Only weight_log syncs for now — tables are added here as domains go
- * local-first (P3/P4).
+ * Tables mirror app/sync.py SYNC_TABLES: parents before children so the
+ * server can resolve FK uuids on push, and rows land locally in an order
+ * that keeps references intact.
  */
 import { db, getMeta, setMeta } from './db'
 import { writeBlocked } from './weights'
 
 const PROBE_TIMEOUT_MS = 3000
+
+// Bump when SYNC_TABLES widens: a device that last synced under a narrower
+// scope must do one full pull (since=null) to backfill the new tables —
+// its incremental cursor predates them.
+const SYNC_SCOPE_VERSION = 2
+
+// table name -> { key, health } (health tables get source-precedence checks)
+const SYNC_TABLES = {
+  exercise: { key: 'uuid' },
+  routine: { key: 'uuid' },
+  routine_exercise: { key: 'uuid' },
+  session: { key: 'uuid' },
+  session_exercise: { key: 'uuid' },
+  set: { key: 'uuid' },
+  plan_item: { key: 'uuid' },
+  tracker: { key: 'uuid' },
+  tracker_log: { key: 'uuid' },
+  weight_log: { key: 'date', health: true },
+  steps_log: { key: 'date', health: true },
+  sleep_log: { key: 'date', health: true },
+  nutrition_day: { key: 'date', health: true },
+  settings: { key: 'singleton' },
+}
 
 function authHeaders() {
   return { Authorization: `Bearer ${localStorage.getItem('app_token') || 'changeme'}` }
@@ -37,17 +61,48 @@ async function probe() {
 }
 
 async function pushDirty() {
-  const dirty = await db.weight_log.where('_dirty').equals(1).toArray()
-  if (dirty.length === 0) return 0
-  const rows = dirty.map(({ _dirty, ...row }) => row)
+  const tables = {}
+  let total = 0
+  for (const name of Object.keys(SYNC_TABLES)) {
+    const dirty = await db.table(name).where('_dirty').equals(1).toArray()
+    if (dirty.length === 0) continue
+    // _dirty is local bookkeeping; settings' local pk stays off the wire too
+    tables[name] = dirty.map(({ _dirty, id, ...row }) => row)
+    total += dirty.length
+  }
+  if (total === 0) return 0
+
   const r = await fetch('/api/sync/push', {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tables: { weight_log: rows } }),
+    body: JSON.stringify({ tables }),
   })
   if (!r.ok) throw new Error(`push failed: HTTP ${r.status}`)
-  await db.weight_log.where('_dirty').equals(1).modify({ _dirty: 0 })
-  return dirty.length
+  for (const name of Object.keys(tables)) {
+    await db.table(name).where('_dirty').equals(1).modify({ _dirty: 0 })
+  }
+  return total
+}
+
+async function applyTable(name, rows) {
+  const spec = SYNC_TABLES[name]
+  let applied = 0
+  for (const incoming of rows) {
+    let existing
+    if (spec.key === 'singleton') existing = await db.settings.get(1)
+    else if (spec.key === 'date') existing = await db.table(name).get(incoming.date)
+    else existing = await db.table(name).get(incoming.uuid)
+
+    // Same merge rules as the server: precedence first, then last-write-wins
+    if (spec.health && existing && writeBlocked(existing, incoming.source)) continue
+    if (existing && existing.updated_at && incoming.updated_at <= existing.updated_at) continue
+
+    const row = { ...incoming, _dirty: 0 }
+    if (spec.key === 'singleton') row.id = 1
+    await db.table(name).put(row)
+    applied++
+  }
+  return applied
 }
 
 async function pullSince(since) {
@@ -57,13 +112,8 @@ async function pullSince(since) {
   const body = await r.json()
 
   let applied = 0
-  for (const incoming of body.tables.weight_log || []) {
-    const existing = await db.weight_log.get(incoming.date)
-    // Same merge rules as the server: precedence first, then last-write-wins
-    if (existing && writeBlocked(existing, incoming.source)) continue
-    if (existing && incoming.updated_at <= existing.updated_at) continue
-    await db.weight_log.put({ ...incoming, _dirty: 0 })
-    applied++
+  for (const name of Object.keys(SYNC_TABLES)) {   // parents before children
+    if (body.tables[name]) applied += await applyTable(name, body.tables[name])
   }
   return { applied, serverTime: body.server_time }
 }
@@ -76,10 +126,11 @@ async function pullSince(since) {
 export async function syncNow() {
   if (!(await probe())) return { reachable: false }
   const pushed = await pushDirty()
-  const { applied, serverTime } = await pullSince(await getMeta('last_sync_at'))
+  const scopeCurrent = (await getMeta('sync_scope_version')) === SYNC_SCOPE_VERSION
+  const since = scopeCurrent ? await getMeta('last_sync_at') : null
+  const { applied, serverTime } = await pullSince(since)
   await setMeta('last_sync_at', serverTime)
-  await setMeta('last_sync_result', {
-    at: serverTime, pushed, pulled: applied,
-  })
+  await setMeta('sync_scope_version', SYNC_SCOPE_VERSION)
+  await setMeta('last_sync_result', { at: serverTime, pushed, pulled: applied })
   return { reachable: true, pushed, pulled: applied }
 }

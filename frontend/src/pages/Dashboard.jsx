@@ -17,20 +17,6 @@ import { Loading, ErrorBox } from '../components/States'
 import MonthCalendar from '../components/MonthCalendar'
 import WidgetLabel from '../components/WidgetLabel'
 import CheckIn from '../components/CheckIn'
-import { isLocalFirst } from '../local/mode'
-import { localWeightDashboard } from '../local/weights'
-
-// What the dashboard renders in local-first mode when the laptop isn't
-// reachable: weight comes from the on-device DB; the not-yet-local domains
-// show their usual empty states instead of an error page.
-const OFFLINE_SKELETON = {
-  weight: { series: [], moving_avg_7d: [] },
-  steps: [],
-  sleep: [],
-  nutrition_today: { logged: false, calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, micros: {} },
-  targets: { calorie_target: 2400, protein_target_g: 180, fat_max_g: 100, unit_system: 'metric' },
-  training: { week_volume_kg: 0, sessions_this_week: 0, recent_prs: [] },
-}
 
 // Chart palette — mirrors the "Quiet Tracker" CSS tokens
 const GRID = 'rgba(236,233,224,0.07)'
@@ -308,24 +294,16 @@ function MicroList({ micros }) {
 
 export default function Dashboard() {
   const [data, setData] = useState(null)
-  const [localWeight, setLocalWeight] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedDay, setSelectedDay] = useState(localTodayIso())
 
   useEffect(() => {
-    const local = isLocalFirst()
-    if (local) {
-      // Weight is served from the on-device DB — instant, works offline
-      localWeightDashboard(localTodayIso()).then(setLocalWeight).catch(() => {})
-    }
+    // In local-first mode apiFetch serves this from the on-device DB,
+    // so the dashboard works with no server reachable.
     apiFetch('/api/dashboard')
       .then(setData)
-      .catch(err => {
-        // Offline is a normal state in local-first mode, not an error
-        if (local) setData(OFFLINE_SKELETON)
-        else setError(err.message)
-      })
+      .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [])
 
@@ -334,12 +312,10 @@ export default function Dashboard() {
   const hour = now.getHours()
   const greeting = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening'
 
-  // Merge the weight series with its moving average for a two-line chart.
-  // Local-first mode: the on-device series wins over whatever the API said.
-  const weightSource = (isLocalFirst() && localWeight) ? localWeight : data?.weight
-  const weightData = weightSource
-    ? weightSource.series.map(p => {
-        const avg = weightSource.moving_avg_7d.find(a => a.date === p.date)
+  // Merge the weight series with its moving average for a two-line chart
+  const weightData = data
+    ? data.weight.series.map(p => {
+        const avg = data.weight.moving_avg_7d.find(a => a.date === p.date)
         return { date: p.date, weight_kg: p.weight_kg, avg_kg: avg ? avg.avg_kg : null, estimated: p.estimated }
       })
     : []
