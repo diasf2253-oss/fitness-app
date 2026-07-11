@@ -9,6 +9,8 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../api'
 import { ErrorBox } from '../components/States'
+import { isLocalFirst } from '../local/mode'
+import { upsertWeight, weightEstimateFor } from '../local/weights'
 
 // Local calendar date (toISOString alone would shift near midnight)
 function localToday() {
@@ -86,9 +88,13 @@ export default function Log() {
   // Prefill the weight field with the day's real reading, or — for a day
   // never tracked — an interpolated estimate flagged as such. Refetches when
   // the date changes; typing a value clears the "estimate" flag.
+  // Local-first mode answers from the on-device DB (works offline).
   useEffect(() => {
     let cancelled = false
-    apiFetch(`/api/health/weight/estimate?date=${date}`)
+    const fetchEstimate = isLocalFirst()
+      ? () => weightEstimateFor(date)
+      : () => apiFetch(`/api/health/weight/estimate?date=${date}`)
+    fetchEstimate()
       .then(r => {
         if (cancelled) return
         setWeight(r.weight_kg != null ? String(r.weight_kg) : '')
@@ -118,14 +124,17 @@ export default function Log() {
 
       <LogCard
         title="Weight"
-        onSave={() => apiFetch('/api/health/weight', {
-          method: 'POST',
-          body: JSON.stringify({
-            date,
-            weight_kg: required(weight, 'a weight'),
-            source: weightEstimated ? 'estimated' : 'manual',
-          }),
-        })}
+        onSave={() => {
+          const kg = required(weight, 'a weight')
+          const source = weightEstimated ? 'estimated' : 'manual'
+          // Local-first: write to the on-device DB (synced to the laptop
+          // next time it's reachable). Otherwise: straight to the API.
+          if (isLocalFirst()) return upsertWeight(date, kg, source)
+          return apiFetch('/api/health/weight', {
+            method: 'POST',
+            body: JSON.stringify({ date, weight_kg: kg, source }),
+          })
+        }}
       >
         <Field label="Weight (kg)">
           <input type="number" inputMode="decimal" step="0.1" placeholder="84.0"
