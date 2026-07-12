@@ -1,30 +1,47 @@
 /**
  * Service worker — versioned offline app shell (P2/P5).
  *
- * Makes the installed PWA open and run with no server reachable: after the
- * first visit, the shell (HTML + hashed JS/CSS assets) is cached here, and
- * in local-first mode the data comes from IndexedDB — so the app is fully
- * standalone. /api/* is never cached: reads either reach a live server or
- * are answered locally by the app itself.
+ * Makes the installed PWA open and run with no server reachable. The key is
+ * PRE-caching the app's code at install time: we fetch index.html, parse out
+ * its hashed JS/CSS URLs, and cache them all up front. (The previous version
+ * only cached '/', so with the server off the page loaded but its JavaScript
+ * bundle was missing → "load failed".) In local-first mode the data comes
+ * from IndexedDB, so with the shell + code cached the app is fully standalone.
+ * /api/* is never cached: reads reach a live server or are answered locally.
  *
  * Releases: bump VERSION (the "tracker 1.0.x" scheme). A new worker installs
- * in the background on the next online open, old caches are dropped on
- * activate, and the following launch runs the new version.
+ * on the next online open, precaches, drops old caches on activate, and takes
+ * over.
  */
-const VERSION = 'tracker-1.0.2'
+const VERSION = 'tracker-1.0.4'
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(VERSION).then((cache) => cache.addAll(['/'])).then(() => self.skipWaiting())
-  )
+  event.waitUntil((async () => {
+    const cache = await caches.open(VERSION)
+    try {
+      // Precache the shell + every hashed asset it references, so ONE online
+      // visit makes the whole app launchable offline.
+      const res = await fetch('/', { cache: 'reload' })
+      const html = await res.clone().text()
+      await cache.put('/', res)
+      const urls = new Set(['/manifest.webmanifest'])
+      for (const m of html.matchAll(/(?:src|href)="(\/[^"']+\.(?:js|css))"/g)) {
+        urls.add(m[1])
+      }
+      await cache.addAll([...urls])
+    } catch (e) {
+      // Best-effort: the fetch handler still cache-fills on later online visits.
+    }
+    await self.skipWaiting()
+  })())
 })
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-  )
+  event.waitUntil((async () => {
+    const keys = await caches.keys()
+    await Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))
+    await self.clients.claim()
+  })())
 })
 
 self.addEventListener('fetch', (event) => {

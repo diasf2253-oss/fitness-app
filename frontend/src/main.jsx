@@ -7,15 +7,30 @@ import { setToken } from './api'
 import { isLocalFirst } from './local/mode'
 import { syncNow } from './local/sync'
 
-// Link-based onboarding: opening `…/?token=XYZ` (e.g. by scanning the
-// "Add a device" QR) logs this device in, then strips the token from the
-// URL so it isn't left in the address bar or history.
-;(function adoptTokenFromUrl() {
+// Link-based onboarding via URL params, then strip them so they aren't left
+// in the address bar or history:
+//   ?token=XYZ  — log this device in (e.g. scanning the "Add a device" QR)
+//   ?local=1    — make THIS device local-first: it runs on its own on-device
+//                 copy of the data and only syncs when the laptop is reachable.
+//                 Set once on the phone; the laptop, opened without it, keeps
+//                 talking straight to its own server.
+;(function adoptSettingsFromUrl() {
   const params = new URLSearchParams(window.location.search)
+  let changed = false
+
   const token = params.get('token')
   if (token) {
     setToken(token)
     params.delete('token')
+    changed = true
+  }
+  if (params.get('local') === '1') {
+    try { localStorage.setItem('local_first', '1') } catch { /* private mode */ }
+    params.delete('local')
+    changed = true
+  }
+
+  if (changed) {
     const qs = params.toString()
     window.history.replaceState(
       {}, '',
