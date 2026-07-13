@@ -3,7 +3,7 @@
  *
  * Behaviour:
  *  - Counts down from `seconds`
- *  - Shows remaining time large and tappable (+15s / -15s / skip)
+ *  - −15 / +15 quick adjust; pause/resume; while paused, add a custom amount
  *  - Plays a beep + browser notification when it reaches zero
  *
  * Props:
@@ -47,15 +47,24 @@ function fmt(total) {
 
 export default function RestTimer({ seconds, onDone, onClose }) {
   const [remaining, setRemaining] = useState(seconds)
+  const [paused, setPaused] = useState(false)
+  const [addInput, setAddInput] = useState('')   // custom seconds to add while paused
   const firedRef = useRef(false)
 
+  function addCustom() {
+    const n = parseInt(addInput, 10)
+    if (n) setRemaining(r => Math.max(0, r + n))
+    setAddInput('')
+  }
+
   useEffect(() => {
-    // Tick every second
+    // Tick every second; a paused timer keeps its remaining time.
+    if (paused) return undefined
     const id = setInterval(() => {
       setRemaining(r => r - 1)
     }, 1000)
     return () => clearInterval(id)
-  }, [])
+  }, [paused])
 
   useEffect(() => {
     if (remaining <= 0 && !firedRef.current) {
@@ -79,6 +88,7 @@ export default function RestTimer({ seconds, onDone, onClose }) {
         margin: '0 auto',
         background: isDone ? 'var(--color-success)' : 'var(--color-primary)',
         color: 'var(--color-on-primary)',
+        opacity: paused ? 0.85 : 1,
         padding: '0.55rem 0.6rem 0.55rem 1.2rem',
         borderRadius: 'var(--radius-pill)',
         display: 'flex',
@@ -93,10 +103,10 @@ export default function RestTimer({ seconds, onDone, onClose }) {
         {isDone ? 'Done' : fmt(remaining)}
       </span>
       <span style={{ fontSize: '0.72rem', letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.65 }}>
-        rest
+        {paused && !isDone ? 'paused' : 'rest'}
       </span>
       <span className="spacer" />
-      {!isDone && (
+      {!isDone && !paused && (
         <>
           <button
             style={{ background: 'rgba(27,33,29,0.10)', color: 'var(--color-on-primary)', minWidth: 56, boxShadow: 'none' }}
@@ -111,6 +121,37 @@ export default function RestTimer({ seconds, onDone, onClose }) {
             +15
           </button>
         </>
+      )}
+      {!isDone && paused && (
+        <>
+          <input
+            type="number" inputMode="numeric" min="0" value={addInput}
+            onChange={e => setAddInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') addCustom() }}
+            placeholder="sec" aria-label="Seconds to add"
+            style={{
+              width: 58, padding: '0.35rem 0.4rem', boxShadow: 'none', margin: 0,
+              background: 'rgba(27,33,29,0.14)', color: 'var(--color-on-primary)',
+              border: '1px solid rgba(27,33,29,0.2)', borderRadius: 'var(--radius-sm)',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          />
+          <button
+            style={{ background: 'rgba(27,33,29,0.10)', color: 'var(--color-on-primary)', minWidth: 52, boxShadow: 'none' }}
+            onClick={addCustom}
+          >
+            Add
+          </button>
+        </>
+      )}
+      {!isDone && (
+        <button
+          aria-label={paused ? 'Resume timer' : 'Pause timer'}
+          style={{ background: 'rgba(27,33,29,0.10)', color: 'var(--color-on-primary)', minWidth: 52, boxShadow: 'none' }}
+          onClick={() => setPaused(p => !p)}
+        >
+          {paused ? '▶' : '⏸'}
+        </button>
       )}
       <button
         style={{ background: 'rgba(27,33,29,0.18)', color: 'var(--color-on-primary)', boxShadow: 'none' }}

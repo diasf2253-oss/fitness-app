@@ -24,6 +24,7 @@ from app.models import NutritionDay, Session as WorkoutSession, SleepLog, StepsL
 from app.routers.health import DERIVED_SOURCES, real_weight_points, resolved_weight_for
 from app.routers.settings import get_or_create_settings
 from app.routers.stats import session_summary
+from app.routers.streak import streak_snapshot
 from app.schemas import (
     DashboardOut, DashboardTargets, DashboardTraining, DashboardWeight,
     MovingAvgPoint, NutritionToday, RecentPR, SleepPoint, StepsPoint, WeightPoint,
@@ -163,4 +164,5 @@ def get_dashboard(
         nutrition_today=nutrition_today,
         targets=targets,
         training=training,
+        streak=streak_snapshot(db),
     )

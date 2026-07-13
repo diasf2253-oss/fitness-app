@@ -648,6 +648,38 @@ h1 em, h2 em, h3 em, .serif-italic {
 .text-warning { color: var(--color-warning); }
 .text-primary { color: var(--color-accent); }
 
+/* Small instrumentation label + hairline rule (shared editorial header bits) */
+.inst {
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.rule {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 0.6rem 0;
+}
+
+/* Micronutrient breakdown (Diet) */
+.nutri-track {
+  height: 7px;
+  background: var(--color-surface2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.nutri-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s var(--ease, ease);
+}
+.nutri-pill {
+  font-size: 0.72rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
 hr {
   border: none;
   border-top: 1px solid var(--color-border);

@@ -30,9 +30,9 @@ from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session as DBSession
 
 from app.models import (
-    AppSettings, Exercise, NutritionDay, PlanItem, Routine, RoutineExercise,
-    Session, SessionExercise, Set as SetModel, SleepLog, StepsLog, Tracker,
-    TrackerLog, WeightLog,
+    Activity, AppSettings, Exercise, NutritionDay, PlanItem, Routine,
+    RoutineExercise, RoutineNote, Session, SessionExercise, Set as SetModel,
+    SleepLog, StepsLog, Tracker, TrackerLog, WeightLog,
 )
 
 _MAX_WARNINGS = 20
@@ -74,6 +74,15 @@ SYNC_TABLES: dict[str, TableSpec] = {
         SetModel, "uuid",
         fks={"session_exercise_id": ("session_exercise_uuid", SessionExercise)},
     ),
+    # Next-session notes: sync by uuid, FK to routine. The session references
+    # are device-local integer ids, so they never travel (excluded); the
+    # archived_at flag DOES sync, so a note is never resurfaced on another device.
+    "routine_note": TableSpec(
+        RoutineNote, "uuid",
+        fks={"routine_id": ("routine_uuid", Routine)},
+        exclude=("created_in_session_id", "surfaced_in_session_id"),
+    ),
+    "activity": TableSpec(Activity, "uuid"),
     "plan_item": TableSpec(PlanItem, "uuid"),
     "tracker": TableSpec(Tracker, "uuid", natural_key=("name", "kind")),
     "tracker_log": TableSpec(

@@ -155,7 +155,7 @@ class TestDashboard:
         assert data["nutrition_today"]["logged"] is False
         assert data["nutrition_today"]["calories"] == 0
         # Targets come from the auto-created settings row defaults
-        assert data["targets"]["calorie_target"] == 2400
+        assert data["targets"]["calorie_target"] == 2300
         assert data["targets"]["protein_target_g"] == 180
         assert data["targets"]["fat_max_g"] == 100
         assert data["training"]["week_volume_kg"] == 0

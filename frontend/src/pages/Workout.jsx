@@ -15,6 +15,51 @@ import { apiFetch } from '../api'
 import ExercisePicker from '../components/ExercisePicker'
 import RestTimer from '../components/RestTimer'
 import { Loading, ErrorBox } from '../components/States'
+import WidgetLabel from '../components/WidgetLabel'
+
+// Next-session notes (surfaced from last time) + composer for the next session.
+function SessionNotes({ session }) {
+  const [text, setText] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [added, setAdded] = useState(false)
+  const notes = session.next_session_notes || []
+  const canAdd = !!session.routine_id
+
+  async function addNote() {
+    if (!text.trim()) return
+    setSaving(true)
+    try {
+      await apiFetch(`/api/routines/${session.routine_id}/notes`, {
+        method: 'POST',
+        body: JSON.stringify({ text: text.trim(), created_in_session_id: session.id }),
+      })
+      setText(''); setAdded(true); setTimeout(() => setAdded(false), 2000)
+    } catch (_) { /* non-critical */ } finally { setSaving(false) }
+  }
+
+  if (notes.length === 0 && !canAdd) return null
+  return (
+    <div className="card" style={{ margin: '1rem 0 0', borderLeft: '3px solid var(--color-accent)' }}>
+      {notes.length > 0 && (
+        <>
+          <WidgetLabel>from last time</WidgetLabel>
+          {notes.map(n => (
+            <p key={n.id} style={{ fontSize: '0.9rem', margin: '0.35rem 0' }}>• {n.text}</p>
+          ))}
+        </>
+      )}
+      {canAdd && (
+        <div className="row" style={{ gap: '0.5rem', marginTop: notes.length ? '0.7rem' : 0 }}>
+          <input value={text} onChange={e => setText(e.target.value)}
+            placeholder="Note for next time…" style={{ flex: 1 }} />
+          <button className="secondary" onClick={addNote} disabled={saving || !text.trim()} style={{ minWidth: 70 }}>
+            {added ? '✓' : 'Add'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function Workout() {
   const location = useLocation()
@@ -127,8 +172,32 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
   const [restSeconds, setRestSeconds] = useState(null)   // active rest timer duration, or null
   const [restKey, setRestKey] = useState(0)              // bumped only when a set completes, to (re)start the timer
   const [restByExercise, setRestByExercise] = useState({})  // exercise_id -> rest seconds (from routine)
+  const [defaultRest, setDefaultRest] = useState(120)       // settings.default_rest_seconds
   const [elapsed, setElapsed] = useState('')
+  const [renaming, setRenaming] = useState(false)
   const navigate = useNavigate()
+
+  // The configurable default rest duration (used when a routine has none).
+  useEffect(() => {
+    apiFetch('/api/settings')
+      .then(s => setDefaultRest(s.default_rest_seconds ?? 120))
+      .catch(() => {})  // non-critical; 120s fallback applies
+  }, [])
+
+  // Give the workout a custom name (tap the title). Optimistic + PATCH.
+  async function renameSession(newName) {
+    const name = (newName || '').trim()
+    setRenaming(false)
+    if (!name || name === session.name) return
+    setSession(s => ({ ...s, name }))
+    try {
+      await apiFetch(`/api/sessions/${session.id}`, {
+        method: 'PATCH', body: JSON.stringify({ name }),
+      })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
 
   // Ask for notification permission once (for rest-timer alerts)
   useEffect(() => {
@@ -164,7 +233,7 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
   }, [session.started_at])
 
   function restForExercise(exerciseId) {
-    return restByExercise[exerciseId] ?? 120  // default 120s
+    return restByExercise[exerciseId] ?? defaultRest  // configurable default
   }
 
   // Start (or restart) the rest timer for a given exercise. Bumping restKey
@@ -232,7 +301,26 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
       {/* Sticky: name, clock and Finish stay reachable mid-session */}
       <div className="workout-header">
         <div>
-          <h1>{session.name}</h1>
+          {renaming ? (
+            <input
+              autoFocus defaultValue={session.name}
+              onBlur={e => renameSession(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') e.target.blur()
+                if (e.key === 'Escape') setRenaming(false)
+              }}
+              aria-label="Workout name"
+              style={{ fontSize: '1.5rem', fontWeight: 600, padding: '0.15rem 0.35rem', margin: 0, maxWidth: '100%' }}
+            />
+          ) : (
+            <h1
+              onClick={() => setRenaming(true)}
+              title="Tap to rename this workout"
+              style={{ cursor: 'pointer', margin: 0 }}
+            >
+              {session.name}
+            </h1>
+          )}
           <span className="muted tnum" style={{ fontSize: '0.78rem' }}>{elapsed} elapsed</span>
         </div>
         <span className="spacer" />
@@ -240,6 +328,8 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
       </div>
 
       <ErrorBox error={error} />
+
+      <SessionNotes session={session} />
 
       <div className="col" style={{ gap: '1rem', marginTop: '1rem' }}>
         {session.exercises.map(se => (

@@ -12,6 +12,10 @@ import Log from './pages/Log'
 import Insights from './pages/Insights'
 import Ranks from './pages/Ranks'
 import Coach from './pages/Coach'
+import Generator from './pages/Generator'
+import Report from './pages/Report'
+import Diet from './pages/Diet'
+import Onboarding from './components/Onboarding'
 
 // Crisp stroke icons (inherit currentColor → active state recolors for free)
 const Icon = {
@@ -45,6 +49,9 @@ const Icon = {
   ranks: (
     <path d="M8 21h8 M12 17v4 M7 4h10v6a5 5 0 0 1-10 0z M7 6H4a1 1 0 0 0-1 1 4 4 0 0 0 4 4 M17 6h3a1 1 0 0 1 1 1 4 4 0 0 1-4 4" />
   ),
+  diet: (
+    <path d="M12 8c-1.5-3-6-3-7 0-1 3 2 8 5 11 1 1 3 1 4 0 3-3 6-8 5-11-1-3-5.5-3-7 0 M12 8V4 M12 4c0-1 1-2 2-2" />
+  ),
 }
 
 function NavIcon({ name }) {
@@ -75,16 +82,19 @@ const SIDEBAR_SECTIONS = [
       { to: '/workout',  label: 'Workout',   icon: 'workout' },
       { to: '/routines', label: 'Routines',  icon: 'routines' },
       { to: '/history',  label: 'History',   icon: 'history' },
+      { to: '/diet',     label: 'Diet',      icon: 'diet' },
       { to: '/insights', label: 'Insights',  icon: 'insights' },
+      { to: '/report',   label: 'Report',    icon: 'insights' },
       { to: '/ranks',    label: 'Ranks',     icon: 'ranks' },
     ],
   },
   {
     label: 'Tools',
     items: [
-      { to: '/exercises', label: 'Exercise library', icon: 'exercises' },
-      { to: '/log',       label: 'Manual log',       icon: 'log' },
-      { to: '/settings',  label: 'Settings',         icon: 'settings' },
+      { to: '/generator', label: 'Workout generator', icon: 'workout' },
+      { to: '/exercises', label: 'Exercise library',  icon: 'exercises' },
+      { to: '/log',       label: 'Manual log',        icon: 'log' },
+      { to: '/settings',  label: 'Settings',          icon: 'settings' },
     ],
   },
 ]
@@ -153,6 +163,21 @@ function Sidebar() {
 }
 
 export default function App() {
+  // First-run gate: show the onboarding wizard only when settings say the user
+  // hasn't onboarded. `null` = still loading (render nothing wizard-wise);
+  // existing installs are already onboarded, so they never see it.
+  const [onboarded, setOnboarded] = useState(null)
+
+  useEffect(() => {
+    apiFetch('/api/settings')
+      .then(s => setOnboarded(s.onboarded !== false))
+      .catch(() => setOnboarded(true))   // never block the app on a settings error
+  }, [])
+
+  if (onboarded === false) {
+    return <Onboarding onDone={() => setOnboarded(true)} />
+  }
+
   return (
     <>
       <ScrollToTop />
@@ -169,6 +194,9 @@ export default function App() {
           <Route path="/log"          element={<Log />} />
           <Route path="/insights"     element={<Insights />} />
           <Route path="/ranks"        element={<Ranks />} />
+          <Route path="/generator"    element={<Generator />} />
+          <Route path="/report"       element={<Report />} />
+          <Route path="/diet"         element={<Diet />} />
           <Route path="/coach"        element={<Coach />} />
           <Route path="/settings"     element={<Settings />} />
         </Routes>

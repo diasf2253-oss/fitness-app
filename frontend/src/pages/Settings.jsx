@@ -210,6 +210,196 @@ function TrackersCard() {
   )
 }
 
+/** Profile — sex + age drive the Ranks references and the RDA targets. */
+function ProfileCard() {
+  const [sex, setSex] = useState(null)
+  const [age, setAge] = useState(null)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    apiFetch('/api/settings')
+      .then(s => { setSex(s.sex || 'male'); setAge(s.age ?? 19) })
+      .catch(e => setError(e.message))
+  }, [])
+
+  async function save() {
+    setError(null)
+    try {
+      await apiFetch('/api/settings', {
+        method: 'PUT', body: JSON.stringify({ sex, age: Number(age) }),
+      })
+      setSaved(true); setTimeout(() => setSaved(false), 1800)
+    } catch (e) { setError(e.message) }
+  }
+
+  if (sex == null) return null
+  return (
+    <div className="card">
+      <h2>Profile</h2>
+      <p className="muted" style={{ marginBottom: '0.75rem' }}>
+        Used to scale the Ranks strength references and the micronutrient targets on the Diet tab.
+      </p>
+      {error && <p className="muted" style={{ color: 'var(--color-danger)' }}>{error}</p>}
+      <div className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
+        <label style={{ flex: 1 }}>Sex</label>
+        <select value={sex} onChange={e => setSex(e.target.value)} style={{ width: 120 }}>
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+        </select>
+      </div>
+      <div className="row" style={{ alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+        <label style={{ flex: 1 }}>Age</label>
+        <input type="number" min="10" max="100" value={age} onChange={e => setAge(e.target.value)} style={{ width: 80 }} />
+        <button onClick={save} style={{ minWidth: 90 }}>{saved ? '✓ Saved' : 'Save'}</button>
+      </div>
+    </div>
+  )
+}
+
+/** Default rest-timer countdown after each set. */
+function RestTimerSettingsCard() {
+  const [mins, setMins] = useState(null)
+  const [secs, setSecs] = useState(null)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    apiFetch('/api/settings')
+      .then(s => { const t = s.default_rest_seconds ?? 120; setMins(Math.floor(t / 60)); setSecs(t % 60) })
+      .catch(e => setError(e.message))
+  }, [])
+
+  async function save() {
+    setError(null)
+    const total = Math.max(5, (Number(mins) || 0) * 60 + (Number(secs) || 0))
+    try {
+      await apiFetch('/api/settings', { method: 'PUT', body: JSON.stringify({ default_rest_seconds: total }) })
+      setSaved(true); setTimeout(() => setSaved(false), 1800)
+    } catch (e) { setError(e.message) }
+  }
+
+  if (mins == null) return null
+  return (
+    <div className="card">
+      <h2>Rest timer</h2>
+      <p className="muted" style={{ marginBottom: '0.75rem' }}>
+        Default countdown after each set. Routines with their own rest time use that instead;
+        during a set you can still adjust or pause it.
+      </p>
+      {error && <p className="muted" style={{ color: 'var(--color-danger)' }}>{error}</p>}
+      <div className="row" style={{ alignItems: 'center', gap: '0.4rem' }}>
+        <label style={{ flex: 1 }}>Default rest</label>
+        <input type="number" min="0" max="20" value={mins} onChange={e => setMins(e.target.value)}
+          aria-label="Minutes" style={{ width: 64 }} />
+        <span className="muted">min</span>
+        <input type="number" min="0" max="59" value={secs} onChange={e => setSecs(e.target.value)}
+          aria-label="Seconds" style={{ width: 64 }} />
+        <span className="muted">sec</span>
+        <button onClick={save} style={{ minWidth: 90 }}>{saved ? '✓ Saved' : 'Save'}</button>
+      </div>
+    </div>
+  )
+}
+
+/** Allowed rest days between workouts before the training streak breaks. */
+function StreakSettingsCard() {
+  const [gap, setGap] = useState(null)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    apiFetch('/api/settings').then(s => setGap(s.streak_rest_gap)).catch(e => setError(e.message))
+  }, [])
+
+  async function save() {
+    setError(null)
+    try {
+      await apiFetch('/api/settings', { method: 'PUT', body: JSON.stringify({ streak_rest_gap: Number(gap) }) })
+      setSaved(true); setTimeout(() => setSaved(false), 1800)
+    } catch (e) { setError(e.message) }
+  }
+
+  if (gap == null) return null
+  return (
+    <div className="card">
+      <h2>Training streak</h2>
+      <p className="muted" style={{ marginBottom: '0.75rem' }}>
+        How many rest days are allowed between workouts before the streak breaks (default 1 — a normal rest day is fine).
+      </p>
+      {error && <p className="muted" style={{ color: 'var(--color-danger)' }}>{error}</p>}
+      <div className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
+        <label style={{ flex: 1 }}>Allowed rest days</label>
+        <input type="number" min="0" max="7" value={gap} onChange={e => setGap(e.target.value)} style={{ width: 80 }} />
+        <button onClick={save} style={{ minWidth: 90 }}>{saved ? '✓ Saved' : 'Save'}</button>
+      </div>
+    </div>
+  )
+}
+
+/** Edit the weekly working-set target ranges per muscle group. Both the
+ * sets-per-week view and the workout generator read this single table. */
+function VolumeTargetsCard() {
+  const [targets, setTargets] = useState(null)   // {muscle: {low, high}}
+  const [error, setError] = useState(null)
+  const [saved, setSaved] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(() => {
+    apiFetch('/api/stats/volume-targets').then(setTargets).catch(e => setError(e.message))
+  }, [])
+  useEffect(load, [load])
+
+  function setField(m, key, value) {
+    setTargets(t => ({ ...t, [m]: { ...t[m], [key]: value } }))
+  }
+
+  async function save() {
+    setBusy(true); setError(null)
+    try {
+      const payload = {}
+      for (const [m, { low, high }] of Object.entries(targets)) payload[m] = [Number(low), Number(high)]
+      await apiFetch('/api/settings', { method: 'PUT', body: JSON.stringify({ volume_targets: payload }) })
+      setSaved(true); setTimeout(() => setSaved(false), 1800)
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  async function resetDefaults() {
+    setBusy(true); setError(null)
+    try {
+      await apiFetch('/api/settings', { method: 'PUT', body: JSON.stringify({ volume_targets: null }) })
+      load()
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  if (!targets) return null
+  return (
+    <div className="card">
+      <h2>Weekly volume targets</h2>
+      <p className="muted" style={{ marginBottom: '0.75rem' }}>
+        Working sets per muscle per week. The sets-per-week view and the workout generator both read these ranges.
+      </p>
+      {error && <p className="muted" style={{ color: 'var(--color-danger)' }}>{error}</p>}
+      <div className="col" style={{ gap: '0.4rem' }}>
+        {Object.entries(targets).map(([m, { low, high }]) => (
+          <div key={m} className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ flex: 1, fontSize: '0.88rem' }}>{m}</span>
+            <input type="number" min="0" value={low} onChange={e => setField(m, 'low', e.target.value)}
+              aria-label={`${m} minimum sets`} style={{ width: 66 }} />
+            <span className="muted">–</span>
+            <input type="number" min="0" value={high} onChange={e => setField(m, 'high', e.target.value)}
+              aria-label={`${m} maximum sets`} style={{ width: 66 }} />
+          </div>
+        ))}
+      </div>
+      <div className="row" style={{ marginTop: '0.85rem', gap: '0.5rem' }}>
+        <button onClick={save} disabled={busy} style={{ flex: 1 }}>{saved ? '✓ Saved' : 'Save targets'}</button>
+        <button className="secondary" onClick={resetDefaults} disabled={busy}>Reset to defaults</button>
+      </div>
+    </div>
+  )
+}
+
 function fmtTimestamp(iso) {
   if (!iso) return null
   // Backend stores naive UTC — mark it so the browser converts to local
@@ -387,6 +577,11 @@ export default function Settings() {
           <p className="muted" style={{ marginTop: '0.6rem', fontSize: '0.8rem' }}>{importMsg}</p>
         )}
       </div>
+
+      <ProfileCard />
+      <RestTimerSettingsCard />
+      <StreakSettingsCard />
+      <VolumeTargetsCard />
 
       <TrackersCard />
 

@@ -23,6 +23,7 @@ from app.config import settings
 from app.routers import calendar, coach, dashboard, dev, exercises, health, insights, nutrition, plan, ranks, routines, sessions
 from app.routers import settings as settings_router
 from app.routers import stats, sync, trackers
+from app.routers import streak, routine_notes, generator, report, diet, activities  # restored features
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -77,6 +78,12 @@ app.include_router(dev.router)
 app.include_router(settings_router.router)
 app.include_router(sync.router)
 app.include_router(ranks.router)
+app.include_router(streak.router)
+app.include_router(routine_notes.router)
+app.include_router(generator.router)
+app.include_router(report.router)
+app.include_router(diet.router)
+app.include_router(activities.router)
 
 
 # ---------------------------------------------------------------------------

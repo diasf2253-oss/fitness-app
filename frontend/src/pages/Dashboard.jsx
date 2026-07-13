@@ -381,6 +381,14 @@ export default function Dashboard() {
                 <div className="stat-num" style={{ fontSize: '1.8rem' }}>{data.training.sessions_this_week}</div>
                 <WidgetLabel>sessions</WidgetLabel>
               </div>
+              {data.streak && (
+                <div>
+                  <div className="stat-num" style={{ fontSize: '1.8rem', color: data.streak.at_risk ? 'var(--color-warning)' : undefined }}>
+                    {data.streak.current}{data.streak.current > 0 ? '🔥' : ''}
+                  </div>
+                  <WidgetLabel>streak{data.streak.at_risk ? ' · at risk' : ''}</WidgetLabel>
+                </div>
+              )}
             </div>
             {data.training.recent_prs.length > 0 ? (
               <>

@@ -5,8 +5,10 @@
  * reps>0, weight>0).
  */
 import { db, newUuid, nowIso } from '../db'
-import { suggestMuscleGroup } from './muscles'
-import { LocalApiError, isoWeekKey, naiveIso, notFound, round } from './util'
+import { MUSCLE_GROUPS, resolvedVolumeTargets, suggestMuscleGroup } from './muscles'
+import { consumePendingNotes, nextSessionNotesFor } from './routine_notes'
+import { isoWeekStart } from './weight_trend'
+import { LocalApiError, addDays, isoWeekKey, naiveIso, notFound, round, todayIso } from './util'
 
 // ---------------------------------------------------------------------------
 // Pure math (exported for tests) — mirrors stats.py
@@ -70,6 +72,7 @@ async function presentSession(s) {
     id: s.uuid, name: s.name, routine_id: s.routine_uuid ?? null,
     started_at: s.started_at, ended_at: s.ended_at ?? null, notes: s.notes ?? null,
     exercises: await Promise.all(ses.map(presentSessionExercise)),
+    next_session_notes: await nextSessionNotesFor(s.uuid),
   }
 }
 
@@ -82,7 +85,8 @@ async function presentRoutine(r) {
   const res = await db.routine_exercise.where('routine_uuid').equals(r.uuid).toArray()
   res.sort((a, b) => a.position - b.position)
   return {
-    id: r.uuid, name: r.name, notes: r.notes ?? null, created_at: r.created_at,
+    id: r.uuid, name: r.name, source: r.source ?? 'manual',
+    notes: r.notes ?? null, created_at: r.created_at,
     exercises: await Promise.all(res.map(async (re) => ({
       id: re.uuid, exercise_id: re.exercise_uuid, position: re.position,
       target_sets: re.target_sets, target_rep_low: re.target_rep_low,
@@ -278,7 +282,7 @@ export const workoutRoutes = [
     method: 'POST', pattern: /^\/api\/routines$/,
     handler: async (_m, _q, body) => {
       const routine = stamp({
-        uuid: newUuid(), name: body.name, notes: body.notes ?? null,
+        uuid: newUuid(), name: body.name, source: 'manual', notes: body.notes ?? null,
         created_at: nowIso(),
       })
       await db.routine.put(routine)
@@ -376,6 +380,8 @@ export const workoutRoutes = [
             }))
           }
         }
+        // Surface any pending next-session notes for this routine, once.
+        await consumePendingNotes(routine.uuid, session.uuid)
       } else {
         await db.session.put(session)
       }
@@ -579,6 +585,60 @@ export const workoutRoutes = [
       }
       return Object.entries(byWeek).sort(([a], [b]) => a.localeCompare(b))
         .map(([week, v]) => ({ week, volume_kg: round(v, 1) }))
+    },
+  },
+
+  // ---- Sets-per-week per primary muscle group (mirrors stats.py) ----
+  {
+    method: 'GET', pattern: /^\/api\/stats\/volume-targets$/,
+    handler: async () => {
+      const settings = (await db.settings.get(1)) || {}
+      const targets = resolvedVolumeTargets(settings.volume_targets)
+      return Object.fromEntries(Object.entries(targets).map(([m, [lo, hi]]) => [m, { low: lo, high: hi }]))
+    },
+  },
+  {
+    method: 'GET', pattern: /^\/api\/stats\/sets-per-week$/,
+    handler: async (_m, query) => {
+      const weeks = Math.min(52, Math.max(1, Number(query.get('weeks') || 8)))
+      const today = todayIso()
+      const currentWeek = isoWeekStart(today)
+      const firstWeek = addDays(currentWeek, -7 * (weeks - 1))
+
+      // Completed working sets (not warm-ups) joined to session date + muscle group.
+      const [sets, ses, sessions, exercises] = await Promise.all([
+        db.set.toArray(), db.session_exercise.toArray(),
+        db.session.toArray(), db.exercise.toArray(),
+      ])
+      const seMap = new Map(ses.map(s => [s.uuid, s]))
+      const sessMap = new Map(sessions.map(s => [s.uuid, s]))
+      const exMap = new Map(exercises.map(e => [e.uuid, e]))
+
+      const counts = {}   // `${weekStart}|${group}` -> count
+      for (const st of sets) {
+        if (!(st.is_completed && !st.is_warmup)) continue
+        const se = seMap.get(st.session_exercise_uuid); if (!se) continue
+        const sess = sessMap.get(se.session_uuid); if (!sess) continue
+        const d = sess.started_at.slice(0, 10)
+        if (d < firstWeek) continue
+        const grp = exMap.get(se.exercise_uuid)?.primary_muscle_group
+        if (!grp) continue
+        const key = `${isoWeekStart(d)}|${grp}`
+        counts[key] = (counts[key] || 0) + 1
+      }
+
+      const settings = (await db.settings.get(1)) || {}
+      const targets = resolvedVolumeTargets(settings.volume_targets)
+      const weekStarts = Array.from({ length: weeks }, (_, i) => addDays(firstWeek, 7 * i))
+      return {
+        muscle_groups: MUSCLE_GROUPS,
+        targets: Object.fromEntries(Object.entries(targets).map(([m, [lo, hi]]) => [m, { low: lo, high: hi }])),
+        weeks: weekStarts.map(wk => ({
+          week_start: wk,
+          is_current: wk === currentWeek,
+          counts: Object.fromEntries(MUSCLE_GROUPS.map(m => [m, counts[`${wk}|${m}`] || 0])),
+        })),
+      }
     },
   },
 ]

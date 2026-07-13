@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session as DBSession
 from app.auth import require_auth
 from app.db import get_db
 from app.models import Exercise, Routine, RoutineExercise, Session, SessionExercise, Set
+from app.routers.routine_notes import consume_pending_notes
 from app.schemas import (
     SessionCreate, SessionExerciseCreate, SessionExerciseOut, SessionOut,
     SessionSummary, SessionUpdate, SetCreate, SetOut, SetUpdate,
@@ -80,6 +81,8 @@ def start_session(
                     weight_kg=0.0,
                     reps=0,
                 ))
+        # Surface any pending next-session notes for this routine, once.
+        consume_pending_notes(db, body.routine_id, session.id)
 
     db.commit()
     db.refresh(session)

@@ -14,8 +14,13 @@
  */
 import { healthRoutes } from './health'
 import { overviewRoutes } from './overview'
+import { dietRoutes } from './diet'
+import { generatorRoutes } from './generator'
 import { planRoutes } from './plan'
 import { rankRoutes } from './ranks'
+import { reportRoutes } from './report'
+import { routineNoteRoutes } from './routine_notes'
+import { streakRoutes } from './streak'
 import { trackerRoutes } from './trackers'
 import { workoutRoutes } from './workout'
 
@@ -24,9 +29,14 @@ export { LocalApiError } from './util'
 const ROUTES = [
   ...healthRoutes,
   ...workoutRoutes,
+  ...routineNoteRoutes,
   ...trackerRoutes,
   ...planRoutes,
   ...rankRoutes,
+  ...streakRoutes,
+  ...generatorRoutes,
+  ...reportRoutes,
+  ...dietRoutes,
   ...overviewRoutes,
 ]
 

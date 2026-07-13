@@ -79,6 +79,9 @@ class Routine(SyncMixin, Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text)
+    # 'manual' | 'generated' — the workout generator replaces only 'generated'
+    # routines on apply, leaving hand-made ones untouched.
+    source: Mapped[str] = mapped_column(String(20), default="manual", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
@@ -88,6 +91,12 @@ class Routine(SyncMixin, Base):
         order_by="RoutineExercise.position"
     )
     sessions: Mapped[list["Session"]] = relationship(back_populates="routine")
+    # Next-session notes for this training day (distinct from the `notes` text
+    # column above, which is the routine's own description).
+    routine_notes: Mapped[list["RoutineNote"]] = relationship(
+        back_populates="routine", cascade="all, delete-orphan",
+        order_by="RoutineNote.created_at",
+    )
 
 
 class RoutineExercise(SyncMixin, Base):
@@ -131,6 +140,13 @@ class Session(SyncMixin, Base):
         back_populates="session", cascade="all, delete-orphan",
         order_by="SessionExercise.position"
     )
+    # Next-session notes consumed (surfaced) at the start of this session.
+    next_session_notes: Mapped[list["RoutineNote"]] = relationship(
+        "RoutineNote",
+        primaryjoin="Session.id == foreign(RoutineNote.surfaced_in_session_id)",
+        viewonly=True,
+        order_by="RoutineNote.created_at",
+    )
 
 
 class SessionExercise(SyncMixin, Base):
@@ -172,6 +188,31 @@ class Set(SyncMixin, Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     session_exercise: Mapped["SessionExercise"] = relationship(back_populates="sets")
+
+
+class RoutineNote(SyncMixin, Base):
+    """A one-shot 'next session' note for a training day (routine). Written
+    during/after a session; surfaces once at the next session of that routine
+    and then auto-archives — still visible in history, never resurfaced again.
+    (Persistent per-exercise cues live on Exercise.notes, not here.)"""
+    __tablename__ = "routine_note"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    routine_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("routine.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    # Informational session references (no FK, so deleting a session is safe).
+    # Device-local integer ids — excluded from sync (see app/sync.py).
+    created_in_session_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    surfaced_in_session_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    # Pending while NULL; set when consumed at the next session of the routine.
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    routine: Mapped["Routine"] = relationship(back_populates="routine_notes")
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +345,9 @@ class AppSettings(UpdatedAtMixin, Base):
     __tablename__ = "settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
-    calorie_target: Mapped[int] = mapped_column(Integer, default=2400)
+    # The adaptive calorie anchor — nudged ±a step each completed week by the
+    # weight trend (see app.calorie_adapt). Never recomputed from scratch.
+    calorie_target: Mapped[int] = mapped_column(Integer, default=2300)
     protein_target_g: Mapped[int] = mapped_column(Integer, default=180)
     fat_max_g: Mapped[int] = mapped_column(Integer, default=100)
     # 'metric' | 'imperial'
@@ -315,3 +358,64 @@ class AppSettings(UpdatedAtMixin, Base):
     rank_config: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     # When the last successful Apple Health ingest ran (push or backfill)
     health_last_ingest: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    # ---- Profile (drives the RDA targets and the onboarding wizard) ----
+    age: Mapped[int] = mapped_column(Integer, default=19, nullable=False)
+    # First-run onboarding: the wizard flips this after the profile questions.
+    # Existing installs are backfilled to True by the migration.
+    onboarded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # ---- Adaptive calorie engine (anchored weekly-trend step model) ----
+    # Desired weekly loss (kg/week, positive = losing).
+    target_loss_kg_per_week: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
+    # How far the target moves in one adaptation, and the dead-band around the
+    # target rate inside which the target holds.
+    adapt_step_kcal: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
+    adapt_tolerance_kg: Mapped[float] = mapped_column(Float, default=0.15, nullable=False)
+    # Hard floor; ceiling is estimated maintenance unless overridden here.
+    calorie_floor: Mapped[int] = mapped_column(Integer, default=1800, nullable=False)
+    calorie_ceiling: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Monday of the ISO week the target was last adapted (once-per-week guard).
+    last_adapted_week: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+    # ---- Training ----
+    # {muscle: [low, high]} weekly volume-target overrides; null ⇒ defaults in
+    # app.muscles. Read by the sets-per-week analytics and the generator.
+    volume_targets: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # Allowed rest days between workouts before the training streak breaks.
+    streak_rest_gap: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # Default rest-timer duration (seconds) for exercises with no routine rest.
+    default_rest_seconds: Mapped[int] = mapped_column(Integer, default=120, nullable=False)
+
+    # ---- Legacy (retired from-scratch TDEE fields; kept nullable, unused) ----
+    goal_rate_kg_per_week: Mapped[float] = mapped_column(Float, default=-0.25, nullable=False)
+    expenditure_kcal: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    calorie_target_set_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+
+class StreakState(UpdatedAtMixin, Base):
+    """Persisted training-streak snapshot (single row, id=1). Recomputed from
+    logged workouts on read, so it is NOT synced across devices — each device
+    derives it locally. Structured so a future points/gamification layer can
+    hook on (e.g. a `points` column) without reshaping the computation."""
+    __tablename__ = "streak_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    current_streak: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    longest_streak: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_workout_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+
+class Activity(SyncMixin, Base):
+    """A logged sport/training session that isn't barbell work — football,
+    judo, padel, etc. Tracked for context; in the adaptive engine the calories
+    are already captured by the weight trend, so the burn estimate here is
+    informational (METs × duration × bodyweight)."""
+    __tablename__ = "activity"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    type: Mapped[str] = mapped_column(String(40), nullable=False)
+    duration_min: Mapped[int] = mapped_column(Integer, nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(String(50), default="manual")

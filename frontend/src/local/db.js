@@ -11,7 +11,9 @@
  * deterministic, no clock comparison needed to decide what to send.
  *
  * Schema versions are append-only: v1 was the weight slice, v2 adds every
- * synced table (P3/P4). Dexie migrates automatically.
+ * synced table (P3/P4), v3 adds the restored features (routine notes +
+ * activities; the streak is recomputed on read, so it needs no table).
+ * Dexie migrates automatically.
  */
 import Dexie from 'dexie'
 
@@ -41,6 +43,28 @@ db.version(2).stores({
   // Singleton (id=1 always, like the backend)
   settings: 'id, _dirty',
   sync_meta: 'key',
+})
+
+db.version(3).stores({
+  // Carry every v2 table forward unchanged…
+  weight_log: 'date, _dirty',
+  steps_log: 'date, _dirty',
+  sleep_log: 'date, _dirty',
+  nutrition_day: 'date, _dirty',
+  exercise: 'uuid, name, _dirty',
+  routine: 'uuid, _dirty',
+  routine_exercise: 'uuid, routine_uuid, _dirty',
+  session: 'uuid, started_at, _dirty',
+  session_exercise: 'uuid, session_uuid, exercise_uuid, _dirty',
+  set: 'uuid, session_exercise_uuid, _dirty',
+  plan_item: 'uuid, date, _dirty',
+  tracker: 'uuid, _dirty',
+  tracker_log: 'uuid, tracker_uuid, date, [tracker_uuid+date], _dirty',
+  settings: 'id, _dirty',
+  sync_meta: 'key',
+  // …and add the restored feature tables.
+  routine_note: 'uuid, routine_uuid, surfaced_in_session_uuid, _dirty',
+  activity: 'uuid, date, _dirty',
 })
 
 export function newUuid() {

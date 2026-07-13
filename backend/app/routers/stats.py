@@ -17,7 +17,7 @@ Routes:
   GET /api/stats/volume/weekly         — weekly training volume (kg × reps)
 """
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -26,7 +26,10 @@ from sqlalchemy.orm import Session as DBSession
 from app.auth import require_auth
 from app.db import get_db
 from app.models import Exercise, Session, SessionExercise, Set
+from app.muscles import MUSCLE_GROUPS, resolved_volume_targets
+from app.routers.settings import get_or_create_settings
 from app.schemas import PRHit, PRRecord, SessionSummaryStats
+from app.weight_trend import iso_week_start
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 
@@ -292,3 +295,70 @@ def weekly_volume(
         {"week": k, "volume_kg": round(v, 1)}
         for k, v in sorted(by_week.items())
     ]
+
+
+# ---------------------------------------------------------------------------
+# Sets-per-week per primary muscle group
+# ---------------------------------------------------------------------------
+
+def _resolved_targets(db: DBSession) -> dict[str, tuple[int, int]]:
+    return resolved_volume_targets(get_or_create_settings(db).volume_targets)
+
+
+@router.get("/volume-targets")
+def get_volume_targets(
+    db: DBSession = Depends(get_db),
+    _: None = Depends(require_auth),
+):
+    """Effective weekly working-set target ranges per muscle (defaults with the
+    user's overrides merged) — the single table this view and the generator read."""
+    return {m: {"low": lo, "high": hi} for m, (lo, hi) in _resolved_targets(db).items()}
+
+
+@router.get("/sets-per-week")
+def sets_per_week(
+    weeks: int = Query(8, ge=1, le=52),
+    db: DBSession = Depends(get_db),
+    _: None = Depends(require_auth),
+):
+    """Completed WORKING sets (not warm-ups) per primary muscle group per ISO
+    week (Monday start), for the last N weeks, against each muscle's target
+    range. Only the exercise's primary muscle group counts."""
+    today = date.today()
+    current_week = iso_week_start(today)
+    first_week = current_week - timedelta(weeks=weeks - 1)
+    since = datetime.combine(first_week, time.min)
+
+    rows = (
+        db.query(Session.started_at, Exercise.primary_muscle_group)
+        .join(SessionExercise, Session.id == SessionExercise.session_id)
+        .join(Set, SessionExercise.id == Set.session_exercise_id)
+        .join(Exercise, SessionExercise.exercise_id == Exercise.id)
+        .filter(
+            Session.started_at >= since,
+            Set.is_completed == True,   # noqa: E712
+            Set.is_warmup == False,     # noqa: E712
+        )
+        .all()
+    )
+
+    counts: dict[tuple[date, str], int] = defaultdict(int)
+    for started_at, group in rows:
+        if not group:
+            continue
+        counts[(iso_week_start(started_at.date()), group)] += 1
+
+    week_starts = [first_week + timedelta(weeks=i) for i in range(weeks)]
+    targets = _resolved_targets(db)
+    return {
+        "muscle_groups": MUSCLE_GROUPS,
+        "targets": {m: {"low": lo, "high": hi} for m, (lo, hi) in targets.items()},
+        "weeks": [
+            {
+                "week_start": wk.isoformat(),
+                "is_current": wk == current_week,
+                "counts": {m: counts.get((wk, m), 0) for m in MUSCLE_GROUPS},
+            }
+            for wk in week_starts
+        ],
+    }

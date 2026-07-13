@@ -23,7 +23,7 @@ const PROBE_TIMEOUT_MS = 3000
 // Bump when SYNC_TABLES widens: a device that last synced under a narrower
 // scope must do one full pull (since=null) to backfill the new tables —
 // its incremental cursor predates them.
-const SYNC_SCOPE_VERSION = 2
+const SYNC_SCOPE_VERSION = 3
 
 // table name -> { key, health } (health tables get source-precedence checks)
 const SYNC_TABLES = {
@@ -33,6 +33,8 @@ const SYNC_TABLES = {
   session: { key: 'uuid' },
   session_exercise: { key: 'uuid' },
   set: { key: 'uuid' },
+  routine_note: { key: 'uuid' },
+  activity: { key: 'uuid' },
   plan_item: { key: 'uuid' },
   tracker: { key: 'uuid' },
   tracker_log: { key: 'uuid' },

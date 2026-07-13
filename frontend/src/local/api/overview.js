@@ -4,6 +4,8 @@
  */
 import { db, nowIso } from '../db'
 import { DERIVED_SOURCES, buildWeightSeries, realWeightPoints, resolvedWeightFor } from '../weights'
+import { streakSnapshot } from './streak'
+import { weeklyAverages } from './weight_trend'
 import { dailyVolume, sessionSummary } from './workout'
 import { addDays, pearson, round, todayIso } from './util'
 
@@ -14,12 +16,22 @@ const MAX_PAIRS = 8
 const MAX_RECENT_PRS = 5
 
 const DEFAULT_SETTINGS = {
-  id: 1, calorie_target: 2400, protein_target_g: 180, fat_max_g: 100,
+  id: 1, calorie_target: 2300, protein_target_g: 180, fat_max_g: 100,
   unit_system: 'metric', sex: 'male', rank_config: null, health_last_ingest: null,
+  age: 19, onboarded: false,
+  target_loss_kg_per_week: 0.5, adapt_step_kcal: 100, adapt_tolerance_kg: 0.15,
+  calorie_floor: 1800, calorie_ceiling: null, last_adapted_week: null,
+  volume_targets: null, streak_rest_gap: 1, default_rest_seconds: 120,
+  goal_rate_kg_per_week: -0.25, expenditure_kcal: null, calorie_target_set_at: null,
 }
 
 async function getSettings() {
-  return (await db.settings.get(1)) || { ...DEFAULT_SETTINGS }
+  const row = await db.settings.get(1)
+  if (!row) return { ...DEFAULT_SETTINGS }
+  // Existing installs predate `onboarded` — treat a returning user (row already
+  // present) as onboarded so the first-run wizard never ambushes them; only a
+  // brand-new install (no settings row at all) starts with onboarded=false.
+  return { ...DEFAULT_SETTINGS, ...row, onboarded: row.onboarded ?? true }
 }
 
 const dateInRange = (rows, start, end) =>
@@ -36,6 +48,14 @@ async function dashboard() {
 
   const weights = await db.weight_log.toArray()
   const weight = buildWeightSeries(weights, today)
+
+  // ISO-week averages (real weigh-ins only) — mirrors weight_trend + the diet trend.
+  const weightByDate = Object.fromEntries(
+    weights.filter(w => !DERIVED_SOURCES.includes(w.source)).map(w => [w.date, w.weight_kg])
+  )
+  weight.weekly_avg = weeklyAverages(weightByDate, today).map(w => ({
+    week_start: w.week_start, avg_kg: w.avg_kg, n_entries: w.n_entries, provisional: w.is_current_week,
+  }))
 
   const steps = dateInRange(await db.steps_log.toArray(), addDays(today, -14), today)
     .sort((a, b) => (a.date < b.date ? -1 : 1))
@@ -82,6 +102,7 @@ async function dashboard() {
       sessions_this_week: weekSessions.length,
       recent_prs: recentPrs.slice(0, MAX_RECENT_PRS),
     },
+    streak: await streakSnapshot(),
   }
 }
 

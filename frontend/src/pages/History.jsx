@@ -73,6 +73,17 @@ export default function History() {
 
   const selected = sessions.find(s => s.id === selectedId)
 
+  async function deleteSession(s) {
+    if (!confirm(`Delete "${s.name}" (${fmtDate(s.started_at)})? Its logged sets are removed for good and PRs/ranks will recompute without them.`)) return
+    try {
+      await apiFetch(`/api/sessions/${s.id}`, { method: 'DELETE' })
+      setSessions(list => list.filter(x => x.id !== s.id))
+      if (selectedId === s.id) setSelectedId(null)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   return (
     <div className="page wide">
       <h1>History</h1>
@@ -105,6 +116,13 @@ export default function History() {
                           : <span className="text-warning"> · in progress</span>}
                       </div>
                     </div>
+                    <button
+                      className="secondary" aria-label={`Delete ${s.name}`} title="Delete session"
+                      style={{ minWidth: 36, padding: '0.25rem 0.5rem', color: 'var(--color-danger)' }}
+                      onClick={e => { e.stopPropagation(); deleteSession(s) }}
+                    >
+                      🗑
+                    </button>
                     <Chevron open={isSelected} />
                   </div>
 

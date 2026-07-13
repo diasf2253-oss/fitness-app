@@ -67,6 +67,96 @@ function RBar({ r }) {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Weekly sets per primary muscle group vs target range
+// ---------------------------------------------------------------------------
+
+const SET_STATUS_COLOR = {
+  under: 'var(--color-muted)',     // below minimum effective volume
+  within: 'var(--color-accent)',   // inside the target window
+  over: 'var(--color-danger)',     // beyond maximum recoverable volume
+}
+
+function setStatus(count, low, high) {
+  if (count < low) return 'under'
+  if (count > high) return 'over'
+  return 'within'
+}
+
+function fmtWeekCommencing(iso) {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function RangeBar({ count, low, high, max, status }) {
+  const left = v => `${Math.min(v / max, 1) * 100}%`
+  const tick = at => (
+    <div style={{ position: 'absolute', left: at, top: -2, bottom: -2, width: 2, background: 'var(--color-border-str)', borderRadius: 1 }} />
+  )
+  return (
+    <div style={{ position: 'relative', height: 8, background: 'var(--color-surface2)', borderRadius: 999 }}>
+      <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: left(count), background: SET_STATUS_COLOR[status], borderRadius: 999 }} />
+      {tick(left(low))}
+      {tick(left(high))}
+    </div>
+  )
+}
+
+function SetsPerMuscle() {
+  const [data, setData] = useState(null)
+  const [error, setError] = useState(null)
+  const [wkIdx, setWkIdx] = useState(null)
+
+  useEffect(() => {
+    apiFetch('/api/stats/sets-per-week?weeks=8')
+      .then(d => { setData(d); setWkIdx(d.weeks.length - 1) })
+      .catch(e => setError(e.message))
+  }, [])
+
+  if (error) return <ErrorBox error={error} />
+  if (!data || wkIdx == null) return null
+
+  const week = data.weeks[wkIdx]
+  const groups = data.muscle_groups
+  const maxHigh = Math.max(...groups.map(m => data.targets[m].high))
+
+  return (
+    <div className="card">
+      <div className="row" style={{ marginBottom: '0.6rem' }}>
+        <h3 style={{ margin: 0, flex: 1 }}>Weekly sets / muscle</h3>
+        <WidgetLabel>working sets · primary only</WidgetLabel>
+      </div>
+
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+        <button className="secondary" disabled={wkIdx === 0} onClick={() => setWkIdx(i => i - 1)} style={{ minWidth: 36, padding: '0.3rem 0.6rem' }}>‹</button>
+        <span className="muted tnum" style={{ fontSize: '0.82rem' }}>
+          w/c {fmtWeekCommencing(week.week_start)}{week.is_current ? ' · this week' : ''}
+        </span>
+        <button className="secondary" disabled={wkIdx === data.weeks.length - 1} onClick={() => setWkIdx(i => i + 1)} style={{ minWidth: 36, padding: '0.3rem 0.6rem' }}>›</button>
+      </div>
+
+      {groups.map(m => {
+        const { low, high } = data.targets[m]
+        const count = week.counts[m]
+        const status = setStatus(count, low, high)
+        return (
+          <div key={m} className="row" style={{ padding: '0.4rem 0', borderBottom: '1px solid var(--color-border)', alignItems: 'center' }}>
+            <span style={{ width: 88, fontSize: '0.86rem' }}>{m}</span>
+            <div style={{ flex: 1, margin: '0 0.6rem' }}>
+              <RangeBar count={count} low={low} high={high} max={maxHigh} status={status} />
+            </div>
+            <span className="tnum" style={{ width: 24, textAlign: 'right', fontSize: '0.9rem', color: SET_STATUS_COLOR[status] }}>{count}</span>
+            <span className="tnum muted" style={{ width: 54, textAlign: 'right', fontSize: '0.76rem' }}>{low}–{high}</span>
+          </div>
+        )
+      })}
+
+      <p className="muted" style={{ fontSize: '0.74rem', marginTop: '0.6rem' }}>
+        Each completed working set counts once toward its exercise's primary muscle (secondary involvement never counts). Ticks mark the target window.
+      </p>
+    </div>
+  )
+}
+
 export default function Insights() {
   const [weekly, setWeekly] = useState(null)
   const [corr, setCorr] = useState(null)
@@ -160,6 +250,9 @@ export default function Insights() {
           )}
         </div>
       )}
+
+      {/* ---- Weekly sets per muscle group ---- */}
+      <SetsPerMuscle />
 
       {/* ---- Training-day splits ---- */}
       {corr && corr.training_splits.length > 0 && (

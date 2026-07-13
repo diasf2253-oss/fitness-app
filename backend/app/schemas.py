@@ -5,7 +5,7 @@ We never return raw SQLAlchemy objects from API endpoints — always use these.
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ---------------------------------------------------------------------------
@@ -83,8 +83,33 @@ class RoutineUpdate(BaseModel):
 
 class RoutineOut(OrmBase, RoutineBase):
     id: int
+    source: str = "manual"        # 'manual' | 'generated'
     created_at: datetime
     exercises: list[RoutineExerciseOut] = []
+
+
+# ---------------------------------------------------------------------------
+# Next-session (routine) notes
+# ---------------------------------------------------------------------------
+
+class RoutineNoteCreate(BaseModel):
+    text: str
+    created_in_session_id: Optional[int] = None
+
+
+class RoutineNoteUpdate(BaseModel):
+    text: Optional[str] = None
+    archived: Optional[bool] = None
+
+
+class RoutineNoteOut(OrmBase):
+    id: int
+    routine_id: int
+    text: str
+    created_at: datetime
+    created_in_session_id: Optional[int] = None
+    surfaced_in_session_id: Optional[int] = None
+    archived_at: Optional[datetime] = None
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +180,8 @@ class SessionOut(OrmBase):
     ended_at: Optional[datetime] = None
     notes: Optional[str] = None
     exercises: list[SessionExerciseOut] = []
+    # Next-session notes surfaced at the start of this session (from the routine).
+    next_session_notes: list[RoutineNoteOut] = []
 
 
 class SessionSummary(OrmBase):
@@ -262,6 +289,20 @@ class AppSettingsUpdate(BaseModel):
     unit_system: Optional[str] = None
     sex: Optional[str] = None
     rank_config: Optional[dict] = None
+    # Profile / onboarding
+    age: Optional[int] = None
+    onboarded: Optional[bool] = None
+    # Adaptive calorie engine
+    target_loss_kg_per_week: Optional[float] = None
+    adapt_step_kcal: Optional[int] = None
+    adapt_tolerance_kg: Optional[float] = None
+    calorie_floor: Optional[int] = None
+    calorie_ceiling: Optional[int] = None
+    # Training
+    volume_targets: Optional[dict] = None
+    streak_rest_gap: Optional[int] = None
+    default_rest_seconds: Optional[int] = None
+    goal_rate_kg_per_week: Optional[float] = None
 
 
 class AppSettingsOut(OrmBase):
@@ -273,6 +314,107 @@ class AppSettingsOut(OrmBase):
     sex: str = "male"
     rank_config: Optional[dict] = None
     health_last_ingest: Optional[datetime] = None
+    # Profile / onboarding
+    age: int = 19
+    onboarded: bool = False
+    # Adaptive calorie engine
+    target_loss_kg_per_week: float = 0.5
+    adapt_step_kcal: int = 100
+    adapt_tolerance_kg: float = 0.15
+    calorie_floor: int = 1800
+    calorie_ceiling: Optional[int] = None
+    last_adapted_week: Optional[date] = None
+    # Training
+    volume_targets: Optional[dict] = None
+    streak_rest_gap: int = 1
+    default_rest_seconds: int = 120
+    # Legacy (retired, unused)
+    goal_rate_kg_per_week: float = -0.25
+    expenditure_kcal: Optional[float] = None
+    calorie_target_set_at: Optional[date] = None
+
+
+# ---------------------------------------------------------------------------
+# Training streak
+# ---------------------------------------------------------------------------
+
+class StreakOut(BaseModel):
+    current: int = 0
+    longest: int = 0
+    last_workout_date: Optional[date] = None
+    rest_gap: int = 1
+    alive: bool = False
+    at_risk: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Workout generator
+# ---------------------------------------------------------------------------
+
+class GeneratorRequest(BaseModel):
+    priority_muscles: list[str] = []      # ranked: order is the priority order
+    days_per_week: int = Field(ge=1, le=7)
+    split_type: str                       # 'full_body' | 'upper_lower' | 'ppl' | 'bro'
+
+
+# ---------------------------------------------------------------------------
+# Diet — activities, adaptive energy, micronutrients
+# ---------------------------------------------------------------------------
+
+class ActivityCreate(BaseModel):
+    date: date
+    type: str
+    duration_min: int = Field(gt=0, le=600)
+    notes: Optional[str] = None
+
+
+class ActivityOut(BaseModel):
+    id: int
+    date: date
+    type: str
+    duration_min: int
+    notes: Optional[str] = None
+    calories_est: Optional[int] = None   # computed (METs × duration × weight)
+
+
+class NutrientStatus(BaseModel):
+    name: str
+    label: str
+    category: str        # 'vitamin' | 'mineral'
+    amount: float
+    unit: str
+    rda: float
+    pct: int
+    status: str          # 'low' | 'slightly_low' | 'meets' | 'above'
+
+
+class EnergySummary(BaseModel):
+    # ---- the adaptive target + macros ----
+    calorie_target: int
+    target_loss_kg_per_week: float
+    protein_target_g: int
+    fat_target_g: int
+    carb_target_g: Optional[int] = None
+    # ---- adaptive context (all from the weekly trend) ----
+    adaptive_ready: bool                          # has it adapted at least once?
+    weekly_change_kg: Optional[float] = None      # last completed wk − prior wk
+    last_adapted: Optional[date] = None
+    next_adapt: Optional[date] = None             # next Monday it can move
+    entries_last_week: Optional[int] = None
+    floor: int
+    ceiling: Optional[int] = None
+    weight_trend_kg: Optional[float] = None       # latest weekly average
+    # ---- intake context ----
+    avg_intake_7d: Optional[int] = None
+    avg_intake_14d: Optional[int] = None
+    note: Optional[str] = None                    # hold reason / gathering data
+
+
+class DietOut(BaseModel):
+    energy: EnergySummary
+    nutrients: list[NutrientStatus]
+    nutrient_days: int          # how many days the micro average covers
+    activities: list[ActivityOut]
 
 
 # ---------------------------------------------------------------------------
@@ -371,6 +513,7 @@ class DashboardOut(BaseModel):
     nutrition_today: NutritionToday
     targets: DashboardTargets
     training: DashboardTraining
+    streak: StreakOut = StreakOut()
 
 
 # ---------------------------------------------------------------------------

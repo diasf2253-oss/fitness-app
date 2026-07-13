@@ -8,6 +8,30 @@ export const MUSCLE_GROUPS = [
   'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Abs',
 ]
 
+// Per-muscle weekly working-set target ranges [low, high] — mirrors
+// muscles.DEFAULT_VOLUME_TARGETS. Read by the generator + sets-per-week.
+export const DEFAULT_VOLUME_TARGETS = {
+  Chest: [10, 20], Back: [10, 22], Shoulders: [8, 20],
+  Biceps: [8, 20], Triceps: [8, 18], Quads: [8, 18],
+  Hamstrings: [6, 16], Glutes: [8, 16], Calves: [8, 16], Abs: [6, 20],
+}
+
+/** Default ranges with per-user overrides merged on top — mirrors
+ * muscles.resolved_volume_targets. Unknown/malformed entries are ignored. */
+export function resolvedVolumeTargets(overrides) {
+  const out = { ...DEFAULT_VOLUME_TARGETS }
+  if (overrides) {
+    for (const [muscle, rng] of Object.entries(overrides)) {
+      if (muscle in out && Array.isArray(rng) && rng.length === 2) {
+        const lo = parseInt(rng[0], 10)
+        const hi = parseInt(rng[1], 10)
+        if (Number.isFinite(lo) && Number.isFinite(hi)) out[muscle] = [lo, hi]
+      }
+    }
+  }
+  return out
+}
+
 // Ordered (specific → general): first matching rule wins, so "leg curl"
 // hits Hamstrings before "curl" hits Biceps.
 const NAME_RULES = [
