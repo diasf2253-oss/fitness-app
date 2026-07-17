@@ -17,6 +17,7 @@
  */
 import { db, getMeta, setMeta } from './db'
 import { writeBlocked } from './weights'
+import { apiUrl } from '../env'
 
 const PROBE_TIMEOUT_MS = 3000
 
@@ -53,7 +54,7 @@ async function probe() {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
   try {
-    const r = await fetch('/api/sync/manifest', { headers: authHeaders(), signal: controller.signal })
+    const r = await fetch(apiUrl('/api/sync/manifest'), { headers: authHeaders(), signal: controller.signal })
     return r.ok
   } catch {
     return false
@@ -74,7 +75,7 @@ async function pushDirty() {
   }
   if (total === 0) return 0
 
-  const r = await fetch('/api/sync/push', {
+  const r = await fetch(apiUrl('/api/sync/push'), {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ tables }),
@@ -109,7 +110,7 @@ async function applyTable(name, rows) {
 
 async function pullSince(since) {
   const qs = since ? `?since=${encodeURIComponent(since)}` : ''
-  const r = await fetch(`/api/sync/pull${qs}`, { headers: authHeaders() })
+  const r = await fetch(apiUrl(`/api/sync/pull${qs}`), { headers: authHeaders() })
   if (!r.ok) throw new Error(`pull failed: HTTP ${r.status}`)
   const body = await r.json()
 

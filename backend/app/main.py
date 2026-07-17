@@ -33,15 +33,23 @@ app = FastAPI(
     version="0.2.0",
 )
 
-# CORS: allow the Vite dev server and same-LAN access from phone in the gym
+# CORS: the Vite dev server, same-LAN phone access, and any configured
+# cross-origin frontends (Vercel staging/previews — see config.cors_origins).
+_LAN_DEV_REGEX = r"http://192\.168\.\d+\.\d+:5173"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        *settings.cors_origin_list,
     ],
-    # Allow any local-network IP (192.168.x.x) on port 5173 for gym phone access
-    allow_origin_regex=r"http://192\.168\.\d+\.\d+:5173",
+    # Allow any local-network IP (192.168.x.x) on port 5173 for gym phone
+    # access; CORS_ALLOW_ORIGIN_REGEX widens this (e.g. *.vercel.app previews).
+    allow_origin_regex=(
+        f"(?:{_LAN_DEV_REGEX})|(?:{settings.cors_allow_origin_regex})"
+        if settings.cors_allow_origin_regex
+        else _LAN_DEV_REGEX
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,8 +62,9 @@ app.add_middleware(
 
 @app.get("/api/ping")
 def ping():
-    """Public endpoint — used by the frontend to verify the API is reachable."""
-    return {"status": "ok"}
+    """Public endpoint — used by the frontend to verify the API is reachable.
+    `env` lets any frontend detect it is talking to staging (STAGING badge)."""
+    return {"status": "ok", "env": settings.app_env}
 
 
 # ---------------------------------------------------------------------------

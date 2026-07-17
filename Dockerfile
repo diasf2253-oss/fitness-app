@@ -12,6 +12,11 @@ WORKDIR /build
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
+# Railway passes service variables as build args when declared. The staging
+# service sets VITE_APP_ENV=staging so the baked-in frontend shows its
+# STAGING badge without waiting for the runtime /api/ping probe.
+ARG VITE_APP_ENV=""
+ENV VITE_APP_ENV=$VITE_APP_ENV
 RUN npm run build
 
 

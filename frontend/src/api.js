@@ -12,6 +12,7 @@
 // The user sets it once on the Settings page (or we default to 'changeme' for dev).
 import { dispatchLocal } from './local/api'
 import { isLocalFirst } from './local/mode'
+import { apiUrl } from './env'
 
 function getToken() {
   return localStorage.getItem('app_token') || 'changeme'
@@ -46,7 +47,7 @@ async function networkFetch(path, options = {}) {
     ...(options.headers || {}),
   }
 
-  const response = await fetch(path, { ...options, headers })
+  const response = await fetch(apiUrl(path), { ...options, headers })
 
   if (!response.ok) {
     // Try to parse a FastAPI {"detail": "..."} error body
@@ -71,7 +72,7 @@ async function networkFetch(path, options = {}) {
  * Content-Type header — the browser must set the multipart boundary.
  */
 export async function apiUpload(path, formData) {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${getToken()}` },
     body: formData,
@@ -97,7 +98,7 @@ export async function apiUpload(path, formData) {
  * Returns the full concatenated text when the stream ends.
  */
 export async function apiStream(path, body, onChunk) {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${getToken()}`,

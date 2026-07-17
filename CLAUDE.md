@@ -31,6 +31,12 @@ Run backend commands from `backend/`, frontend commands from `frontend/`.
 - Build frontend: `npm run build` (the backend then serves the built output on one origin)
 - Run tests: `pytest`
 
+## Environments & promotion
+Two isolated stacks (full runbook: `docs/STAGING.md`). **Production** = Railway service + its own Postgres, deploys from `main` **only**. **Staging** = a second Railway service + its own Postgres (`APP_ENV=staging`), deploys from the long-lived `staging` branch (a throwaway pointer — force-push any feature onto it). Frontends: Vercel builds a preview per feature branch and a persistent staging URL from the `staging` branch, all pointed at the staging API (`VITE_API_BASE_URL`); the frontend shows a **STAGING badge** whenever it talks to a staging API (`frontend/src/env.js` + `/api/ping`'s `env` field).
+- Promotion flow: **feature branch → Vercel preview + staging test (`git push --force-with-lease origin <branch>:staging`) → merge to `main` → production deploys**. Never deploy to production from any other branch.
+- Staging data is an anonymised prod copy: `./scripts/seed_staging.sh` (dump → guarded restore → `scripts/anonymise_staging.sql`). Staging is disposable; re-seed freely.
+- API paths in frontend code stay relative — `apiUrl()` in `src/env.js` prefixes them when a cross-origin base is configured. New cross-origin frontends need their origin in the API's `CORS_ORIGINS`/`CORS_ALLOW_ORIGIN_REGEX`.
+
 ## Backups (production Postgres)
 Production runs on a Railway **Postgres** service (local dev still uses SQLite — Postgres is a `DATABASE_URL` swap). Two scripts under `scripts/` back that DB up and restore it. Full setup + the one-time Railway steps live in the README (*Database backups*).
 - `scripts/backup.sh` — `pg_dump` prod to `backups/fitness_prod_<ts>.dump` (custom format). One command: `./scripts/backup.sh`. The connection string comes from `PROD_DATABASE_URL` (env or the git-ignored `scripts/.env.backup`) — **never hardcode credentials**.

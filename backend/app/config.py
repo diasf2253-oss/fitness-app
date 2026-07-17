@@ -35,6 +35,24 @@ class Settings(BaseSettings):
             v = "postgresql+psycopg://" + v[len("postgresql://"):]
         return v
 
+    # Which deployment this is: 'production' (default — the laptop and the
+    # Railway prod service) or 'staging'. Exposed on /api/ping so the frontend
+    # can show its STAGING badge no matter which build is talking to us.
+    app_env: str = "production"
+
+    # Cross-origin frontends (the Vercel staging/preview deployments call the
+    # Railway API from another origin). Comma-separated exact origins:
+    #   CORS_ORIGINS=https://fitness-staging.vercel.app
+    # plus an optional regex for the per-branch preview URLs:
+    #   CORS_ALLOW_ORIGIN_REGEX=https://.*\.vercel\.app
+    # Both empty (the default) ⇒ same-origin + Vite-dev only, as before.
+    cors_origins: str = ""
+    cors_allow_origin_regex: str = ""
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
     # Built-frontend directory (relative to the backend working directory).
     # When it exists, the API also serves the app — one origin for
     # everything, which is what the PWA and Health Auto Export point at.

@@ -68,7 +68,9 @@ class TestHealthIngest:
     def test_ping_is_public(self):
         r = client.get("/api/ping")
         assert r.status_code == 200
-        assert r.json() == {"status": "ok"}
+        body = r.json()
+        assert body["status"] == "ok"
+        assert "env" in body  # environment label for the STAGING badge
 
     def test_ingest_requires_auth(self):
         r = client.post("/api/ingest/health", json={"data": {}})

@@ -16,6 +16,7 @@ import Generator from './pages/Generator'
 import Report from './pages/Report'
 import Diet from './pages/Diet'
 import Onboarding from './components/Onboarding'
+import StagingBadge from './components/StagingBadge'
 
 // Crisp stroke icons (inherit currentColor → active state recolors for free)
 const Icon = {
@@ -175,11 +176,17 @@ export default function App() {
   }, [])
 
   if (onboarded === false) {
-    return <Onboarding onDone={() => setOnboarded(true)} />
+    return (
+      <>
+        <StagingBadge />
+        <Onboarding onDone={() => setOnboarded(true)} />
+      </>
+    )
   }
 
   return (
     <>
+      <StagingBadge />
       <ScrollToTop />
       <Sidebar />
 
