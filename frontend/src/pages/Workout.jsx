@@ -15,6 +15,7 @@ import { apiFetch } from '../api'
 import ExercisePicker from '../components/ExercisePicker'
 import RestTimer from '../components/RestTimer'
 import { Loading, ErrorBox } from '../components/States'
+import { parseDecimal } from '../num'
 import WidgetLabel from '../components/WidgetLabel'
 
 // Next-session notes (surfaced from last time) + composer for the next session.
@@ -460,7 +461,7 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, setE
 // Single set row — weight, reps, RPE, warmup, complete checkbox
 // ---------------------------------------------------------------------------
 
-function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, setError }) {
+export function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, setError }) {
   // Local input state. Initialise from the set; if untouched (0) leave blank
   // so the previous-session value shows as a placeholder.
   const [weight, setWeight] = useState(set.weight_kg || '')
@@ -483,9 +484,9 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
   // Save weight/reps/rpe on blur (avoids a request per keystroke)
   function saveField() {
     patch({
-      weight_kg: weight === '' ? 0 : Number(weight),
+      weight_kg: parseDecimal(weight) ?? 0,
       reps: reps === '' ? 0 : Number(reps),
-      rpe: rpe === '' ? null : Number(rpe),
+      rpe: parseDecimal(rpe),
     })
   }
 
@@ -493,14 +494,14 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
     const next = !completed
     setCompleted(next)
     // When completing: use the prefilled previous value if the field is blank
-    const w = weight === '' ? (prev?.weight_kg || 0) : Number(weight)
+    const w = parseDecimal(weight) ?? (prev?.weight_kg || 0)
     const r = reps === '' ? (prev?.reps || 0) : Number(reps)
     if (weight === '' && prev) setWeight(prev.weight_kg)
     if (reps === '' && prev) setReps(prev.reps)
     await patch({
       weight_kg: w,
       reps: r,
-      rpe: rpe === '' ? null : Number(rpe),
+      rpe: parseDecimal(rpe),
       is_completed: next,
       is_warmup: isWarmup,
     })
@@ -540,7 +541,7 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
 
       <input
         style={{ flex: 1, minHeight: 44, textAlign: 'center' }}
-        type="number" inputMode="decimal"
+        type="text" inputMode="decimal" aria-label="Weight (kg)"
         placeholder={prev ? String(prev.weight_kg) : '0'}
         value={weight}
         onChange={e => setWeight(e.target.value)}
@@ -556,7 +557,7 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
       />
       <input
         style={{ width: 48, minHeight: 44, textAlign: 'center', padding: '0.3rem' }}
-        type="number" inputMode="decimal"
+        type="text" inputMode="decimal" aria-label="RPE"
         placeholder="–"
         value={rpe}
         onChange={e => setRpe(e.target.value)}

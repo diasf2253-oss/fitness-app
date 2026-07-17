@@ -29,7 +29,12 @@ Run backend commands from `backend/`, frontend commands from `frontend/`.
 - Run backend (dev): `uvicorn app.main:app --reload`
 - Frontend dev server: `npm install`, then `npm run dev`
 - Build frontend: `npm run build` (the backend then serves the built output on one origin)
-- Run tests: `pytest`
+
+## Tests
+- Backend: `pytest` from `backend/` (uses `backend/.venv`; tests run on an in-memory SQLite — they never touch `fitness.sqlite3`).
+- Frontend: `npm test` from `frontend/` (vitest — ported math in `src/local/`, plus component tests for numeric input handling, e.g. comma decimals like "82,5").
+- The named safety net is `backend/tests/test_safety_net.py`: auth, weight entry, workout logging, the 2,300 kcal calorie anchor, and the Apple Health sample-payload import. Deep coverage lives in the per-feature test files next to it.
+- CI (`.github/workflows/ci.yml`) runs both suites on every PR and on pushes to `main`. Keep both green — a red suite blocks the promotion flow below.
 
 ## Environments & promotion
 Two isolated stacks (full runbook: `docs/STAGING.md`). **Production** = Railway service + its own Postgres, deploys from `main` **only**. **Staging** = a second Railway service + its own Postgres (`APP_ENV=staging`), deploys from the long-lived `staging` branch (a throwaway pointer — force-push any feature onto it). Frontends: Vercel builds a preview per feature branch and a persistent staging URL from the `staging` branch, all pointed at the staging API (`VITE_API_BASE_URL`); the frontend shows a **STAGING badge** whenever it talks to a staging API (`frontend/src/env.js` + `/api/ping`'s `env` field).

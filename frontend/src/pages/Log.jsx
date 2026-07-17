@@ -9,6 +9,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../api'
 import { ErrorBox } from '../components/States'
+import { parseDecimal } from '../num'
 
 // Local calendar date (toISOString alone would shift near midnight)
 function localToday() {
@@ -79,8 +80,9 @@ export default function Log() {
   const [fat, setFat] = useState('')
 
   const required = (value, name) => {
-    if (value === '' || value === null) throw new Error(`Enter ${name} first`)
-    return Number(value)
+    const n = parseDecimal(value)
+    if (n === null) throw new Error(`Enter ${name} first`)
+    return n
   }
 
   // Prefill the weight field with the day's real reading, or — for a day
@@ -129,7 +131,7 @@ export default function Log() {
         })}
       >
         <Field label="Weight (kg)">
-          <input type="number" inputMode="decimal" step="0.1" placeholder="84.0"
+          <input type="text" inputMode="decimal" placeholder="84.0"
             value={weight}
             onChange={e => { setWeight(e.target.value); setWeightEstimated(false) }} />
           {weightEstimated && (
@@ -158,7 +160,7 @@ export default function Log() {
         onSave={() => {
           const asleep = required(asleepH, 'hours asleep')
           // In-bed defaults to asleep time when left blank
-          const inBed = inBedH === '' ? asleep : Number(inBedH)
+          const inBed = parseDecimal(inBedH) ?? asleep
           return apiFetch('/api/health/sleep', {
             method: 'POST',
             body: JSON.stringify({
@@ -171,11 +173,11 @@ export default function Log() {
       >
         <div className="form-row">
           <Field label="Asleep (h)">
-            <input type="number" inputMode="decimal" step="0.25" placeholder="7.5"
+            <input type="text" inputMode="decimal" placeholder="7.5"
               value={asleepH} onChange={e => setAsleepH(e.target.value)} />
           </Field>
           <Field label="In bed (h, optional)">
-            <input type="number" inputMode="decimal" step="0.25" placeholder="8"
+            <input type="text" inputMode="decimal" placeholder="8"
               value={inBedH} onChange={e => setInBedH(e.target.value)} />
           </Field>
         </div>
