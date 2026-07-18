@@ -10,6 +10,48 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { apiFetch, apiUpload, setToken } from '../api'
+import { isMuted, setMuted, subscribeMuted, playTap } from '../audio'
+
+/**
+ * Sound on/off. The switch reads "Sound effects" (checked = audible), which is
+ * friendlier than a "Mute" negative. State lives in the audio service (backed
+ * by localStorage), so it persists across sessions and any other surface that
+ * reads it stays in sync via subscribeMuted.
+ */
+function SoundCard() {
+  const [soundOn, setSoundOn] = useState(!isMuted())
+
+  // Reflect changes made elsewhere (defensive; today only this toggles it).
+  useEffect(() => subscribeMuted(m => setSoundOn(!m)), [])
+
+  function toggle() {
+    const next = !soundOn
+    setSoundOn(next)
+    setMuted(!next)
+    if (next) playTap()  // brief confirmation that sound is back on
+  }
+
+  return (
+    <div className="card">
+      <div className="row" style={{ alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ flex: 1 }}>
+          <h2 style={{ margin: 0 }}>Sound effects</h2>
+          <p className="muted" style={{ margin: '0.35rem 0 0', fontSize: '0.85rem' }}>
+            Subtle cues on taps, finishing a workout, and ranking up.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={soundOn}
+          aria-label="Sound effects"
+          className="switch"
+          onClick={toggle}
+        />
+      </div>
+    </div>
+  )
+}
 
 /**
  * A small "tap to copy" button. Shows a brief ✓ after copying.
@@ -512,6 +554,8 @@ export default function Settings() {
           <button type="submit">{saved ? '✓ Saved' : 'Save token'}</button>
         </form>
       </div>
+
+      <SoundCard />
 
       <AddDeviceCard />
 

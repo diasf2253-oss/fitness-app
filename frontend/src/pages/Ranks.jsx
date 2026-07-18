@@ -9,6 +9,12 @@ import { apiFetch } from '../api'
 import { Loading, ErrorBox } from '../components/States'
 import WidgetLabel from '../components/WidgetLabel'
 import { IMG_W, IMG_H, MUSCLE_SHAPES } from '../data/muscleShapes'
+import { detectRankUp } from '../rankSignature'
+import { playRankUp } from '../audio'
+
+// Persisted promotion score — compared on each Ranks load to fire the rank-up
+// cue exactly when the ladder actually climbs (device-local; not synced data).
+const RANK_SIG_KEY = 'rank_signature'
 
 // Body map = the realistic anatomy render (front figure on the left, back on the
 // right) with precise muscle outlines overlaid on top. The outlines are traced
@@ -88,7 +94,18 @@ export default function Ranks() {
   function load() {
     setLoading(true)
     apiFetch('/api/ranks')
-      .then(setData)
+      .then(d => {
+        setData(d)
+        // Fire the rank-up cue if the ladder climbed since we last looked.
+        let prev = null
+        try {
+          const stored = localStorage.getItem(RANK_SIG_KEY)
+          prev = stored == null ? null : Number(stored)
+        } catch { /* storage blocked — treat as first load */ }
+        const { rankedUp, signature } = detectRankUp(d, prev)
+        if (rankedUp) playRankUp()
+        try { localStorage.setItem(RANK_SIG_KEY, String(signature)) } catch { /* ignore */ }
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }

@@ -6,6 +6,7 @@ import './index.css'
 import { setToken } from './api'
 import { isLocalFirst } from './local/mode'
 import { syncNow } from './local/sync'
+import { installUnlockListeners, playAppOpen, playTap, preload } from './audio'
 
 // Link-based onboarding via URL params, then strip them so they aren't left
 // in the address bar or history:
@@ -54,6 +55,20 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {})
   })
 }
+
+// Audio cue layer. Fetch the clips now (best-effort, no AudioContext yet), arm
+// the iOS unlock (first gesture resumes audio), and request the app-open cue —
+// it no-ops until unlock, then plays on that first tap. The subtle tap cue is a
+// single delegated listener on `document`: it sits earlier in the bubble path
+// than the window unlock listener, so the very first tap unlocks + plays
+// app-open WITHOUT also firing a tap.
+preload()
+installUnlockListeners()
+playAppOpen()
+document.addEventListener('pointerdown', (e) => {
+  const el = e.target.closest?.('button, [role="button"], a[href]')
+  if (el && !el.disabled && el.getAttribute('aria-disabled') !== 'true') playTap()
+}, { passive: true })
 
 // Sync on open (local-first mode): if the laptop answers on this network,
 // exchange changes; if not, carry on fully local. Never blocks the UI.

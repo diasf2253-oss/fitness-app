@@ -15,6 +15,7 @@ import { apiFetch } from '../api'
 import ExercisePicker from '../components/ExercisePicker'
 import RestTimer from '../components/RestTimer'
 import { Loading, ErrorBox } from '../components/States'
+import { playWorkoutComplete } from '../audio'
 import { parseDecimal } from '../num'
 import WidgetLabel from '../components/WidgetLabel'
 
@@ -623,6 +624,9 @@ export function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onD
 function WorkoutSummary({ summary, onDone }) {
   const navigate = useNavigate()
   const prLabel = { heaviest: 'Heaviest weight', best_1rm: 'Best est. 1RM', best_volume: 'Best set volume' }
+
+  // Celebrate the finish once, when the summary first appears.
+  useEffect(() => { playWorkoutComplete() }, [])
 
   return (
     <div className="page">
