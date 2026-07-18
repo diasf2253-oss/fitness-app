@@ -181,7 +181,7 @@ def build_report(db: DBSession, period: str = "weekly") -> dict:
         "sleep": _sleep(db, start, today, days),
         "plan": {
             "calorie_target": settings.calorie_target,
-            "target_loss_kg_per_week": settings.target_loss_kg_per_week,
+            "goal_kg_per_week": settings.goal_kg_per_week,
             "next_adapt": (iso_week_start(today) + timedelta(days=7)).isoformat(),
             "volume_flags": _current_week_volume_flags(db, settings, today),
         },
@@ -244,7 +244,7 @@ def report_markdown(r: dict) -> str:
 
     p = r["plan"]
     lines += ["## Plan for next week", "",
-              f"- Calorie target: **{p['calorie_target']} kcal** (aiming to lose {p['target_loss_kg_per_week']} kg/wk; next adapt {p['next_adapt']})"]
+              f"- Calorie target: **{p['calorie_target']} kcal** (aiming to lose {p['goal_kg_per_week']} kg/wk; next adapt {p['next_adapt']})"]
     if p["volume_flags"]:
         for f in p["volume_flags"]:
             lines.append(f"- {f['muscle']}: {f['count']} sets — **{f['status']}** target ({f['low']}–{f['high']})")

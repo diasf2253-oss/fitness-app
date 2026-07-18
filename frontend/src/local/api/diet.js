@@ -3,8 +3,8 @@
  * pure engines app/calorie_adapt.py, app/nutrition_rda.py, app/activity_burn.py.
  *
  * The calorie target is an anchored weekly-trend step model: it moves ±one
- * step once per completed ISO week toward the desired loss rate, never
- * recomputed from scratch. The adapted target is persisted onto the settings
+ * step once per completed ISO week toward the signed weekly goal (− cut ·
+ * 0 maintain · + bulk), never recomputed from scratch. The adapted target is persisted onto the settings
  * singleton (dirty-marked so it syncs).
  */
 import { db, newUuid, nowIso } from '../db'
@@ -64,7 +64,7 @@ export function estimateMaintenance(weightByDate, intakeByDate, today) {
 }
 
 export function adaptTarget({
-  currentTarget, targetLossKgPerWeek, stepKcal, toleranceKg, floor, ceiling,
+  currentTarget, goalKgPerWeek, stepKcal, toleranceKg, floor, ceiling,
   weightByDate, today, lastAdaptedWeek,
 }) {
   const thisWeek = isoWeekStart(today)
@@ -86,7 +86,7 @@ export function adaptTarget({
   if (last.n_entries < MIN_ENTRIES_FOR_ADAPT) return gathering(last.n_entries)
 
   const actualChange = round(last.avg_kg - prev.avg_kg, 3)
-  const desired = -Math.abs(targetLossKgPerWeek)
+  const desired = goalKgPerWeek   // signed: − cut · 0 maintain · + bulk (H1a slider)
   const lower = desired - toleranceKg
   const upper = desired + toleranceKg
 
@@ -95,8 +95,10 @@ export function adaptTarget({
   else if (actualChange > upper) { proposed = currentTarget - stepKcal; reason = 'decrease' }
   else { proposed = currentTarget; reason = 'hold' }
 
+  // Maintenance ceiling only applies when cutting/maintaining — a bulk must
+  // be allowed to exceed maintenance (mirrors calorie_adapt.py).
   proposed = Math.max(floor, proposed)
-  if (ceiling != null) proposed = Math.max(floor, Math.min(ceiling, proposed))
+  if (ceiling != null && goalKgPerWeek <= 0) proposed = Math.max(floor, Math.min(ceiling, proposed))
   proposed = Math.round(proposed / 10.0) * 10
 
   return {
@@ -202,7 +204,7 @@ export function buildBreakdown(avgMicros, sex) {
 
 const DEFAULTS = {
   calorie_target: 2300, protein_target_g: 180, fat_max_g: 100, sex: 'male',
-  target_loss_kg_per_week: 0.5, adapt_step_kcal: 100, adapt_tolerance_kg: 0.15,
+  goal_kg_per_week: -0.5, adapt_step_kcal: 100, adapt_tolerance_kg: 0.15,
   calorie_floor: 1800, calorie_ceiling: null, last_adapted_week: null,
 }
 
@@ -220,7 +222,7 @@ function resolvedCeiling(settings, weightByDate, intakeByDate, today) {
 async function adaptIfDue(settings, weightByDate, ceiling, today, force) {
   const result = adaptTarget({
     currentTarget: settings.calorie_target,
-    targetLossKgPerWeek: settings.target_loss_kg_per_week,
+    goalKgPerWeek: settings.goal_kg_per_week,
     stepKcal: settings.adapt_step_kcal,
     toleranceKg: settings.adapt_tolerance_kg,
     floor: settings.calorie_floor,
@@ -300,7 +302,7 @@ async function buildDiet(forceRecalc = false) {
 
   const energy = {
     calorie_target: settings.calorie_target,
-    target_loss_kg_per_week: settings.target_loss_kg_per_week,
+    goal_kg_per_week: settings.goal_kg_per_week,
     protein_target_g: protein, fat_target_g: fat, carb_target_g: carb,
     adaptive_ready: adaptiveReady, weekly_change_kg: weeklyChange,
     last_adapted: settings.last_adapted_week, next_adapt: nextAdapt,

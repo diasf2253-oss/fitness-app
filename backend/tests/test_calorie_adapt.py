@@ -16,10 +16,10 @@ def wk(monday, *weights):
     return {monday + timedelta(days=i): w for i, w in enumerate(weights)}
 
 
-def run(weight_by_date, *, current=2300, last_week=None, target_loss=0.5,
+def run(weight_by_date, *, current=2300, last_week=None, goal=-0.5,
         step=100, tol=0.15, floor=1800, ceiling=None, today=TODAY):
     return adapt_target(
-        current_target=current, target_loss_kg_per_week=target_loss,
+        current_target=current, goal_kg_per_week=goal,
         step_kcal=step, tolerance_kg=tol, floor=floor, ceiling=ceiling,
         weight_by_date=weight_by_date, today=today, last_adapted_week=last_week,
     )
@@ -112,3 +112,42 @@ def test_carbs_flex_to_fill_remaining_calories():
     assert carbs_from_target(2300, 180, 100) == 170
     # Protein + fat already exceed the target → carbs floored at 0, never negative
     assert carbs_from_target(1000, 180, 100) == 0
+
+
+# ---------------------------------------------------------------------------
+# Signed goal (H1a slider): maintain and bulk semantics
+# ---------------------------------------------------------------------------
+
+def test_maintain_goal_holds_when_stable():
+    # goal 0: −0.1 kg/wk sits inside the ±0.15 band → hold
+    w = {**wk(JUN8, 79.9, 80.0, 80.1), **wk(JUN15, 79.8, 79.9, 80.0)}
+    r = run(w, goal=0)
+    assert r.reason == "hold" and r.target == 2300
+
+
+def test_maintain_goal_decreases_when_gaining():
+    # goal 0: +0.5 kg/wk is outside the band → eat less
+    w = {**wk(JUN8, 79.9, 80.0, 80.1), **wk(JUN15, 80.4, 80.5, 80.6)}
+    r = run(w, goal=0)
+    assert r.reason == "decrease" and r.target == 2200
+
+
+def test_bulk_goal_increases_when_gaining_too_slowly():
+    # goal +0.5: +0.1 kg/wk is below the 0.35 lower band → eat more
+    w = {**wk(JUN8, 79.9, 80.0, 80.1), **wk(JUN15, 80.0, 80.1, 80.2)}
+    r = run(w, goal=0.5)
+    assert r.reason == "increase" and r.target == 2400
+
+
+def test_bulk_goal_decreases_when_gaining_too_fast():
+    # goal +0.5: +0.9 kg/wk is above the 0.65 upper band → eat less
+    w = {**wk(JUN8, 79.9, 80.0, 80.1), **wk(JUN15, 80.8, 80.9, 81.0)}
+    r = run(w, goal=0.5)
+    assert r.reason == "decrease" and r.target == 2200
+
+
+def test_bulk_ignores_maintenance_ceiling():
+    # A bulk must be allowed to eat above estimated maintenance
+    w = {**wk(JUN8, 79.9, 80.0, 80.1), **wk(JUN15, 80.0, 80.1, 80.2)}
+    r = run(w, goal=0.5, ceiling=2350)
+    assert r.reason == "increase" and r.target == 2400   # not clamped to 2350

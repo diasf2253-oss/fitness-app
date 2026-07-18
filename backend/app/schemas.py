@@ -292,8 +292,8 @@ class AppSettingsUpdate(BaseModel):
     # Profile / onboarding
     age: Optional[int] = None
     onboarded: Optional[bool] = None
-    # Adaptive calorie engine
-    target_loss_kg_per_week: Optional[float] = None
+    # Adaptive calorie engine — goal is the signed slider: − cut · 0 maintain · + bulk
+    goal_kg_per_week: Optional[float] = Field(None, ge=-0.5, le=0.5)
     adapt_step_kcal: Optional[int] = None
     adapt_tolerance_kg: Optional[float] = None
     calorie_floor: Optional[int] = None
@@ -317,8 +317,8 @@ class AppSettingsOut(OrmBase):
     # Profile / onboarding
     age: int = 19
     onboarded: bool = False
-    # Adaptive calorie engine
-    target_loss_kg_per_week: float = 0.5
+    # Adaptive calorie engine (goal is signed: − cut · 0 maintain · + bulk)
+    goal_kg_per_week: float = -0.5
     adapt_step_kcal: int = 100
     adapt_tolerance_kg: float = 0.15
     calorie_floor: int = 1800
@@ -391,7 +391,7 @@ class NutrientStatus(BaseModel):
 class EnergySummary(BaseModel):
     # ---- the adaptive target + macros ----
     calorie_target: int
-    target_loss_kg_per_week: float
+    goal_kg_per_week: float
     protein_target_g: int
     fat_target_g: int
     carb_target_g: Optional[int] = None

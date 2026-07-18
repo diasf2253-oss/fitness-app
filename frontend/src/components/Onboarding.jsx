@@ -14,7 +14,7 @@ export default function Onboarding({ onDone }) {
   const [weight, setWeight] = useState('')
   const [calories, setCalories] = useState('2300')
   const [protein, setProtein] = useState('180')
-  const [lossRate, setLossRate] = useState('0.5')
+  const [goalRate, setGoalRate] = useState('-0.5')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
@@ -36,7 +36,7 @@ export default function Onboarding({ onDone }) {
           ...(age !== '' ? { age: Number(age) } : {}),
           ...(calories !== '' ? { calorie_target: Number(calories) } : {}),
           ...(protein !== '' ? { protein_target_g: Number(protein) } : {}),
-          ...(lossRate !== '' ? { target_loss_kg_per_week: Number(lossRate) } : {}),
+          ...(goalRate !== '' ? { goal_kg_per_week: Number(goalRate) } : {}),
           onboarded: true,
         }),
       })
@@ -111,9 +111,9 @@ export default function Onboarding({ onDone }) {
               </div>
             </div>
             <div className="form-group">
-              <label htmlFor="ob-loss">Weight goal (kg/week — positive = losing, 0 = maintain)</label>
+              <label htmlFor="ob-loss">Weekly goal (kg/week — negative = cut, 0 = maintain, positive = bulk)</label>
               <input id="ob-loss" type="number" inputMode="decimal" step="0.05"
-                value={lossRate} onChange={e => setLossRate(e.target.value)} />
+                value={goalRate} onChange={e => setGoalRate(e.target.value)} min="-0.5" max="0.5" />
             </div>
             <p className="muted" style={{ fontSize: '0.78rem', margin: 0 }}>
               The calorie target adapts weekly from your weight trend — this is

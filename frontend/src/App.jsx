@@ -11,10 +11,10 @@ import Settings from './pages/Settings'
 import Log from './pages/Log'
 import Insights from './pages/Insights'
 import Ranks from './pages/Ranks'
-import Coach from './pages/Coach'
 import Generator from './pages/Generator'
 import Report from './pages/Report'
 import Diet from './pages/Diet'
+// Coach page killed per workbook H9 (grade D) — code kept at pages/Coach.jsx
 import Onboarding from './components/Onboarding'
 import StagingBadge from './components/StagingBadge'
 
@@ -68,7 +68,7 @@ function NavIcon({ name }) {
 const NAV_ITEMS = [
   { to: '/',        label: 'Home',     icon: 'home' },
   { to: '/workout', label: 'Workout',  icon: 'workout' },
-  { to: '/coach',   label: 'Coach',    icon: 'coach' },
+  { to: '/diet',    label: 'Diet',     icon: 'diet' },
   { to: '/history', label: 'History',  icon: 'history' },
   { to: '/settings',label: 'Settings', icon: 'settings' },
 ]
@@ -79,7 +79,6 @@ const SIDEBAR_SECTIONS = [
     label: 'General',
     items: [
       { to: '/',         label: 'Dashboard', icon: 'home' },
-      { to: '/coach',    label: 'Coach',     icon: 'coach' },
       { to: '/workout',  label: 'Workout',   icon: 'workout' },
       { to: '/routines', label: 'Routines',  icon: 'routines' },
       { to: '/history',  label: 'History',   icon: 'history' },
@@ -204,7 +203,6 @@ export default function App() {
           <Route path="/generator"    element={<Generator />} />
           <Route path="/report"       element={<Report />} />
           <Route path="/diet"         element={<Diet />} />
-          <Route path="/coach"        element={<Coach />} />
           <Route path="/settings"     element={<Settings />} />
         </Routes>
       </div>

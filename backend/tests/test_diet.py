@@ -80,7 +80,7 @@ class TestAdaptiveEnergy:
         e = client.get("/api/diet", headers=AUTH).json()["energy"]
         assert e["adaptive_ready"] is False
         assert e["calorie_target"] == 2300     # the seeded anchor
-        assert e["target_loss_kg_per_week"] == 0.5
+        assert e["goal_kg_per_week"] == -0.5
         assert e["note"]                       # explains it's gathering data
         assert e["carb_target_g"] == 170       # 2300 − 180·4 − 100·9 = 680 → 170 g
 

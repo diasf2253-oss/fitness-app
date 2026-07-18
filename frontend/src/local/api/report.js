@@ -150,7 +150,7 @@ async function buildReport(period = 'weekly') {
     sleep: await sleepSection(start, today, days),
     plan: {
       calorie_target: settings.calorie_target ?? 2400,
-      target_loss_kg_per_week: settings.target_loss_kg_per_week ?? 0.5,
+      goal_kg_per_week: settings.goal_kg_per_week ?? 0.5,
       next_adapt: addDays(isoWeekStart(today), 7),
       volume_flags: await currentWeekVolumeFlags(settings, today),
     },
@@ -206,7 +206,7 @@ export function reportMarkdown(r) {
 
   const p = r.plan
   lines.push('## Plan for next week', '',
-    `- Calorie target: **${p.calorie_target} kcal** (aiming to lose ${p.target_loss_kg_per_week} kg/wk; next adapt ${p.next_adapt})`)
+    `- Calorie target: **${p.calorie_target} kcal** (aiming to lose ${p.goal_kg_per_week} kg/wk; next adapt ${p.next_adapt})`)
   if (p.volume_flags.length) {
     for (const f of p.volume_flags) {
       lines.push(`- ${f.muscle}: ${f.count} sets — **${f.status}** target (${f.low}–${f.high})`)

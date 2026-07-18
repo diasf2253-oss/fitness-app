@@ -16,7 +16,7 @@ os.environ["APP_TOKEN"] = "testtoken"
 
 from app.db import Base, get_db
 from app.main import app
-from app.models import Exercise, Session, SessionExercise, Set
+from app.models import Activity, Exercise, Session, SessionExercise, Set, StepsLog
 
 engine = create_engine(
     TEST_DB_URL, connect_args={"check_same_thread": False}, poolclass=StaticPool
@@ -138,3 +138,49 @@ def test_longest_is_persisted_monotonic():
     # Raising the rest-gap config doesn't lower the stored longest-ever
     client.put("/api/settings", json={"streak_rest_gap": 0}, headers=AUTH)
     assert client.get("/api/streak", headers=AUTH).json()["longest"] == 4
+
+
+# ---------------------------------------------------------------------------
+# Active days (T6a): sport sessions and 10k-step days keep the streak alive
+# ---------------------------------------------------------------------------
+
+def test_sport_session_keeps_streak_alive():
+    db = TestingSession()
+    today = date.today()
+    _log_workout(db, today)
+    _log_workout(db, today - timedelta(days=4))
+    # The 2-rest-day hole (days 1-3 back) is bridged by football on days 2 and 3
+    db.add(Activity(date=today - timedelta(days=2), type="football", duration_min=90))
+    db.add(Activity(date=today - timedelta(days=3), type="judo", duration_min=60))
+    db.commit(); db.close()
+
+    r = client.get("/api/streak", headers=AUTH).json()
+    assert r["current"] == 4 and r["alive"] is True
+
+
+def test_10k_step_day_keeps_streak_alive_but_less_does_not():
+    db = TestingSession()
+    today = date.today()
+    _log_workout(db, today)
+    _log_workout(db, today - timedelta(days=4))
+    db.add(StepsLog(date=today - timedelta(days=2), steps=11500))
+    db.add(StepsLog(date=today - timedelta(days=3), steps=4000))   # not active
+    db.commit(); db.close()
+
+    r = client.get("/api/streak", headers=AUTH).json()
+    # Active: today, -2 (11.5k steps), -4. The 4k day (-3) is NOT active, but
+    # each remaining hole is a single rest day, so the chain of 3 holds.
+    assert r["current"] == 3
+
+
+def test_sample_rows_never_count_as_active():
+    db = TestingSession()
+    today = date.today()
+    _log_workout(db, today)
+    db.add(Activity(date=today - timedelta(days=2), type="padel",
+                    duration_min=60, source="sample"))
+    db.add(StepsLog(date=today - timedelta(days=3), steps=20000, source="sample"))
+    db.commit(); db.close()
+
+    r = client.get("/api/streak", headers=AUTH).json()
+    assert r["current"] == 1

@@ -6,7 +6,7 @@ POST /api/diet/recalc  — re-run the weekly adaptation now (ignores the
 
 The calorie target is an anchored, weekly-trend step model (see
 ``app.calorie_adapt``): it starts at a user-set anchor (2,300 kcal) and moves
-±one step once per completed ISO week toward the desired rate of loss. It is
+±one step once per completed ISO week toward the signed weekly goal. It is
 never recomputed from scratch. Protein and fat targets are manual; carbs flex.
 """
 from datetime import date, timedelta
@@ -45,7 +45,7 @@ def _adapt_if_due(db, settings, weight_by_date, ceiling, today, *, force=False):
     last_week = None if force else settings.last_adapted_week
     result = calorie_adapt.adapt_target(
         current_target=settings.calorie_target,
-        target_loss_kg_per_week=settings.target_loss_kg_per_week,
+        goal_kg_per_week=settings.goal_kg_per_week,
         step_kcal=settings.adapt_step_kcal,
         tolerance_kg=settings.adapt_tolerance_kg,
         floor=settings.calorie_floor,
@@ -138,7 +138,7 @@ def build_diet(db: DBSession, *, force_recalc: bool = False) -> DietOut:
 
     energy = EnergySummary(
         calorie_target=settings.calorie_target,
-        target_loss_kg_per_week=settings.target_loss_kg_per_week,
+        goal_kg_per_week=settings.goal_kg_per_week,
         protein_target_g=protein,
         fat_target_g=fat,
         carb_target_g=carb,

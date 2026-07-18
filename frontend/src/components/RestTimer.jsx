@@ -10,6 +10,8 @@
  *   seconds  — starting duration in seconds
  *   onDone   — called once when the timer hits zero
  *   onClose  — called when user dismisses/skips the timer
+ *   onAdjust — called with the delta (±seconds) on every manual adjustment,
+ *              so the caller can learn real rest habits per exercise
  */
 import React, { useEffect, useRef, useState } from 'react'
 
@@ -39,21 +41,31 @@ function notify(text) {
   }
 }
 
+// Two short pulses; no-ops where the Vibration API is unsupported (iOS Safari)
+function vibrate() {
+  try { navigator.vibrate?.([200, 100, 200]) } catch (_) { /* ignore */ }
+}
+
 function fmt(total) {
   const m = Math.floor(total / 60)
   const s = total % 60
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-export default function RestTimer({ seconds, onDone, onClose }) {
+export default function RestTimer({ seconds, onDone, onClose, onAdjust }) {
   const [remaining, setRemaining] = useState(seconds)
   const [paused, setPaused] = useState(false)
   const [addInput, setAddInput] = useState('')   // custom seconds to add while paused
   const firedRef = useRef(false)
 
+  function adjust(delta) {
+    setRemaining(r => Math.max(0, r + delta))
+    onAdjust?.(delta)
+  }
+
   function addCustom() {
     const n = parseInt(addInput, 10)
-    if (n) setRemaining(r => Math.max(0, r + n))
+    if (n) adjust(n)
     setAddInput('')
   }
 
@@ -70,6 +82,7 @@ export default function RestTimer({ seconds, onDone, onClose }) {
     if (remaining <= 0 && !firedRef.current) {
       firedRef.current = true
       beep()
+      vibrate()
       notify('Time to start your next set.')
       onDone?.()
     }
@@ -110,13 +123,13 @@ export default function RestTimer({ seconds, onDone, onClose }) {
         <>
           <button
             style={{ background: 'rgba(27,33,29,0.10)', color: 'var(--color-on-primary)', minWidth: 56, boxShadow: 'none' }}
-            onClick={() => setRemaining(r => Math.max(0, r - 15))}
+            onClick={() => adjust(-15)}
           >
             −15
           </button>
           <button
             style={{ background: 'rgba(27,33,29,0.10)', color: 'var(--color-on-primary)', minWidth: 56, boxShadow: 'none' }}
-            onClick={() => setRemaining(r => r + 15)}
+            onClick={() => adjust(15)}
           >
             +15
           </button>

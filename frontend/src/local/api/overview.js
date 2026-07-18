@@ -19,7 +19,7 @@ const DEFAULT_SETTINGS = {
   id: 1, calorie_target: 2300, protein_target_g: 180, fat_max_g: 100,
   unit_system: 'metric', sex: 'male', rank_config: null, health_last_ingest: null,
   age: 19, onboarded: false,
-  target_loss_kg_per_week: 0.5, adapt_step_kcal: 100, adapt_tolerance_kg: 0.15,
+  goal_kg_per_week: 0.5, adapt_step_kcal: 100, adapt_tolerance_kg: 0.15,
   calorie_floor: 1800, calorie_ceiling: null, last_adapted_week: null,
   volume_targets: null, streak_rest_gap: 1, default_rest_seconds: 120,
   goal_rate_kg_per_week: -0.25, expenditure_kcal: null, calorie_target_set_at: null,

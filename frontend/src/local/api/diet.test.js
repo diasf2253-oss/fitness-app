@@ -19,10 +19,47 @@ function wk(monday, ...weights) {
 }
 
 const run = (weightByDate, opts = {}) => adaptTarget({
-  currentTarget: opts.current ?? 2300, targetLossKgPerWeek: opts.targetLoss ?? 0.5,
+  currentTarget: opts.current ?? 2300, goalKgPerWeek: opts.goal ?? -0.5,
   stepKcal: opts.step ?? 100, toleranceKg: opts.tol ?? 0.15,
   floor: opts.floor ?? 1800, ceiling: opts.ceiling ?? null,
   weightByDate, today: opts.today ?? TODAY, lastAdaptedWeek: opts.lastWeek ?? null,
+})
+
+describe('adaptTarget — signed goal (H1a slider)', () => {
+  it('maintain: stable weight holds', () => {
+    const w = { ...wk(JUN8, 79.9, 80.0, 80.1), ...wk(JUN15, 79.8, 79.9, 80.0) }
+    const r = run(w, { goal: 0 })
+    expect(r.reason).toBe('hold')
+    expect(r.target).toBe(2300)
+  })
+
+  it('maintain: gaining → decrease', () => {
+    const w = { ...wk(JUN8, 79.9, 80.0, 80.1), ...wk(JUN15, 80.4, 80.5, 80.6) }
+    const r = run(w, { goal: 0 })
+    expect(r.reason).toBe('decrease')
+    expect(r.target).toBe(2200)
+  })
+
+  it('bulk: gaining too slowly → increase', () => {
+    const w = { ...wk(JUN8, 79.9, 80.0, 80.1), ...wk(JUN15, 80.0, 80.1, 80.2) }
+    const r = run(w, { goal: 0.5 })
+    expect(r.reason).toBe('increase')
+    expect(r.target).toBe(2400)
+  })
+
+  it('bulk: gaining too fast → decrease', () => {
+    const w = { ...wk(JUN8, 79.9, 80.0, 80.1), ...wk(JUN15, 80.8, 80.9, 81.0) }
+    const r = run(w, { goal: 0.5 })
+    expect(r.reason).toBe('decrease')
+    expect(r.target).toBe(2200)
+  })
+
+  it('bulk ignores the maintenance ceiling', () => {
+    const w = { ...wk(JUN8, 79.9, 80.0, 80.1), ...wk(JUN15, 80.0, 80.1, 80.2) }
+    const r = run(w, { goal: 0.5, ceiling: 2350 })
+    expect(r.reason).toBe('increase')
+    expect(r.target).toBe(2400)
+  })
 })
 
 describe('adaptTarget', () => {

@@ -6,12 +6,13 @@ over-inflated the target). The target is a user-set *anchor* (seeded at
 it is never recomputed from scratch.
 
 Once per completed ISO week (Monday onward) we compare the change in the
-weekly-average weight against the desired rate of loss:
+weekly-average weight against the signed weekly goal (negative = cut,
+0 = maintain, positive = bulk — the Diet goal slider, workbook H1a):
 
   actual_change = avg(last completed week) − avg(previous completed week)
 
-  • losing faster than target (beyond the tolerance band) → +1 step  (eat more)
-  • losing slower / maintaining / gaining (beyond the band) → −1 step  (eat less)
+  • changing faster-downward than goal (beyond the band) → +1 step  (eat more)
+  • changing slower / opposite direction (beyond the band) → −1 step  (eat less)
   • within the tolerance band                              → hold
 
 Guardrails: at least ``MIN_ENTRIES_FOR_ADAPT`` weigh-ins in the completed
@@ -85,7 +86,7 @@ def estimate_maintenance(
 def adapt_target(
     *,
     current_target: int,
-    target_loss_kg_per_week: float,
+    goal_kg_per_week: float,
     step_kcal: int,
     tolerance_kg: float,
     floor: int,
@@ -123,19 +124,20 @@ def adapt_target(
         return gathering(entries=last.n_entries)
 
     actual_change = round(last.avg_kg - prev.avg_kg, 3)   # negative = losing
-    desired = -abs(target_loss_kg_per_week)               # loss is negative
+    desired = goal_kg_per_week                            # signed: − cut · 0 maintain · + bulk
     lower, upper = desired - tolerance_kg, desired + tolerance_kg
 
-    if actual_change < lower:           # losing faster than target → eat more
+    if actual_change < lower:           # dropping faster than the goal → eat more
         proposed, reason = current_target + step_kcal, "increase"
-    elif actual_change > upper:         # losing slower / maintaining / gaining → eat less
+    elif actual_change > upper:         # dropping slower / gaining beyond goal → eat less
         proposed, reason = current_target - step_kcal, "decrease"
     else:                               # within band → hold
         proposed, reason = current_target, "hold"
 
-    # Guardrails: never below the floor; never above estimated maintenance.
+    # Guardrails: never below the floor. The maintenance ceiling only applies
+    # when cutting/maintaining — a bulk must be allowed to exceed maintenance.
     proposed = max(floor, proposed)
-    if ceiling is not None:
+    if ceiling is not None and goal_kg_per_week <= 0:
         proposed = max(floor, min(ceiling, proposed))
     proposed = int(round(proposed / 10.0) * 10)
 

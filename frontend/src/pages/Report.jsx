@@ -155,7 +155,7 @@ export default function Report() {
           <Section title="Plan for next week">
             <p style={{ fontSize: '0.9rem', margin: '0 0 0.5rem' }}>
               Calorie target <strong>{r.plan.calorie_target.toLocaleString()} kcal</strong>
-              <span className="muted"> · aiming to lose {r.plan.target_loss_kg_per_week} kg/wk · next adapt {r.plan.next_adapt}</span>
+              <span className="muted"> · goal {r.plan.goal_kg_per_week > 0 ? '+' : ''}{r.plan.goal_kg_per_week} kg/wk · next adapt {r.plan.next_adapt}</span>
             </p>
             {r.plan.volume_flags.length === 0 ? (
               <p className="muted" style={{ fontSize: '0.82rem' }}>Volume on track across all muscle groups this week.</p>

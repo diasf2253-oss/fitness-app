@@ -3,7 +3,7 @@
  * the phone and laptop compute the same chain.
  */
 import { describe, expect, it } from 'vitest'
-import { computeStreak } from './streak'
+import { computeStreak, mergeActiveDays } from './streak'
 
 const D = (...days) => days.map(d => `2026-06-${String(d).padStart(2, '0')}`)
 
@@ -47,5 +47,43 @@ describe('computeStreak', () => {
   it('a configurable gap allows more rest', () => {
     expect(computeStreak(D(20, 23, 26), 1, '2026-06-26').longest).toBe(1)
     expect(computeStreak(D(20, 23, 26), 2, '2026-06-26').current).toBe(3)
+  })
+})
+
+// Mirrors the T6a endpoint tests in backend/tests/test_streak.py
+describe('mergeActiveDays (T6a: any active day)', () => {
+  it('sport sessions bridge workout gaps', () => {
+    const days = mergeActiveDays(
+      new Set(D(26, 22)),
+      [
+        { date: '2026-06-24', type: 'football', source: 'manual' },
+        { date: '2026-06-23', type: 'judo', source: 'manual' },
+      ],
+      [],
+    )
+    expect(computeStreak([...days], 1, '2026-06-26').current).toBe(4)
+  })
+
+  it('10k-step days count, fewer steps do not', () => {
+    const days = mergeActiveDays(
+      new Set(D(26, 22)),
+      [],
+      [
+        { date: '2026-06-24', steps: 11500, source: 'apple_health' },
+        { date: '2026-06-23', steps: 4000, source: 'apple_health' },
+      ],
+    )
+    expect(days.has('2026-06-24')).toBe(true)
+    expect(days.has('2026-06-23')).toBe(false)
+    expect(computeStreak([...days], 1, '2026-06-26').current).toBe(3)
+  })
+
+  it('sample rows never count', () => {
+    const days = mergeActiveDays(
+      new Set(D(26)),
+      [{ date: '2026-06-24', type: 'padel', source: 'sample' }],
+      [{ date: '2026-06-23', steps: 20000, source: 'sample' }],
+    )
+    expect(computeStreak([...days], 1, '2026-06-26').current).toBe(1)
   })
 })

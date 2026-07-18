@@ -1,11 +1,11 @@
 /**
  * Training streak, local-first — mirrors backend app/streak.py + routers/streak.py.
  *
- * A workout day is any calendar date with at least one completed working set
- * (completed, non-warm-up). The chain survives up to `rest_gap` rest days and
- * breaks when a larger gap passes. Computed over IndexedDB; no persisted
- * snapshot (each device derives it), so `longest` is the longest chain in
- * history under the current gap.
+ * An "active day" keeps the chain alive: a real workout (≥1 completed working
+ * set), a logged sport session, or a 10k-step day — workbook ruling T6a. The
+ * chain survives up to `rest_gap` rest days and breaks when a larger gap
+ * passes. Computed over IndexedDB; no persisted snapshot (each device derives
+ * it), so `longest` is the longest chain in history under the current gap.
  */
 import { db } from '../db'
 import { todayIso } from './util'
@@ -34,6 +34,29 @@ async function workoutDates() {
     if (workingSessionUuids.has(s.uuid)) days.add(s.started_at.slice(0, 10))
   }
   return days
+}
+
+export const ACTIVE_STEPS_THRESHOLD = 10000  // a 10k-step day counts as active (T6a)
+
+// Pure merge of the three active-day sources — mirrors routers/streak.py
+// _active_dates: workout ∪ sport ∪ 10k-step days. Sample rows never count.
+export function mergeActiveDays(workoutDays, activities, stepsRows) {
+  const days = new Set(workoutDays)
+  for (const a of activities) {
+    if (a.source !== 'sample') days.add(a.date)
+  }
+  for (const s of stepsRows) {
+    if (s.steps >= ACTIVE_STEPS_THRESHOLD && s.source !== 'sample') days.add(s.date)
+  }
+  return days
+}
+
+async function activeDates() {
+  return mergeActiveDays(
+    await workoutDates(),
+    await db.activity.toArray(),
+    await db.steps_log.toArray(),
+  )
 }
 
 // Pure port of app/streak.py compute_streak.
@@ -76,7 +99,7 @@ export function computeStreak(dates, restGap = DEFAULT_REST_GAP, today = null) {
 export async function streakSnapshot() {
   const settings = await db.settings.get(1)
   const restGap = settings?.streak_rest_gap ?? DEFAULT_REST_GAP
-  const r = computeStreak(await workoutDates(), restGap)
+  const r = computeStreak(await activeDates(), restGap)
   return { ...r, rest_gap: restGap }
 }
 

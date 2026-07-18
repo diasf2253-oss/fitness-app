@@ -18,17 +18,14 @@ function todayIso() {
 function fmtShort(iso) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
-function lossText(rate) {
-  return rate > 0 ? `Aiming to lose ${rate} kg / week` : 'Maintaining weight'
+// Goal is signed: negative = cut, 0 = maintain, positive = bulk (H1a slider)
+function goalText(rate) {
+  if (rate < 0) return `Aiming to lose ${Math.abs(rate)} kg / week`
+  if (rate > 0) return `Aiming to gain ${rate} kg / week`
+  return 'Maintaining weight'
 }
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1)
 
-const LOSS_PRESETS = [
-  { rate: 0.75, label: '0.75 kg' },
-  { rate: 0.5, label: '0.5 kg' },
-  { rate: 0.25, label: '0.25 kg' },
-  { rate: 0, label: 'Maintain' },
-]
 const ACTIVITY_TYPES = ['football', 'judo', 'padel']
 
 function Metric({ label, value }) {
@@ -46,7 +43,7 @@ export default function Diet() {
   const [error, setError] = useState(null)
 
   const [goalOpen, setGoalOpen] = useState(false)
-  const [lossRate, setLossRate] = useState(0.5)
+  const [goal, setGoal] = useState(-0.5)
   const [protein, setProtein] = useState(180)
   const [fat, setFat] = useState(100)
   const [savingGoal, setSavingGoal] = useState(false)
@@ -61,7 +58,7 @@ export default function Diet() {
     apiFetch('/api/diet')
       .then(d => {
         setData(d)
-        setLossRate(d.energy.target_loss_kg_per_week)
+        setGoal(d.energy.goal_kg_per_week)
         setProtein(d.energy.protein_target_g)
         setFat(d.energy.fat_target_g)
       })
@@ -76,7 +73,7 @@ export default function Diet() {
       await apiFetch('/api/settings', {
         method: 'PUT',
         body: JSON.stringify({
-          target_loss_kg_per_week: Number(lossRate),
+          goal_kg_per_week: Number(goal),
           protein_target_g: Number(protein),
           fat_max_g: Number(fat),
         }),
@@ -128,7 +125,7 @@ export default function Diet() {
               <div className="stat-num" style={{ fontSize: '2.6rem' }}>{e.calorie_target.toLocaleString()}</div>
               <span className="muted">kcal · daily target</span>
             </div>
-            <div className="inst" style={{ marginTop: 2 }}>{lossText(e.target_loss_kg_per_week)}</div>
+            <div className="inst" style={{ marginTop: 2 }}>{goalText(e.goal_kg_per_week)}</div>
 
             <hr className="rule" style={{ margin: '1rem 0' }} />
 
@@ -163,18 +160,34 @@ export default function Diet() {
 
             {goalOpen && (
               <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)' }}>
-                <WidgetLabel>target weekly loss</WidgetLabel>
-                <div className="row" style={{ flexWrap: 'wrap', gap: '0.4rem', margin: '0.5rem 0 1rem' }}>
-                  {LOSS_PRESETS.map(p => (
-                    <button
-                      key={p.rate}
-                      className={lossRate === p.rate ? '' : 'secondary'}
-                      style={{ minHeight: 38, padding: '0.4rem 0.8rem', fontSize: '0.82rem' }}
-                      onClick={() => setLossRate(p.rate)}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
+                <WidgetLabel>weekly goal</WidgetLabel>
+                <div style={{ margin: '0.5rem 0 0.25rem' }}>
+                  <input
+                    type="range" min="-0.5" max="0.5" step="0.01"
+                    value={goal}
+                    onChange={ev => setGoal(Number(ev.target.value))}
+                    aria-label="Weekly bodyweight goal (kg per week)"
+                    style={{ width: '100%', margin: 0 }}
+                  />
+                  <div className="row" style={{ justifyContent: 'space-between', marginTop: 4 }}>
+                    {[['Cut −0.5', -0.5], ['Maintain 0', 0], ['Bulk +0.5', 0.5]].map(([label, v]) => (
+                      <button
+                        key={label}
+                        className="secondary"
+                        onClick={() => setGoal(v)}
+                        style={{
+                          background: 'transparent', border: 'none', boxShadow: 'none',
+                          minHeight: 0, padding: '0.15rem 0', fontSize: '0.72rem',
+                          color: 'var(--color-muted)',
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="tnum" style={{ textAlign: 'center', margin: '0.35rem 0 1rem', fontSize: '0.95rem' }}>
+                  {goal > 0 ? '+' : ''}{Number(goal).toFixed(2)} kg / week · {goal < 0 ? 'cut' : goal > 0 ? 'bulk' : 'maintain'}
                 </div>
                 <div className="form-row">
                   <div className="form-group">
@@ -187,7 +200,7 @@ export default function Diet() {
                   </div>
                 </div>
                 <p className="muted" style={{ fontSize: '0.74rem', margin: '0 0 0.75rem' }}>
-                  The target moves ±100 kcal per week toward this rate — it never drops below the {e.floor.toLocaleString()} kcal floor.
+                  The target moves ±100 kcal per week toward this goal — it never drops below the {e.floor.toLocaleString()} kcal floor.
                 </p>
                 <div className="row" style={{ justifyContent: 'flex-end', gap: '0.5rem' }}>
                   <button className="secondary" onClick={() => setGoalOpen(false)}>Cancel</button>

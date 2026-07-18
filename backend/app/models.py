@@ -366,8 +366,9 @@ class AppSettings(UpdatedAtMixin, Base):
     onboarded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # ---- Adaptive calorie engine (anchored weekly-trend step model) ----
-    # Desired weekly loss (kg/week, positive = losing).
-    target_loss_kg_per_week: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
+    # Signed weekly bodyweight goal (kg/week): negative = cut, 0 = maintain,
+    # positive = bulk. Matches the Diet goal slider (workbook H1a).
+    goal_kg_per_week: Mapped[float] = mapped_column(Float, default=-0.5, nullable=False)
     # How far the target moves in one adaptation, and the dead-band around the
     # target rate inside which the target holds.
     adapt_step_kcal: Mapped[int] = mapped_column(Integer, default=100, nullable=False)

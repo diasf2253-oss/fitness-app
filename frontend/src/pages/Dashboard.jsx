@@ -94,22 +94,6 @@ function DayDetail({ date }) {
     load()
   }, [date])
 
-  async function togglePlan(item) {
-    // Optimistic flip so the checkbox feels instant, then persist
-    setDetail(d => ({
-      ...d,
-      plan: d.plan.map(p => p.id === item.id ? { ...p, is_done: !p.is_done } : p),
-    }))
-    try {
-      await apiFetch(`/api/plan/items/${item.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ is_done: !item.is_done }),
-      })
-    } catch (_) {
-      load()  // reconcile on failure
-    }
-  }
-
   const title = new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric',
   })
@@ -117,7 +101,7 @@ function DayDetail({ date }) {
   const hasAnything = detail && (
     detail.sessions.length > 0 || detail.weight_kg != null ||
     detail.steps != null || detail.sleep || detail.nutrition ||
-    (detail.trackers || []).length > 0 || (detail.plan || []).length > 0
+    (detail.trackers || []).length > 0
   )
 
   const Row = ({ label, children }) => (
@@ -136,34 +120,7 @@ function DayDetail({ date }) {
 
       {!detail && <p className="muted" style={{ fontSize: '0.8rem' }}>Loading…</p>}
 
-      {/* Plan — checkable, the one interactive section in the rail */}
-      {detail && (detail.plan || []).length > 0 && (
-        <div style={{ marginBottom: '0.5rem' }}>
-          {detail.plan.map(p => (
-            <button
-              key={p.id}
-              onClick={() => togglePlan(p)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%',
-                background: 'transparent', border: 'none', boxShadow: 'none',
-                padding: '0.3rem 0', minHeight: 0, textAlign: 'left', color: 'var(--color-text)',
-              }}
-            >
-              <span style={{
-                width: 16, height: 16, flexShrink: 0, borderRadius: 5,
-                border: `1px solid ${p.is_done ? 'var(--color-success)' : 'var(--color-border-str)'}`,
-                background: p.is_done ? 'var(--color-success)' : 'transparent',
-                color: 'var(--color-on-primary)', fontSize: '0.7rem',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>{p.is_done ? '✓' : ''}</span>
-              {p.start_time && <span className="tnum muted" style={{ fontSize: '0.75rem', width: 38 }}>{p.start_time}</span>}
-              <span style={{ flex: 1, fontSize: '0.85rem', opacity: p.is_done ? 0.55 : 1, textDecoration: p.is_done ? 'line-through' : 'none' }}>
-                {p.title}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Plan section killed per workbook H8 (grade D) */}
 
       {detail && detail.sessions.map(s => (
         <div key={s.id} style={{ padding: '0.35rem 0', borderBottom: '1px solid var(--color-border)' }}>
