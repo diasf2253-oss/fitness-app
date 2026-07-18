@@ -50,6 +50,14 @@ Production runs on a Railway **Postgres** service (local dev still uses SQLite �
 - `backups/` and `scripts/.env.backup` are git-ignored (real personal data + the prod connection string). Never commit them.
 - Needs the Postgres client (`pg_dump`/`pg_restore`/`psql`) on PATH, client major version >= the Railway server's.
 
+## Product direction — from the July 2026 workbook (FLIGHT_WORKBOOK_DONE.md)
+- **Design tiebreaker (V3): the app is a *body recomposition instrument* first** — the weight/diet/energy loop is the core. Quantified-self lab second, gym logger third. Gamification is last — nice, never load-bearing.
+- Guardrails (V4): never complicated to use; built for people serious about fitness but usable by anyone; not a clone of existing apps.
+- Killed per the workbook: the Coach page (H9) and Plan/day-planner (H8) are hidden from the UI — code and endpoints remain, don't resurrect them without being asked. Trackers stay but stay simple (H5).
+- The diet goal is a signed slider `goal_kg_per_week` ∈ [−0.5, +0.5] (− cut · 0 maintain · + bulk); the maintenance ceiling only applies when not bulking.
+- A streak "active day" = workout, sport activity, or ≥10k steps (T6a).
+- Single-user for ~2 years, but keep it deployable — it may become a product later (V5).
+
 ## Conventions — follow these
 - Auth is single-user bearer token. Every protected route depends on `require_auth`; new endpoints follow the same pattern.
 - Endpoints return Pydantic v2 schemas from `schemas.py` — never raw SQLAlchemy models.
