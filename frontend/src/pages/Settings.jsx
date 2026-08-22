@@ -12,6 +12,14 @@ import { QRCodeSVG } from 'qrcode.react'
 import { apiFetch, apiUpload, setToken } from '../api'
 import { isMuted, setMuted, subscribeMuted, playTap } from '../audio'
 
+// Copy-paste starter body for the iOS Shortcut push (see the Apple Health
+// sync card + docs/HEALTH_INGEST_SHORTCUT.md). Swap the dates for today.
+const SHORTCUT_JSON_TEMPLATE = `{
+  "weight": [{ "date": "2026-07-18", "kg": 82.4 }],
+  "steps":  [{ "date": "2026-07-18", "count": 11205 }],
+  "sleep":  [{ "date": "2026-07-18", "asleep_minutes": 427, "in_bed_minutes": 465 }]
+}`
+
 /**
  * Sound on/off. The switch reads "Sound effects" (checked = audible), which is
  * friendlier than a "Mute" negative. State lives in the audio service (backed
@@ -588,6 +596,33 @@ export default function Settings() {
           <li style={{ marginTop: '0.4rem' }}>Select metrics: steps, weight, sleep, plus the dietary ones</li>
           <li>Schedule it daily</li>
         </ol>
+
+        <hr />
+
+        <h3>iOS Shortcut push</h3>
+        <p className="muted" style={{ marginBottom: '0.6rem' }}>
+          More reliable than Health Auto Export's background pushes: an iOS
+          Shortcut automation posts weight, steps, and sleep straight here on
+          the phone's own schedule. Same validated pipeline, so manual
+          corrections still win. Full recipe in{' '}
+          <code style={{ fontSize: '0.72rem' }}>docs/HEALTH_INGEST_SHORTCUT.md</code>.
+        </p>
+        <div className="row" style={{ gap: '0.5rem', marginBottom: '0.4rem' }}>
+          <span style={{ flex: 1 }}>POST: <code style={{ fontSize: '0.72rem' }}>{window.location.origin}/api/ingest/health/shortcut</code></span>
+          <CopyButton text={`${window.location.origin}/api/ingest/health/shortcut`} />
+        </div>
+        <div className="row" style={{ gap: '0.5rem', marginBottom: '0.4rem' }}>
+          <span style={{ flex: 1 }}>Header: <code style={{ fontSize: '0.72rem' }}>Authorization: Bearer {localStorage.getItem('app_token') || 'changeme'}</code></span>
+          <CopyButton text={`Bearer ${localStorage.getItem('app_token') || 'changeme'}`} />
+        </div>
+        <div className="row" style={{ gap: '0.5rem', alignItems: 'flex-start' }}>
+          <pre style={{
+            flex: 1, margin: 0, padding: '0.5rem', borderRadius: 6,
+            background: 'var(--surface-2, rgba(127,127,127,0.12))',
+            fontSize: '0.68rem', overflowX: 'auto', whiteSpace: 'pre',
+          }}>{SHORTCUT_JSON_TEMPLATE}</pre>
+          <CopyButton text={SHORTCUT_JSON_TEMPLATE} label="Copy JSON" />
+        </div>
 
         <hr />
 

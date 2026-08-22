@@ -4,10 +4,15 @@ Apple Health ingest endpoints + health data read endpoints.
 All health data — weight, steps, sleep, and nutrition including
 micronutrients — arrives through Apple Health (YAZIO feeds it on-phone).
 
-POST /api/ingest/health         — Health Auto Export JSON push (daily)
-POST /api/ingest/health-export  — export.zip/.xml upload (history backfill)
+POST /api/ingest/health          — Health Auto Export JSON push (daily)
+POST /api/ingest/health/shortcut — iOS Shortcut push (weight/steps/sleep)
+POST /api/ingest/health-export   — export.zip/.xml upload (history backfill)
 GET  /api/health/weight|steps|sleep|nutrition — date-range series
 POST /api/health/weight|steps|sleep           — manual upserts
+
+The Shortcut push and the export backfill share the validated ingest core in
+app.health_ingest (HealthAggregator); the HAE push keeps its own inline
+parsing for the wider nutrition/micronutrient payload.
 """
 import logging
 from collections import defaultdict
@@ -348,6 +353,140 @@ def ingest_health(
         "metrics_ignored": sorted(unknown_names),
         "rows_upserted": upserted,
     }
+
+
+# ---------------------------------------------------------------------------
+# iOS Shortcut ingest — a stable, always-on alternative to Health Auto Export.
+#
+# The HAE app's background pushes are unreliable (H4 diagnosis): they only
+# fire when the app is opened, and the export window is fragile. An iOS
+# Shortcut ("Get Health Sample" → "Get Contents of URL") can post the same
+# core numbers on the phone's own automation, straight at the production API.
+#
+# It deliberately reuses the export.xml importer's validated pipeline via the
+# shared HealthAggregator — units, timezone/night attribution, multi-source
+# dedup, and manual-precedence — instead of the older inline HAE parsing, so
+# a Shortcut push obeys the exact same rules a history backfill does.
+#
+# Payload (all sections optional; a section may be one object or a list):
+#     {
+#       "weight": [{"date": "2026-07-18", "kg": 82.5}],
+#       "steps":  [{"date": "2026-07-18", "count": 11205}],
+#       "sleep":  [{"date": "2026-07-18", "asleep_minutes": 427,
+#                   "in_bed_minutes": 465, "deep_minutes": 68,
+#                   "rem_minutes": 95, "core_minutes": 264}]
+#     }
+# See docs/HEALTH_INGEST_SHORTCUT.md for the full spec + Shortcut recipe.
+# ---------------------------------------------------------------------------
+
+# Accepted field aliases, so the Shortcut author isn't boxed into one spelling.
+_WEIGHT_VALUE_KEYS = ("kg", "weight_kg", "value", "qty")
+_STEPS_VALUE_KEYS = ("count", "steps", "value", "qty")
+_SLEEP_FIELD_ALIASES = {
+    "asleep": ("asleep_minutes", "asleep", "asleepMinutes"),
+    "in_bed": ("in_bed_minutes", "in_bed", "inBed", "inBedMinutes"),
+    "deep": ("deep_minutes", "deep", "deepMinutes"),
+    "rem": ("rem_minutes", "rem", "remMinutes"),
+    "core": ("core_minutes", "core", "coreMinutes"),
+}
+
+
+def _as_items(section) -> list[dict]:
+    """A Shortcut may send one object or a list; a dict of items also works."""
+    if section is None:
+        return []
+    if isinstance(section, dict):
+        return [section]
+    if isinstance(section, list):
+        return [it for it in section if isinstance(it, dict)]
+    return []
+
+
+def _first(item: dict, keys: tuple[str, ...]):
+    for k in keys:
+        if k in item and item[k] not in (None, ""):
+            return item[k]
+    return None
+
+
+@router.post("/api/ingest/health/shortcut")
+def ingest_health_shortcut(
+    payload: dict,
+    db: DBSession = Depends(get_db),
+    _: None = Depends(require_auth),
+):
+    """
+    Ingest weight / steps / sleep posted by an iOS Shortcut, through the same
+    validated pipeline as the export.xml backfill. Idempotent, and days the
+    user corrected by hand are never overwritten. Bad items are skipped with
+    a warning rather than failing the whole push.
+    """
+    from app.health_ingest import HealthAggregator, parse_day, parse_when, to_float
+
+    agg = HealthAggregator()
+    handled: set[str] = set()
+    ignored: set[str] = set()
+
+    # Case-insensitive lookup of the three known sections.
+    sections = {str(k).lower(): v for k, v in payload.items()}
+
+    for weight in _as_items(sections.get("weight")):
+        agg.records_seen += 1
+        try:
+            when = parse_when(weight["date"])
+            raw = _first(weight, _WEIGHT_VALUE_KEYS)
+            if raw is None:
+                agg.warn(f"weight item missing a value: {weight}")
+                continue
+            agg.add_weight(when, to_float(raw), weight.get("unit"), "apple_health")
+            handled.add("weight")
+        except Exception as e:
+            agg.warn(f"weight item skipped: {e}")
+
+    for steps in _as_items(sections.get("steps")):
+        agg.records_seen += 1
+        try:
+            raw = _first(steps, _STEPS_VALUE_KEYS)
+            if raw is None:
+                agg.warn(f"steps item missing a value: {steps}")
+                continue
+            agg.add_steps(parse_day(steps["date"]), to_float(raw), "apple_health")
+            handled.add("steps")
+        except Exception as e:
+            agg.warn(f"steps item skipped: {e}")
+
+    for sleep in _as_items(sections.get("sleep")):
+        agg.records_seen += 1
+        try:
+            night = parse_day(sleep["date"])
+            minutes = {
+                field: to_float(_first(sleep, aliases) or 0)
+                for field, aliases in _SLEEP_FIELD_ALIASES.items()
+            }
+            if not (minutes["asleep"] or minutes["in_bed"]):
+                agg.warn(f"sleep item has no asleep/in-bed minutes: {sleep}")
+                continue
+            agg.add_sleep_night(night, "apple_health", **minutes)
+            handled.add("sleep")
+        except Exception as e:
+            agg.warn(f"sleep item skipped: {e}")
+
+    for key in sections:
+        if key not in ("weight", "steps", "sleep"):
+            ignored.add(str(key))
+
+    report = agg.finalize(db)
+    touch_last_ingest(db)
+    db.commit()
+
+    logger.info(
+        "Shortcut ingest — sections handled: %s, rows created: %d, warnings: %d",
+        sorted(handled), report["rows_created"], len(report["warnings"]),
+    )
+
+    report["sections_handled"] = sorted(handled)
+    report["ignored"] = sorted(ignored)
+    return report
 
 
 def _parse_date(date_str: str) -> date:

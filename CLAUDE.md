@@ -62,7 +62,7 @@ Production runs on a Railway **Postgres** service (local dev still uses SQLite �
 - Auth is single-user bearer token. Every protected route depends on `require_auth`; new endpoints follow the same pattern.
 - Endpoints return Pydantic v2 schemas from `schemas.py` — never raw SQLAlchemy models.
 - Schema changes go through a new Alembic migration; don't hand-edit the database.
-- Health and nutrition data come from Apple Health (Health Auto Export JSON ingest + an export.zip backfill). On conflict, manual entries win over Apple Health. Writes are idempotent upserts keyed by date. Do not reintroduce YAZIO (removed in phase 2).
+- Health and nutrition data come from Apple Health: Health Auto Export JSON push, an export.zip backfill, and an iOS-Shortcut push for weight/steps/sleep (`POST /api/ingest/health/shortcut`, spec in `docs/HEALTH_INGEST_SHORTCUT.md`). The backfill and the Shortcut push share one validated core, `app/health_ingest.py` (`HealthAggregator`: units, wake-date sleep bucketing, best-source-per-day dedup, manual-precedence) — route new ingest paths through it, don't reimplement parsing. On conflict, manual entries win over Apple Health. Writes are idempotent upserts keyed by date. Do not reintroduce YAZIO (removed in phase 2).
 - The app is single-user by design — don't add multi-user accounts or sharing.
 - 1RM uses the Epley formula with reps capped at 12.
 - Keep the Pytest suite green.
