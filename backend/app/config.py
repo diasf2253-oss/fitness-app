@@ -7,8 +7,22 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # Bearer token that protects every API route except /api/ping
-    app_token: str = "changeme"
+    # Cookie session auth (Phase 1-2 friends beta). The cookie carries an
+    # opaque session id (never a JWT) looked up against the auth_session
+    # table, so logout / temp-password resets can invalidate it server-side.
+    session_cookie_name: str = "session_id"
+    session_max_age_days: int = 30
+    # False only for local dev over http:// and tests — browsers silently
+    # refuse to store/send a Secure cookie on a non-HTTPS connection, so this
+    # must be false there or every login would appear to succeed and then
+    # immediately look logged-out. Always true on Railway/Vercel (HTTPS).
+    session_cookie_secure: bool = True
+
+    # Seeds the first admin account (python -m app.seed_admin) and the
+    # migration backfill that attaches all pre-multi-user data to it.
+    # Never hardcode these — env vars only.
+    admin_email: str = ""
+    admin_password: str = ""
 
     # SQLAlchemy connection string. SQLite by default; Postgres in production
     # (Railway). A bare postgres URL is normalized to the psycopg (v3) driver

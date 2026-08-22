@@ -22,10 +22,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy.orm import Session as DBSession
 
-from app.auth import require_auth
+from app.auth import require_auth, require_ingest_auth
 from app.db import get_db
 from app.health_metrics import HAE_NUTRITION, convert_amount, upsert_nutrition_partial
-from app.models import NutritionDay, SleepLog, StepsLog, WeightLog
+from app.models import NutritionDay, SleepLog, StepsLog, User, WeightLog
 from app.schemas import (
     NutritionDayOut, SleepLogCreate, SleepLogOut,
     StepsLogCreate, StepsLogOut, WeightEstimateOut, WeightLogCreate, WeightLogOut,
@@ -69,28 +69,28 @@ def _write_blocked(row, source: str) -> bool:
     return False
 
 
-def upsert_weight(db: DBSession, day: date, weight_kg: float, source: str) -> bool:
+def upsert_weight(db: DBSession, day: date, weight_kg: float, source: str, user_id: int) -> bool:
     """Insert or update weight_log for a given date. Returns True if new row."""
-    row = db.query(WeightLog).filter(WeightLog.date == day).first()
+    row = db.query(WeightLog).filter(WeightLog.user_id == user_id, WeightLog.date == day).first()
     if _write_blocked(row, source):
         return False
     if row:
         row.weight_kg = weight_kg
         row.source = source
         return False
-    db.add(WeightLog(date=day, weight_kg=weight_kg, source=source))
+    db.add(WeightLog(user_id=user_id, date=day, weight_kg=weight_kg, source=source))
     return True
 
 
-def upsert_steps(db: DBSession, day: date, steps: int, source: str) -> bool:
-    row = db.query(StepsLog).filter(StepsLog.date == day).first()
+def upsert_steps(db: DBSession, day: date, steps: int, source: str, user_id: int) -> bool:
+    row = db.query(StepsLog).filter(StepsLog.user_id == user_id, StepsLog.date == day).first()
     if _write_blocked(row, source):
         return False
     if row:
         row.steps = steps
         row.source = source
         return False
-    db.add(StepsLog(date=day, steps=steps, source=source))
+    db.add(StepsLog(user_id=user_id, date=day, steps=steps, source=source))
     return True
 
 
@@ -103,8 +103,9 @@ def upsert_sleep(
     rem_minutes: Optional[int],
     core_minutes: Optional[int],
     source: str,
+    user_id: int,
 ) -> bool:
-    row = db.query(SleepLog).filter(SleepLog.date == day).first()
+    row = db.query(SleepLog).filter(SleepLog.user_id == user_id, SleepLog.date == day).first()
     if _write_blocked(row, source):
         return False
     if row:
@@ -116,6 +117,7 @@ def upsert_sleep(
         row.source = source
         return False
     db.add(SleepLog(
+        user_id=user_id,
         date=day,
         asleep_minutes=asleep_minutes,
         in_bed_minutes=in_bed_minutes,
@@ -127,10 +129,10 @@ def upsert_sleep(
     return True
 
 
-def touch_last_ingest(db: DBSession) -> None:
+def touch_last_ingest(db: DBSession, user_id: int) -> None:
     """Record the time of the last successful Apple Health ingest."""
     from app.routers.settings import get_or_create_settings
-    get_or_create_settings(db).health_last_ingest = datetime.utcnow()
+    get_or_create_settings(db, user_id).health_last_ingest = datetime.utcnow()
 
 
 # ---------------------------------------------------------------------------
@@ -142,12 +144,12 @@ def touch_last_ingest(db: DBSession) -> None:
 # and stale sample data is replaced by an interpolation of your real weigh-ins.
 # ---------------------------------------------------------------------------
 
-def real_weight_points(db: DBSession) -> list[tuple[date, float]]:
+def real_weight_points(db: DBSession, user_id: int) -> list[tuple[date, float]]:
     """Real weigh-ins only (excludes estimate/demo), date-ascending — the
     interpolation basis."""
     rows = (
         db.query(WeightLog)
-        .filter(WeightLog.source.notin_(DERIVED_SOURCES))
+        .filter(WeightLog.user_id == user_id, WeightLog.source.notin_(DERIVED_SOURCES))
         .order_by(WeightLog.date)
         .all()
     )
@@ -214,7 +216,7 @@ def estimate_weight_for(
 def ingest_health(
     payload: dict,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_ingest_auth),
 ):
     """
     Receives Health Auto Export JSON payload with shape:
@@ -255,7 +257,7 @@ def ingest_health(
                 except Exception as e:
                     logger.warning("step_count point parse error: %s — %s", pt, e)
             for d, steps in by_date.items():
-                new = upsert_steps(db, d, steps, "apple_health")
+                new = upsert_steps(db, d, steps, "apple_health", current_user.id)
                 if new:
                     upserted += 1
 
@@ -267,7 +269,7 @@ def ingest_health(
                     raw = float(pt.get("qty", pt.get("value", 0)))
                     # Convert lb → kg if needed
                     kg = raw * 0.453592 if units.lower() in ("lb", "lbs") else raw
-                    new = upsert_weight(db, d, round(kg, 2), "apple_health")
+                    new = upsert_weight(db, d, round(kg, 2), "apple_health", current_user.id)
                     if new:
                         upserted += 1
                 except Exception as e:
@@ -308,6 +310,7 @@ def ingest_health(
                     rem_minutes=v["rem"] or None,
                     core_minutes=v["core"] or None,
                     source="apple_health",
+                    user_id=current_user.id,
                 )
                 if new:
                     upserted += 1
@@ -332,10 +335,10 @@ def ingest_health(
             unknown_names.add(name)
 
     for d, values in nutrition_acc.items():
-        if upsert_nutrition_partial(db, d, values, "apple_health"):
+        if upsert_nutrition_partial(db, d, values, "apple_health", current_user.id):
             upserted += 1
 
-    touch_last_ingest(db)
+    touch_last_ingest(db, current_user.id)
     db.commit()
     elapsed = (datetime.utcnow() - start_ts).total_seconds()
 
@@ -413,7 +416,7 @@ def _first(item: dict, keys: tuple[str, ...]):
 def ingest_health_shortcut(
     payload: dict,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_ingest_auth),
 ):
     """
     Ingest weight / steps / sleep posted by an iOS Shortcut, through the same
@@ -475,8 +478,8 @@ def ingest_health_shortcut(
         if key not in ("weight", "steps", "sleep"):
             ignored.add(str(key))
 
-    report = agg.finalize(db)
-    touch_last_ingest(db)
+    report = agg.finalize(db, current_user.id)
+    touch_last_ingest(db, current_user.id)
     db.commit()
 
     logger.info(
@@ -519,7 +522,7 @@ def _parse_date(date_str: str) -> date:
 def ingest_health_export(
     file: UploadFile = File(...),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_ingest_auth),
 ):
     """
     One-time history import. Accepts the export.zip produced by the
@@ -529,9 +532,9 @@ def ingest_health_export(
     """
     from app.health_xml import import_export_file
 
-    result = import_export_file(file.file, file.filename or "", db)
+    result = import_export_file(file.file, file.filename or "", db, current_user.id)
     if result.get("status") == "ok":
-        touch_last_ingest(db)
+        touch_last_ingest(db, current_user.id)
         db.commit()
     logger.info("Health export backfill: %s", result)
     return result
@@ -545,13 +548,13 @@ def ingest_health_export(
 def get_weight_log(
     days: int = Query(90, ge=1, le=365),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     from datetime import timedelta
     since = date.today() - timedelta(days=days)
     return (
         db.query(WeightLog)
-        .filter(WeightLog.date >= since)
+        .filter(WeightLog.user_id == current_user.id, WeightLog.date >= since)
         .order_by(WeightLog.date)
         .all()
     )
@@ -561,7 +564,7 @@ def get_weight_log(
 def estimate_weight(
     day: date = Query(..., alias="date"),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """
     Weight to show/prefill for a date. A real reading is returned as-is
@@ -569,8 +572,8 @@ def estimate_weight(
     interpolated from the surrounding real weigh-ins (estimated=True), or
     returns a null weight when there's nothing to estimate from.
     """
-    row = db.query(WeightLog).filter(WeightLog.date == day).first()
-    wkg, est, method = resolved_weight_for(day, row, real_weight_points(db))
+    row = db.query(WeightLog).filter(WeightLog.user_id == current_user.id, WeightLog.date == day).first()
+    wkg, est, method = resolved_weight_for(day, row, real_weight_points(db, current_user.id))
     if wkg is None:
         return WeightEstimateOut(date=day, weight_kg=None, estimated=False)
     if est:
@@ -586,24 +589,24 @@ def estimate_weight(
 def log_weight_manual(
     body: WeightLogCreate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    upsert_weight(db, body.date, body.weight_kg, body.source)
+    upsert_weight(db, body.date, body.weight_kg, body.source, current_user.id)
     db.commit()
-    return db.query(WeightLog).filter(WeightLog.date == body.date).first()
+    return db.query(WeightLog).filter(WeightLog.user_id == current_user.id, WeightLog.date == body.date).first()
 
 
 @router.get("/api/health/steps", response_model=list[StepsLogOut])
 def get_steps_log(
     days: int = Query(14, ge=1, le=365),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     from datetime import timedelta
     since = date.today() - timedelta(days=days)
     return (
         db.query(StepsLog)
-        .filter(StepsLog.date >= since)
+        .filter(StepsLog.user_id == current_user.id, StepsLog.date >= since)
         .order_by(StepsLog.date)
         .all()
     )
@@ -613,24 +616,24 @@ def get_steps_log(
 def log_steps_manual(
     body: StepsLogCreate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    upsert_steps(db, body.date, body.steps, body.source)
+    upsert_steps(db, body.date, body.steps, body.source, current_user.id)
     db.commit()
-    return db.query(StepsLog).filter(StepsLog.date == body.date).first()
+    return db.query(StepsLog).filter(StepsLog.user_id == current_user.id, StepsLog.date == body.date).first()
 
 
 @router.get("/api/health/sleep", response_model=list[SleepLogOut])
 def get_sleep_log(
     days: int = Query(14, ge=1, le=365),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     from datetime import timedelta
     since = date.today() - timedelta(days=days)
     return (
         db.query(SleepLog)
-        .filter(SleepLog.date >= since)
+        .filter(SleepLog.user_id == current_user.id, SleepLog.date >= since)
         .order_by(SleepLog.date)
         .all()
     )
@@ -640,28 +643,29 @@ def get_sleep_log(
 def log_sleep_manual(
     body: SleepLogCreate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     upsert_sleep(
         db, body.date, body.asleep_minutes, body.in_bed_minutes,
-        body.deep_minutes, body.rem_minutes, body.core_minutes, body.source
+        body.deep_minutes, body.rem_minutes, body.core_minutes, body.source,
+        current_user.id,
     )
     db.commit()
-    return db.query(SleepLog).filter(SleepLog.date == body.date).first()
+    return db.query(SleepLog).filter(SleepLog.user_id == current_user.id, SleepLog.date == body.date).first()
 
 
 @router.get("/api/health/nutrition", response_model=list[NutritionDayOut])
 def get_nutrition_log(
     days: int = Query(30, ge=1, le=365),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """Same data as GET /api/nutrition, exposed under the /api/health/* scheme."""
     from datetime import timedelta
     since = date.today() - timedelta(days=days)
     return (
         db.query(NutritionDay)
-        .filter(NutritionDay.date >= since)
+        .filter(NutritionDay.user_id == current_user.id, NutritionDay.date >= since)
         .order_by(NutritionDay.date)
         .all()
     )

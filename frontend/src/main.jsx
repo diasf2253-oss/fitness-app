@@ -3,28 +3,20 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './index.css'
-import { setToken } from './api'
 import { isLocalFirst } from './local/mode'
 import { syncNow } from './local/sync'
 import { installUnlockListeners, playAppOpen, playTap, preload } from './audio'
 
 // Link-based onboarding via URL params, then strip them so they aren't left
 // in the address bar or history:
-//   ?token=XYZ  — log this device in (e.g. scanning the "Add a device" QR)
-//   ?local=1    — make THIS device local-first: it runs on its own on-device
-//                 copy of the data and only syncs when the laptop is reachable.
-//                 Set once on the phone; the laptop, opened without it, keeps
-//                 talking straight to its own server.
+//   ?local=1  — make THIS device local-first: it runs on its own on-device
+//               copy of the data and only syncs when it can reach the API.
+//               Set once on the phone; other devices, opened without it,
+//               keep talking straight to the server.
 ;(function adoptSettingsFromUrl() {
   const params = new URLSearchParams(window.location.search)
   let changed = false
 
-  const token = params.get('token')
-  if (token) {
-    setToken(token)
-    params.delete('token')
-    changed = true
-  }
   if (params.get('local') === '1') {
     try { localStorage.setItem('local_first', '1') } catch { /* private mode */ }
     params.delete('local')
@@ -76,7 +68,7 @@ if (isLocalFirst()) {
   syncNow()
     .then(r => {
       if (r.reachable) console.info(`[sync] pushed ${r.pushed}, pulled ${r.pulled}`)
-      else console.info('[sync] laptop not reachable — staying local')
+      else console.info('[sync] API not reachable or not logged in — staying local')
     })
     .catch(err => console.warn('[sync] failed:', err))
 }

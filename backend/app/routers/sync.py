@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.auth import require_auth
 from app.db import get_db
+from app.models import User
 from app.schemas import SyncManifestOut, SyncPullOut, SyncPushIn, SyncPushOut
 from app.sync import SYNC_TABLES, apply_push, build_manifest, serialize_table
 
@@ -31,18 +32,18 @@ router = APIRouter(prefix="/api/sync", tags=["sync"])
 @router.get("/manifest", response_model=SyncManifestOut)
 def sync_manifest(
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    return SyncManifestOut(server_time=datetime.utcnow(), tables=build_manifest(db))
+    return SyncManifestOut(server_time=datetime.utcnow(), tables=build_manifest(db, current_user.id))
 
 
 @router.get("/pull", response_model=SyncPullOut)
 def sync_pull(
     since: Optional[datetime] = Query(None),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    tables = {name: serialize_table(db, name, since) for name in SYNC_TABLES}
+    tables = {name: serialize_table(db, name, current_user.id, since) for name in SYNC_TABLES}
     return SyncPullOut(
         server_time=datetime.utcnow(),
         since=since,
@@ -55,10 +56,10 @@ def sync_pull(
 def sync_push(
     payload: SyncPushIn,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     unknown = sorted(set(payload.tables) - set(SYNC_TABLES))
-    result = apply_push(db, payload.tables)
+    result = apply_push(db, payload.tables, current_user.id)
     db.commit()
     warnings = result["warnings"]
     if unknown:

@@ -8,8 +8,8 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { QRCodeSVG } from 'qrcode.react'
-import { apiFetch, apiUpload, setToken } from '../api'
+import { apiFetch, apiUpload } from '../api'
+import { useAuth } from '../auth'
 import { isMuted, setMuted, subscribeMuted, playTap } from '../audio'
 
 // Copy-paste starter body for the iOS Shortcut push (see the Apple Health
@@ -85,44 +85,28 @@ function CopyButton({ text, label = 'Copy' }) {
 }
 
 /**
- * "Add a device" — show a QR that encodes this origin plus the token, so
- * scanning it on a phone opens the app already logged in (main.jsx adopts
- * ?token= and strips it). One scan replaces typing the IP + the token.
+ * Account — who's logged in, and the log-out button. Each device now logs
+ * in independently (that's what accounts are for), replacing the old
+ * shared-token "Add a device" QR flow.
  */
-function AddDeviceCard() {
-  const origin = window.location.origin
-  const token = localStorage.getItem('app_token') || 'changeme'
-  const link = `${origin}/?token=${encodeURIComponent(token)}`
-  const onLocalhost = /localhost|127\.0\.0\.1/.test(origin)
+function AccountCard() {
+  const { user, logout } = useAuth()
+  const [busy, setBusy] = useState(false)
 
   return (
     <div className="card">
-      <h2>Add a device</h2>
+      <h2>Account</h2>
       <p className="muted" style={{ marginBottom: '0.85rem' }}>
-        Scan this on your phone to open the app already signed in — then use
-        Share → Add to Home Screen. Both devices then sync automatically.
+        {user.name} · {user.email}
       </p>
-
-      {onLocalhost ? (
-        <p className="muted" style={{ fontSize: '0.85rem' }}>
-          You're on <code>localhost</code>, which only this laptop can reach.
-          Open the app on the <strong>phone URL</strong> printed by
-          <code> ./start.sh</code> (or your tunnel URL), then come back here —
-          the QR will point somewhere your phone can actually open.
-        </p>
-      ) : (
-        <div className="col" style={{ alignItems: 'center', gap: '0.75rem' }}>
-          <div style={{ background: '#ece9e0', padding: 12, borderRadius: 14 }}>
-            <QRCodeSVG value={link} size={180} bgColor="#ece9e0" fgColor="#151b18" />
-          </div>
-          <div className="row" style={{ width: '100%', gap: '0.5rem' }}>
-            <code style={{ flex: 1, fontSize: '0.72rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {link}
-            </code>
-            <CopyButton text={link} label="Copy link" />
-          </div>
-        </div>
-      )}
+      <button
+        className="secondary"
+        style={{ width: '100%' }}
+        disabled={busy}
+        onClick={async () => { setBusy(true); await logout() }}
+      >
+        {busy ? 'Logging out…' : 'Log out'}
+      </button>
     </div>
   )
 }
@@ -459,8 +443,8 @@ function fmtTimestamp(iso) {
 }
 
 export default function Settings() {
-  const [token, setTokenState] = useState(localStorage.getItem('app_token') || 'changeme')
-  const [saved, setSaved] = useState(false)
+  const { user } = useAuth()
+  const ingestToken = user.ingest_token
 
   const [lastIngest, setLastIngest] = useState(null)
   const [importFile, setImportFile] = useState(null)
@@ -476,13 +460,6 @@ export default function Settings() {
       .then(s => setLastIngest(s.health_last_ingest))
       .catch(() => {})  // non-critical; card just shows "never"
   }, [])
-
-  function handleSave(e) {
-    e.preventDefault()
-    setToken(token)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
 
   async function runImport() {
     if (!importFile) return
@@ -543,29 +520,9 @@ export default function Settings() {
     <div className="page">
       <h1>Settings</h1>
 
-      <div className="card">
-        <h2>API token</h2>
-        <p className="muted" style={{ marginBottom: '0.75rem' }}>
-          Must match the APP_TOKEN value in your backend <code>.env</code> file.
-        </p>
-        <form onSubmit={handleSave} className="col">
-          <div className="form-group">
-            <label htmlFor="token-input">Bearer token</label>
-            <input
-              id="token-input"
-              type="password"
-              value={token}
-              onChange={e => setTokenState(e.target.value)}
-              placeholder="changeme"
-            />
-          </div>
-          <button type="submit">{saved ? '✓ Saved' : 'Save token'}</button>
-        </form>
-      </div>
+      <AccountCard />
 
       <SoundCard />
-
-      <AddDeviceCard />
 
       <div className="card">
         <div className="row" style={{ marginBottom: '0.5rem' }}>
@@ -589,8 +546,8 @@ export default function Settings() {
           </li>
           <li style={{ marginTop: '0.4rem' }}>
             <div className="row" style={{ gap: '0.5rem' }}>
-              <span style={{ flex: 1 }}>Header: <code style={{ fontSize: '0.72rem' }}>Authorization: Bearer {localStorage.getItem('app_token') || 'changeme'}</code></span>
-              <CopyButton text={`Bearer ${localStorage.getItem('app_token') || 'changeme'}`} />
+              <span style={{ flex: 1 }}>Header: <code style={{ fontSize: '0.72rem' }}>Authorization: Bearer {ingestToken}</code></span>
+              <CopyButton text={`Bearer ${ingestToken}`} />
             </div>
           </li>
           <li style={{ marginTop: '0.4rem' }}>Select metrics: steps, weight, sleep, plus the dietary ones</li>
@@ -612,8 +569,8 @@ export default function Settings() {
           <CopyButton text={`${window.location.origin}/api/ingest/health/shortcut`} />
         </div>
         <div className="row" style={{ gap: '0.5rem', marginBottom: '0.4rem' }}>
-          <span style={{ flex: 1 }}>Header: <code style={{ fontSize: '0.72rem' }}>Authorization: Bearer {localStorage.getItem('app_token') || 'changeme'}</code></span>
-          <CopyButton text={`Bearer ${localStorage.getItem('app_token') || 'changeme'}`} />
+          <span style={{ flex: 1 }}>Header: <code style={{ fontSize: '0.72rem' }}>Authorization: Bearer {ingestToken}</code></span>
+          <CopyButton text={`Bearer ${ingestToken}`} />
         </div>
         <div className="row" style={{ gap: '0.5rem', alignItems: 'flex-start' }}>
           <pre style={{

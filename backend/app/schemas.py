@@ -751,3 +751,73 @@ class SyncPushOut(BaseModel):
     # table -> {received, inserted, updated, skipped_older, ...}
     counts: dict[str, dict[str, int]]
     warnings: list[str] = []
+
+
+# ---------------------------------------------------------------------------
+# Auth (Phase 1-2 friends beta)
+# ---------------------------------------------------------------------------
+
+class JoinRequest(BaseModel):
+    code: str
+    name: str
+    email: str
+    password: str = Field(min_length=8)
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+    remember: bool = False
+
+
+class ChangePasswordRequest(BaseModel):
+    new_password: str = Field(min_length=8)
+
+
+class UserMeOut(OrmBase):
+    id: int
+    email: str
+    name: str
+    role: str
+    status: str
+    must_change_password: bool
+    ingest_token: str
+
+
+# ---------------------------------------------------------------------------
+# Admin (Phase 1-2 friends beta) — user management only, no per-user data
+# drill-down.
+# ---------------------------------------------------------------------------
+
+class AdminUserOut(OrmBase):
+    id: int
+    email: str
+    name: str
+    role: str
+    status: str
+    created_at: datetime
+    last_login_at: Optional[datetime] = None
+
+
+class UserStatusUpdate(BaseModel):
+    status: Optional[str] = None   # 'active' | 'disabled'
+    role: Optional[str] = None     # 'admin' | 'user'
+
+
+class TempPasswordOut(BaseModel):
+    temp_password: str
+
+
+class InviteCodeCreate(BaseModel):
+    label: Optional[str] = None
+    max_uses: Optional[int] = None
+
+
+class InviteCodeOut(OrmBase):
+    id: int
+    code: str
+    label: Optional[str] = None
+    active: bool
+    max_uses: Optional[int] = None
+    uses: int
+    created_at: datetime

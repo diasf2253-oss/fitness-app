@@ -15,18 +15,22 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.auth import require_auth
 from app.db import get_db
-from app.models import Routine, RoutineNote
+from app.models import Routine, RoutineNote, User
 from app.schemas import RoutineNoteCreate, RoutineNoteOut, RoutineNoteUpdate
 
 router = APIRouter(tags=["routine-notes"])
 
 
-def consume_pending_notes(db: DBSession, routine_id: int, session_id: int) -> list[RoutineNote]:
+def consume_pending_notes(db: DBSession, routine_id: int, session_id: int, user_id: int) -> list[RoutineNote]:
     """Surface and archive a routine's pending next-session notes onto the
     session that's starting, so they show once and never resurface."""
     pending = (
         db.query(RoutineNote)
-        .filter(RoutineNote.routine_id == routine_id, RoutineNote.archived_at.is_(None))
+        .filter(
+            RoutineNote.user_id == user_id,
+            RoutineNote.routine_id == routine_id,
+            RoutineNote.archived_at.is_(None),
+        )
         .all()
     )
     now = datetime.utcnow()
@@ -41,15 +45,17 @@ def create_routine_note(
     routine_id: int,
     body: RoutineNoteCreate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    if not db.get(Routine, routine_id):
+    routine = db.get(Routine, routine_id)
+    if not routine or routine.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Routine not found")
     text = (body.text or "").strip()
     if not text:
         raise HTTPException(status_code=422, detail="Note text is required")
     note = RoutineNote(
-        routine_id=routine_id, text=text, created_in_session_id=body.created_in_session_id
+        user_id=current_user.id, routine_id=routine_id, text=text,
+        created_in_session_id=body.created_in_session_id,
     )
     db.add(note)
     db.commit()
@@ -62,11 +68,14 @@ def list_routine_notes(
     routine_id: int,
     include_archived: bool = Query(True),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    if not db.get(Routine, routine_id):
+    routine = db.get(Routine, routine_id)
+    if not routine or routine.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Routine not found")
-    q = db.query(RoutineNote).filter(RoutineNote.routine_id == routine_id)
+    q = db.query(RoutineNote).filter(
+        RoutineNote.user_id == current_user.id, RoutineNote.routine_id == routine_id
+    )
     if not include_archived:
         q = q.filter(RoutineNote.archived_at.is_(None))
     return q.order_by(RoutineNote.created_at.desc()).all()
@@ -77,10 +86,10 @@ def update_routine_note(
     note_id: int,
     body: RoutineNoteUpdate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     note = db.get(RoutineNote, note_id)
-    if not note:
+    if not note or note.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Note not found")
     if body.text is not None:
         note.text = body.text.strip()
@@ -95,10 +104,10 @@ def update_routine_note(
 def delete_routine_note(
     note_id: int,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     note = db.get(RoutineNote, note_id)
-    if not note:
+    if not note or note.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Note not found")
     db.delete(note)
     db.commit()

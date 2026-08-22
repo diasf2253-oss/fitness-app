@@ -5,32 +5,33 @@ GET /api/ranks — body-map data: every muscle group's rank (the average of its
 exercises' benchmark scores) plus the per-exercise PR breakdown behind it.
 """
 from fastapi import APIRouter, Depends
+from sqlalchemy import or_
 from sqlalchemy.orm import Session as DBSession
 
 from app import ranks as R
 from app.auth import require_auth
 from app.db import get_db
-from app.models import Exercise, Session, SessionExercise, Set, WeightLog
+from app.models import Exercise, Session, SessionExercise, Set, User, WeightLog
 from app.muscles import MUSCLE_GROUPS
 from app.routers.settings import get_or_create_settings
 
 router = APIRouter(prefix="/api/ranks", tags=["ranks"])
 
 
-def _latest_bodyweight(db: DBSession) -> float | None:
+def _latest_bodyweight(db: DBSession, user_id: int) -> float | None:
     """Latest REAL reading only — a leftover demo ('sample') or interpolated
     ('estimated') row must never set the bodyweight every rank divides by."""
     from app.routers.health import DERIVED_SOURCES
     row = (
         db.query(WeightLog)
-        .filter(WeightLog.source.notin_(DERIVED_SOURCES))
+        .filter(WeightLog.user_id == user_id, WeightLog.source.notin_(DERIVED_SOURCES))
         .order_by(WeightLog.date.desc())
         .first()
     )
     return row.weight_kg if row else None
 
 
-def _best_alltime_by_exercise(db: DBSession) -> dict[int, tuple]:
+def _best_alltime_by_exercise(db: DBSession, user_id: int) -> dict[int, tuple]:
     """{exercise_id: (best_1rm, weight, reps)} over ALL completed working sets
     ever (no recency window) — the ranks are PR-based, using the same capped
     Epley as the PR system so the two never disagree."""
@@ -39,6 +40,7 @@ def _best_alltime_by_exercise(db: DBSession) -> dict[int, tuple]:
         .join(Session, Session.id == SessionExercise.session_id)
         .join(Set, Set.session_exercise_id == SessionExercise.id)
         .filter(
+            Session.user_id == user_id,
             Set.is_completed == True, Set.is_warmup == False,   # noqa: E712
             Set.reps > 0, Set.weight_kg > 0,
         )
@@ -53,20 +55,24 @@ def _best_alltime_by_exercise(db: DBSession) -> dict[int, tuple]:
 
 
 @router.get("")
-def get_ranks(db: DBSession = Depends(get_db), _: None = Depends(require_auth)):
-    settings = get_or_create_settings(db)
+def get_ranks(db: DBSession = Depends(get_db), current_user: User = Depends(require_auth)):
+    user_id = current_user.id
+    settings = get_or_create_settings(db, user_id)
     cfg = R.resolve_config(settings.rank_config)
-    bw = _latest_bodyweight(db)
+    bw = _latest_bodyweight(db, user_id)
     sex = settings.sex
 
-    exercises = db.query(Exercise).all()
+    # The shared global library plus this user's own custom exercises.
+    exercises = db.query(Exercise).filter(
+        or_(Exercise.user_id.is_(None), Exercise.user_id == user_id)
+    ).all()
     by_id = {e.id: e for e in exercises}
     by_group: dict[str, list[int]] = {}
     for e in exercises:
         if e.primary_muscle_group:
             by_group.setdefault(e.primary_muscle_group, []).append(e.id)
 
-    best_all = _best_alltime_by_exercise(db)
+    best_all = _best_alltime_by_exercise(db, user_id)
 
     # A muscle's rank is the AVERAGE of its exercises' scores. Each exercise's
     # score = all-time best 1RM ÷ bodyweight, measured against that exercise's

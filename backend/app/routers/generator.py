@@ -6,13 +6,14 @@ POST /api/generator/apply    — persist it, replacing previously-generated
                                routines only (hand-made routines are untouched)
 """
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session as DBSession
 
 from app import generator
 from app.auth import require_auth
 from app.db import get_db
 from app.generator import SPLIT_LABELS, SPLITS
-from app.models import Exercise, Routine, RoutineExercise
+from app.models import Exercise, Routine, RoutineExercise, User
 from app.muscles import MUSCLE_GROUPS, resolved_volume_targets
 from app.routers.settings import get_or_create_settings
 from app.schemas import GeneratorRequest, RoutineOut
@@ -28,22 +29,25 @@ def _validate(body: GeneratorRequest) -> None:
         raise HTTPException(status_code=422, detail=f"unknown priority muscles: {bad}")
 
 
-def _exercises_by_group(db: DBSession) -> dict[str, list]:
+def _exercises_by_group(db: DBSession, user_id: int) -> dict[str, list]:
     out: dict[str, list] = {}
-    rows = db.query(Exercise).filter(Exercise.primary_muscle_group.isnot(None)).all()
+    rows = db.query(Exercise).filter(
+        Exercise.primary_muscle_group.isnot(None),
+        or_(Exercise.user_id.is_(None), Exercise.user_id == user_id),
+    ).all()
     for ex in rows:
         out.setdefault(ex.primary_muscle_group, []).append(ex)
     return out
 
 
-def _build(db: DBSession, body: GeneratorRequest) -> generator.GenProgram:
-    targets = resolved_volume_targets(get_or_create_settings(db).volume_targets)
+def _build(db: DBSession, body: GeneratorRequest, user_id: int) -> generator.GenProgram:
+    targets = resolved_volume_targets(get_or_create_settings(db, user_id).volume_targets)
     return generator.generate(
         priority=body.priority_muscles,
         days_per_week=body.days_per_week,
         split_type=body.split_type,
         targets=targets,
-        exercises_by_group=_exercises_by_group(db),
+        exercises_by_group=_exercises_by_group(db, user_id),
     )
 
 
@@ -76,7 +80,7 @@ def _program_dict(prog: generator.GenProgram) -> dict:
 
 
 @router.get("/options")
-def options(_: None = Depends(require_auth)):
+def options(_: User = Depends(require_auth)):
     """Split types and muscle groups to drive the generator form."""
     return {
         "muscle_groups": MUSCLE_GROUPS,
@@ -88,24 +92,25 @@ def options(_: None = Depends(require_auth)):
 def preview(
     body: GeneratorRequest,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     _validate(body)
-    return _program_dict(_build(db, body))
+    return _program_dict(_build(db, body, current_user.id))
 
 
 @router.post("/apply")
 def apply(
     body: GeneratorRequest,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """Persist the generated program. Deterministic, so it saves exactly what
     the review screen showed. Replaces only routines tagged 'generated'."""
     _validate(body)
-    prog = _build(db, body)
+    user_id = current_user.id
+    prog = _build(db, body, user_id)
 
-    old = db.query(Routine).filter(Routine.source == "generated").all()
+    old = db.query(Routine).filter(Routine.user_id == user_id, Routine.source == "generated").all()
     replaced = len(old)
     for r in old:
         db.delete(r)
@@ -113,11 +118,12 @@ def apply(
 
     created: list[Routine] = []
     for r in prog.routines:
-        routine = Routine(name=r.name, source="generated")
+        routine = Routine(user_id=user_id, name=r.name, source="generated")
         db.add(routine)
         db.flush()
         for pos, e in enumerate(r.exercises):
             db.add(RoutineExercise(
+                user_id=user_id,
                 routine_id=routine.id,
                 exercise_id=e.exercise_id,
                 position=pos,

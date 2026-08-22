@@ -24,7 +24,7 @@ from app.auth import require_auth
 from app.db import get_db
 from app.models import (
     NutritionDay, Session as WorkoutSession, SessionExercise, Set as SetModel,
-    SleepLog, StepsLog, Tracker, TrackerLog, WeightLog,
+    SleepLog, StepsLog, Tracker, TrackerLog, User, WeightLog,
 )
 from app.schemas import (
     CorrelationPair, CorrelationPoint, CorrelationsOut, HabitWeek,
@@ -62,13 +62,14 @@ def pearson(xs: list[float], ys: list[float]) -> Optional[float]:
 # Shared series builders
 # ---------------------------------------------------------------------------
 
-def _daily_volume(db: DBSession, start: date, end: date) -> dict[date, float]:
+def _daily_volume(db: DBSession, start: date, end: date, user_id: int) -> dict[date, float]:
     """Completed working-set volume per calendar day (kg)."""
     rows = (
         db.query(WorkoutSession.started_at, SetModel.weight_kg, SetModel.reps)
         .join(SessionExercise, WorkoutSession.id == SessionExercise.session_id)
         .join(SetModel, SessionExercise.id == SetModel.session_exercise_id)
         .filter(
+            WorkoutSession.user_id == user_id,
             WorkoutSession.started_at >= datetime.combine(start, time.min),
             WorkoutSession.started_at < datetime.combine(end + timedelta(days=1), time.min),
             SetModel.is_completed.is_(True),
@@ -84,10 +85,10 @@ def _daily_volume(db: DBSession, start: date, end: date) -> dict[date, float]:
     return dict(acc)
 
 
-def _scale_trackers(db: DBSession) -> list[Tracker]:
+def _scale_trackers(db: DBSession, user_id: int) -> list[Tracker]:
     return (
         db.query(Tracker)
-        .filter(Tracker.kind == "scale", Tracker.is_archived.is_(False))
+        .filter(Tracker.user_id == user_id, Tracker.kind == "scale", Tracker.is_archived.is_(False))
         .order_by(Tracker.position, Tracker.id)
         .all()
     )
@@ -110,28 +111,28 @@ def _tracker_map(db: DBSession, tracker_id: int, start: date, end: date) -> dict
 # Weekly review
 # ---------------------------------------------------------------------------
 
-def period_metrics(db: DBSession, start: date, end: date) -> WeekMetrics:
+def period_metrics(db: DBSession, start: date, end: date, user_id: int) -> WeekMetrics:
     days_in_period = (end - start).days + 1
 
     steps_avg = (
         db.query(func.avg(StepsLog.steps))
-        .filter(StepsLog.date.between(start, end))
+        .filter(StepsLog.user_id == user_id, StepsLog.date.between(start, end))
         .scalar()
     )
     sleep_avg = (
         db.query(func.avg(SleepLog.asleep_minutes))
-        .filter(SleepLog.date.between(start, end))
+        .filter(SleepLog.user_id == user_id, SleepLog.date.between(start, end))
         .scalar()
     )
     calories_avg, protein_avg = (
         db.query(func.avg(NutritionDay.calories), func.avg(NutritionDay.protein_g))
-        .filter(NutritionDay.date.between(start, end))
+        .filter(NutritionDay.user_id == user_id, NutritionDay.date.between(start, end))
         .first()
     )
 
     weights = (
         db.query(WeightLog)
-        .filter(WeightLog.date.between(start, end))
+        .filter(WeightLog.user_id == user_id, WeightLog.date.between(start, end))
         .order_by(WeightLog.date)
         .all()
     )
@@ -140,10 +141,11 @@ def period_metrics(db: DBSession, start: date, end: date) -> WeekMetrics:
         if len(weights) >= 2 else None
     )
 
-    volume_by_day = _daily_volume(db, start, end)
+    volume_by_day = _daily_volume(db, start, end, user_id)
     sessions = (
         db.query(WorkoutSession)
         .filter(
+            WorkoutSession.user_id == user_id,
             WorkoutSession.started_at >= datetime.combine(start, time.min),
             WorkoutSession.started_at < datetime.combine(end + timedelta(days=1), time.min),
         )
@@ -154,7 +156,7 @@ def period_metrics(db: DBSession, start: date, end: date) -> WeekMetrics:
     habits = []
     for t in (
         db.query(Tracker)
-        .filter(Tracker.is_archived.is_(False))
+        .filter(Tracker.user_id == user_id, Tracker.is_archived.is_(False))
         .order_by(Tracker.position, Tracker.id)
         .all()
     ):
@@ -194,12 +196,12 @@ def period_metrics(db: DBSession, start: date, end: date) -> WeekMetrics:
 @router.get("/weekly", response_model=WeeklyReviewOut)
 def weekly_review(
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     today = date.today()
     return WeeklyReviewOut(
-        current=period_metrics(db, today - timedelta(days=6), today),
-        previous=period_metrics(db, today - timedelta(days=13), today - timedelta(days=7)),
+        current=period_metrics(db, today - timedelta(days=6), today, current_user.id),
+        previous=period_metrics(db, today - timedelta(days=13), today - timedelta(days=7), current_user.id),
     )
 
 
@@ -210,23 +212,24 @@ def weekly_review(
 @router.get("/correlations", response_model=CorrelationsOut)
 def correlations(
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     today = date.today()
     start = today - timedelta(days=WINDOW_DAYS - 1)
+    user_id = current_user.id
 
     steps = {r.date: float(r.steps) for r in
-             db.query(StepsLog).filter(StepsLog.date.between(start, today)).all()}
+             db.query(StepsLog).filter(StepsLog.user_id == user_id, StepsLog.date.between(start, today)).all()}
     sleep_h = {r.date: round(r.asleep_minutes / 60, 2) for r in
-               db.query(SleepLog).filter(SleepLog.date.between(start, today)).all()}
+               db.query(SleepLog).filter(SleepLog.user_id == user_id, SleepLog.date.between(start, today)).all()}
     calories = {r.date: r.calories for r in
-                db.query(NutritionDay).filter(NutritionDay.date.between(start, today)).all()}
+                db.query(NutritionDay).filter(NutritionDay.user_id == user_id, NutritionDay.date.between(start, today)).all()}
     weight = {r.date: r.weight_kg for r in
-              db.query(WeightLog).filter(WeightLog.date.between(start, today)).all()}
+              db.query(WeightLog).filter(WeightLog.user_id == user_id, WeightLog.date.between(start, today)).all()}
 
     # Volume is zero-filled across the window: "did I train, and how much"
     # is the question, so rest days count as 0 rather than missing.
-    volume_days = _daily_volume(db, start, today)
+    volume_days = _daily_volume(db, start, today, user_id)
     volume = {start + timedelta(days=i): volume_days.get(start + timedelta(days=i), 0.0)
               for i in range(WINDOW_DAYS)}
 
@@ -238,7 +241,7 @@ def correlations(
         "Training volume (kg)": volume,
     }
 
-    scale_trackers = _scale_trackers(db)
+    scale_trackers = _scale_trackers(db, user_id)
     for t in scale_trackers:
         series[t.name] = _tracker_map(db, t.id, start, today)
 
@@ -280,7 +283,7 @@ def correlations(
     training_days = {
         row.started_at.date()
         for row in db.query(WorkoutSession.started_at)
-        .filter(WorkoutSession.started_at >= datetime.combine(start, time.min))
+        .filter(WorkoutSession.user_id == user_id, WorkoutSession.started_at >= datetime.combine(start, time.min))
         .all()
     }
     splits: list[TrainingSplit] = []

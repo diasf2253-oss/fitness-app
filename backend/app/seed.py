@@ -15,6 +15,7 @@ import os
 # Allow running as a standalone script
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+from app.auth_bootstrap import get_or_create_admin_user
 from app.db import SessionLocal
 from app.models import AppSettings, Exercise, Routine, RoutineExercise
 
@@ -142,10 +143,14 @@ ROUTINES = [
 def seed():
     db = SessionLocal()
     try:
+        # ---- Admin account (everything below is scoped to it) ----
+        admin = get_or_create_admin_user(db)
+        print(f"Seeding sample data for admin account: {admin.email} (id={admin.id})")
+
         # ---- Settings ----
-        if not db.get(AppSettings, 1):
+        if not db.query(AppSettings).filter(AppSettings.user_id == admin.id).first():
             db.add(AppSettings(
-                id=1,
+                user_id=admin.id,
                 calorie_target=2400,
                 protein_target_g=180,
                 fat_max_g=100,
@@ -173,14 +178,16 @@ def seed():
         # Build a name → Exercise id map for quick lookup
         ex_by_name = {e.name: e.id for e in db.query(Exercise).all()}
 
-        existing_routine_names = {r.name for r in db.query(Routine.name).all()}
+        existing_routine_names = {
+            r.name for r in db.query(Routine.name).filter(Routine.user_id == admin.id).all()
+        }
 
         for routine_name, exercise_list in ROUTINES:
             if routine_name in existing_routine_names:
                 print(f"Routine '{routine_name}' already exists — skipping")
                 continue
 
-            routine = Routine(name=routine_name)
+            routine = Routine(name=routine_name, user_id=admin.id)
             db.add(routine)
             db.flush()
 
@@ -190,6 +197,7 @@ def seed():
                     print(f"  WARNING: exercise '{ex_name}' not found — skipping")
                     continue
                 db.add(RoutineExercise(
+                    user_id=admin.id,
                     routine_id=routine.id,
                     exercise_id=ex_id,
                     position=pos,
@@ -201,11 +209,11 @@ def seed():
             print(f"Seeded routine '{routine_name}' with {len(exercise_list)} exercises")
 
         # ---- Default trackers (Phase 6) ----
-        # Only when the table is empty — renames/archives must stick.
+        # Only when the admin has none yet — renames/archives must stick.
         from app.models import Tracker
-        if db.query(Tracker).count() == 0:
-            db.add(Tracker(name="Mood", kind="scale", position=0))
-            db.add(Tracker(name="Journal", kind="text", position=1))
+        if db.query(Tracker).filter(Tracker.user_id == admin.id).count() == 0:
+            db.add(Tracker(name="Mood", kind="scale", position=0, user_id=admin.id))
+            db.add(Tracker(name="Journal", kind="text", position=1, user_id=admin.id))
             print("Seeded default trackers: Mood, Journal")
         else:
             print("Trackers already exist — skipping")

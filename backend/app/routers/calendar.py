@@ -16,7 +16,7 @@ from app.auth import require_auth
 from app.db import get_db
 from app.models import (
     NutritionDay, PlanItem, Session as WorkoutSession, SleepLog, StepsLog,
-    Tracker, TrackerLog, WeightLog,
+    Tracker, TrackerLog, User, WeightLog,
 )
 from app.routers.health import DERIVED_SOURCES, real_weight_points, resolved_weight_for
 from app.routers.stats import session_summary
@@ -27,11 +27,12 @@ from app.schemas import (
 router = APIRouter(tags=["calendar"])
 
 
-def _sessions_on(db: DBSession, day: date) -> list[WorkoutSession]:
+def _sessions_on(db: DBSession, day: date, user_id: int) -> list[WorkoutSession]:
     start = datetime.combine(day, time.min)
     return (
         db.query(WorkoutSession)
-        .filter(WorkoutSession.started_at >= start,
+        .filter(WorkoutSession.user_id == user_id,
+                WorkoutSession.started_at >= start,
                 WorkoutSession.started_at < start + timedelta(days=1))
         .order_by(WorkoutSession.started_at)
         .all()
@@ -43,11 +44,12 @@ def month_calendar(
     year: int,
     month: int,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     if not 1 <= month <= 12:
         raise HTTPException(status_code=422, detail="month must be 1-12")
 
+    user_id = current_user.id
     first = date(year, month, 1)
     last = date(year, month, monthrange(year, month)[1])
     month_start = datetime.combine(first, time.min)
@@ -62,7 +64,8 @@ def month_calendar(
 
     for (started_at,) in (
         db.query(WorkoutSession.started_at)
-        .filter(WorkoutSession.started_at >= month_start,
+        .filter(WorkoutSession.user_id == user_id,
+                WorkoutSession.started_at >= month_start,
                 WorkoutSession.started_at < month_end)
         .all()
     ):
@@ -70,20 +73,25 @@ def month_calendar(
 
     for row in (
         db.query(WeightLog)
-        .filter(WeightLog.date.between(first, last),
+        .filter(WeightLog.user_id == user_id, WeightLog.date.between(first, last),
                 WeightLog.source.notin_(DERIVED_SOURCES))
         .all()
     ):
         day_of(row.date).has_weight = True
-    for row in db.query(StepsLog).filter(StepsLog.date.between(first, last)).all():
+    for row in db.query(StepsLog).filter(StepsLog.user_id == user_id, StepsLog.date.between(first, last)).all():
         day_of(row.date).steps = row.steps
-    for row in db.query(SleepLog).filter(SleepLog.date.between(first, last)).all():
+    for row in db.query(SleepLog).filter(SleepLog.user_id == user_id, SleepLog.date.between(first, last)).all():
         day_of(row.date).has_sleep = True
-    for row in db.query(NutritionDay).filter(NutritionDay.date.between(first, last)).all():
+    for row in db.query(NutritionDay).filter(NutritionDay.user_id == user_id, NutritionDay.date.between(first, last)).all():
         day_of(row.date).has_nutrition = True
-    for row in db.query(TrackerLog).filter(TrackerLog.date.between(first, last)).all():
+    for row in (
+        db.query(TrackerLog)
+        .join(Tracker, Tracker.id == TrackerLog.tracker_id)
+        .filter(Tracker.user_id == user_id, TrackerLog.date.between(first, last))
+        .all()
+    ):
         day_of(row.date).trackers += 1
-    for row in db.query(PlanItem).filter(PlanItem.date.between(first, last)).all():
+    for row in db.query(PlanItem).filter(PlanItem.user_id == user_id, PlanItem.date.between(first, last)).all():
         day_of(row.date).plan_items += 1
 
     return MonthCalendarOut(
@@ -97,11 +105,12 @@ def month_calendar(
 def day_detail(
     day: date,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
+    user_id = current_user.id
     sessions = []
-    for ws in _sessions_on(db, day):
-        summary = session_summary(ws.id, db=db, _=None)
+    for ws in _sessions_on(db, day, user_id):
+        summary = session_summary(ws.id, db=db, current_user=current_user)
         sessions.append(DaySession(
             id=ws.id,
             name=ws.name,
@@ -110,19 +119,19 @@ def day_detail(
             completed_sets=summary.completed_sets,
         ))
 
-    weight_row = db.query(WeightLog).filter(WeightLog.date == day).first()
+    weight_row = db.query(WeightLog).filter(WeightLog.user_id == user_id, WeightLog.date == day).first()
     weight_kg, weight_estimated, _ = resolved_weight_for(
-        day, weight_row, real_weight_points(db)
+        day, weight_row, real_weight_points(db, user_id)
     )
 
-    steps = db.query(StepsLog).filter(StepsLog.date == day).first()
-    sleep = db.query(SleepLog).filter(SleepLog.date == day).first()
-    nutrition = db.query(NutritionDay).filter(NutritionDay.date == day).first()
+    steps = db.query(StepsLog).filter(StepsLog.user_id == user_id, StepsLog.date == day).first()
+    sleep = db.query(SleepLog).filter(SleepLog.user_id == user_id, SleepLog.date == day).first()
+    nutrition = db.query(NutritionDay).filter(NutritionDay.user_id == user_id, NutritionDay.date == day).first()
 
     tracker_rows = (
         db.query(Tracker, TrackerLog)
         .join(TrackerLog, TrackerLog.tracker_id == Tracker.id)
-        .filter(TrackerLog.date == day)
+        .filter(Tracker.user_id == user_id, TrackerLog.date == day)
         .order_by(Tracker.position, Tracker.id)
         .all()
     )
@@ -136,7 +145,7 @@ def day_detail(
 
     plan = (
         db.query(PlanItem)
-        .filter(PlanItem.date == day)
+        .filter(PlanItem.user_id == user_id, PlanItem.date == day)
         .order_by(PlanItem.position, PlanItem.start_time, PlanItem.id)
         .all()
     )

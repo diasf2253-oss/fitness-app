@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.auth import require_auth
 from app.db import get_db
-from app.models import Tracker, TrackerLog
+from app.models import Tracker, TrackerLog, User
 from app.schemas import (
     TRACKER_KINDS, TrackerCreate, TrackerLogOut, TrackerLogValue,
     TrackerOut, TrackerUpdate,
@@ -50,9 +50,9 @@ def habit_streak(db: DBSession, tracker_id: int, today: date) -> int:
     return streak
 
 
-def _get_tracker(db: DBSession, tracker_id: int) -> Tracker:
+def _get_tracker(db: DBSession, tracker_id: int, user_id: int) -> Tracker:
     tracker = db.get(Tracker, tracker_id)
-    if not tracker:
+    if not tracker or tracker.user_id != user_id:
         raise HTTPException(status_code=404, detail="Tracker not found")
     return tracker
 
@@ -61,10 +61,10 @@ def _get_tracker(db: DBSession, tracker_id: int) -> Tracker:
 def list_trackers(
     include_archived: bool = Query(False),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """Trackers for the daily check-in: ordered, with today's entry filled in."""
-    q = db.query(Tracker)
+    q = db.query(Tracker).filter(Tracker.user_id == current_user.id)
     if not include_archived:
         q = q.filter(Tracker.is_archived.is_(False))
     trackers = q.order_by(Tracker.position, Tracker.id).all()
@@ -92,15 +92,21 @@ def list_trackers(
 def create_tracker(
     body: TrackerCreate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     if body.kind not in TRACKER_KINDS:
         raise HTTPException(status_code=422, detail=f"kind must be one of {TRACKER_KINDS}")
     if not body.name.strip():
         raise HTTPException(status_code=422, detail="name is required")
 
-    max_pos = db.query(Tracker.position).order_by(Tracker.position.desc()).first()
+    max_pos = (
+        db.query(Tracker.position)
+        .filter(Tracker.user_id == current_user.id)
+        .order_by(Tracker.position.desc())
+        .first()
+    )
     tracker = Tracker(
+        user_id=current_user.id,
         name=body.name.strip(),
         kind=body.kind,
         unit=body.unit,
@@ -117,9 +123,9 @@ def update_tracker(
     tracker_id: int,
     body: TrackerUpdate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    tracker = _get_tracker(db, tracker_id)
+    tracker = _get_tracker(db, tracker_id, current_user.id)
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(tracker, field, value)
     db.commit()
@@ -131,10 +137,10 @@ def update_tracker(
 def delete_tracker(
     tracker_id: int,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """Hard delete, history included. The UI offers archive as the soft path."""
-    tracker = _get_tracker(db, tracker_id)
+    tracker = _get_tracker(db, tracker_id, current_user.id)
     db.delete(tracker)
     db.commit()
 
@@ -144,10 +150,10 @@ def log_tracker(
     tracker_id: int,
     body: TrackerLogValue,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """Upsert one day's entry; null values clear the day (returns null)."""
-    _get_tracker(db, tracker_id)
+    _get_tracker(db, tracker_id, current_user.id)
     row = (
         db.query(TrackerLog)
         .filter(TrackerLog.tracker_id == tracker_id, TrackerLog.date == body.date)
@@ -180,9 +186,9 @@ def tracker_series(
     tracker_id: int,
     days: int = Query(90, ge=1, le=730),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    _get_tracker(db, tracker_id)
+    _get_tracker(db, tracker_id, current_user.id)
     since = date.today() - timedelta(days=days)
     return (
         db.query(TrackerLog)

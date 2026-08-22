@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom'
 import { apiFetch } from './api'
+import { AuthProvider, useAuth } from './auth'
 import Dashboard from './pages/Dashboard'
 import Workout from './pages/Workout'
 import Routines from './pages/Routines'
@@ -15,6 +16,10 @@ import Generator from './pages/Generator'
 import Report from './pages/Report'
 import Diet from './pages/Diet'
 // Coach page killed per workbook H9 (grade D) — code kept at pages/Coach.jsx
+import Login from './pages/Login'
+import Join from './pages/Join'
+import ChangePassword from './pages/ChangePassword'
+import Admin from './pages/Admin'
 import Onboarding from './components/Onboarding'
 import StagingBadge from './components/StagingBadge'
 
@@ -52,6 +57,9 @@ const Icon = {
   ),
   diet: (
     <path d="M12 8c-1.5-3-6-3-7 0-1 3 2 8 5 11 1 1 3 1 4 0 3-3 6-8 5-11-1-3-5.5-3-7 0 M12 8V4 M12 4c0-1 1-2 2-2" />
+  ),
+  admin: (
+    <path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6z M9 12l2 2 4-4" />
   ),
 }
 
@@ -136,7 +144,7 @@ function ScrollToTop() {
   return null
 }
 
-function Sidebar() {
+function Sidebar({ isAdmin }) {
   return (
     <aside className="sidebar">
       {/* Wordmark — placeholder name, easy to rebrand later */}
@@ -157,22 +165,44 @@ function Sidebar() {
           ))}
         </nav>
       ))}
+      {isAdmin && (
+        <nav>
+          <div className="sidebar-label">Admin</div>
+          <NavLink to="/admin" className={({ isActive }) => isActive ? 'active' : undefined}>
+            <NavIcon name="admin" />
+            Admin
+          </NavLink>
+        </nav>
+      )}
       <SyncStatus />
     </aside>
   )
 }
 
-export default function App() {
-  // First-run gate: show the onboarding wizard only when settings say the user
-  // hasn't onboarded. `null` = still loading (render nothing wizard-wise);
-  // existing installs are already onboarded, so they never see it.
+/** Everything shown once a session is confirmed active. */
+function AuthedApp({ user }) {
+  // First-run gate: show the onboarding wizard only when settings say the
+  // user hasn't onboarded. `null` = still loading (render nothing wizard-wise).
+  // Declared before any conditional return — hooks must run unconditionally.
   const [onboarded, setOnboarded] = useState(null)
 
   useEffect(() => {
+    if (user.must_change_password) return   // settings 403s until the password is set
     apiFetch('/api/settings')
       .then(s => setOnboarded(s.onboarded !== false))
       .catch(() => setOnboarded(true))   // never block the app on a settings error
-  }, [])
+  }, [user.must_change_password])
+
+  // Forced password change (admin-issued temp password) — the only screen
+  // reachable until it's done; require_auth blocks every other route too.
+  if (user.must_change_password) {
+    return (
+      <>
+        <StagingBadge />
+        <ChangePassword />
+      </>
+    )
+  }
 
   if (onboarded === false) {
     return (
@@ -183,11 +213,13 @@ export default function App() {
     )
   }
 
+  const isAdmin = user.role === 'admin'
+
   return (
     <>
       <StagingBadge />
       <ScrollToTop />
-      <Sidebar />
+      <Sidebar isAdmin={isAdmin} />
 
       <div className="main-content">
         <Routes>
@@ -204,6 +236,10 @@ export default function App() {
           <Route path="/report"       element={<Report />} />
           <Route path="/diet"         element={<Diet />} />
           <Route path="/settings"     element={<Settings />} />
+          <Route path="/admin"        element={isAdmin ? <Admin /> : <Navigate to="/" replace />} />
+          <Route path="/login"        element={<Navigate to="/" replace />} />
+          <Route path="/join"         element={<Navigate to="/" replace />} />
+          <Route path="*"             element={<Navigate to="/" replace />} />
         </Routes>
       </div>
 
@@ -222,5 +258,34 @@ export default function App() {
         ))}
       </nav>
     </>
+  )
+}
+
+/** Everything shown while logged out — no data, no sidebar, no nav. */
+function AnonApp() {
+  return (
+    <>
+      <StagingBadge />
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/join"  element={<Join />} />
+        <Route path="*"      element={<Navigate to="/login" replace />} />
+      </Routes>
+    </>
+  )
+}
+
+function AppShell() {
+  const { status, user } = useAuth()
+  if (status === 'loading') return null
+  if (status === 'anon') return <AnonApp />
+  return <AuthedApp user={user} />
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
   )
 }

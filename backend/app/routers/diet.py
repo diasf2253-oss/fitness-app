@@ -19,7 +19,7 @@ from app.activity_burn import activity_kcal
 from app.auth import require_auth
 from app.calorie_adapt import carbs_from_target
 from app.db import get_db
-from app.models import Activity, NutritionDay, WeightLog
+from app.models import Activity, NutritionDay, User, WeightLog
 from app.nutrition_rda import build_breakdown
 from app.routers.settings import get_or_create_settings
 from app.schemas import ActivityOut, DietOut, EnergySummary, NutrientStatus
@@ -62,16 +62,20 @@ def _adapt_if_due(db, settings, weight_by_date, ceiling, today, *, force=False):
     return result
 
 
-def build_diet(db: DBSession, *, force_recalc: bool = False) -> DietOut:
+def build_diet(db: DBSession, user_id: int, *, force_recalc: bool = False) -> DietOut:
     today = date.today()
-    settings = get_or_create_settings(db)
+    settings = get_or_create_settings(db, user_id)
 
     since = today - timedelta(days=LOOKBACK_DAYS)
     weights = (
-        db.query(WeightLog).filter(WeightLog.date >= since).order_by(WeightLog.date).all()
+        db.query(WeightLog)
+        .filter(WeightLog.user_id == user_id, WeightLog.date >= since)
+        .order_by(WeightLog.date).all()
     )
     nutrition = (
-        db.query(NutritionDay).filter(NutritionDay.date >= since).order_by(NutritionDay.date).all()
+        db.query(NutritionDay)
+        .filter(NutritionDay.user_id == user_id, NutritionDay.date >= since)
+        .order_by(NutritionDay.date).all()
     )
     weight_by_date = {w.date: w.weight_kg for w in weights}
     intake_by_date = {n.date: n.calories for n in nutrition}
@@ -159,7 +163,7 @@ def build_diet(db: DBSession, *, force_recalc: bool = False) -> DietOut:
     latest_w = weights[-1].weight_kg if weights else 75.0
     act_rows = (
         db.query(Activity)
-        .filter(Activity.date >= today - timedelta(days=14))
+        .filter(Activity.user_id == user_id, Activity.date >= today - timedelta(days=14))
         .order_by(Activity.date.desc(), Activity.id.desc())
         .all()
     )
@@ -177,10 +181,10 @@ def build_diet(db: DBSession, *, force_recalc: bool = False) -> DietOut:
 
 
 @router.get("", response_model=DietOut)
-def get_diet(db: DBSession = Depends(get_db), _: None = Depends(require_auth)):
-    return build_diet(db)
+def get_diet(db: DBSession = Depends(get_db), current_user: User = Depends(require_auth)):
+    return build_diet(db, current_user.id)
 
 
 @router.post("/recalc", response_model=DietOut)
-def recalc_diet(db: DBSession = Depends(get_db), _: None = Depends(require_auth)):
-    return build_diet(db, force_recalc=True)
+def recalc_diet(db: DBSession = Depends(get_db), current_user: User = Depends(require_auth)):
+    return build_diet(db, current_user.id, force_recalc=True)

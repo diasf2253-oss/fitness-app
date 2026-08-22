@@ -26,7 +26,7 @@ from app.weight_trend import iso_week_start, weekly_averages
 PERIOD_DAYS = {"weekly": 7, "biweekly": 14}
 
 
-def _period_prs(db: DBSession, start: date, end: date) -> list[dict]:
+def _period_prs(db: DBSession, start: date, end: date, user_id: int) -> list[dict]:
     """Estimated-1RM PRs achieved in [start, end] — an in-period best that
     beats the best from before the period (a fresh lift with no history counts
     as a new PR)."""
@@ -37,6 +37,7 @@ def _period_prs(db: DBSession, start: date, end: date) -> list[dict]:
         .join(Set, SessionExercise.id == Set.session_exercise_id)
         .join(Exercise, SessionExercise.exercise_id == Exercise.id)
         .filter(
+            Session.user_id == user_id,
             Set.is_completed == True, Set.is_warmup == False,   # noqa: E712
             Set.reps > 0, Set.weight_kg > 0, Session.started_at <= end_dt,
         )
@@ -65,11 +66,13 @@ def _period_prs(db: DBSession, start: date, end: date) -> list[dict]:
     return prs
 
 
-def _bodyweight(db: DBSession, end: date, weeks_back: int) -> dict | None:
+def _bodyweight(db: DBSession, end: date, weeks_back: int, user_id: int) -> dict | None:
     """Change in the weekly-average weight over the period (reuses the shared
     weekly-average function)."""
     since = end - timedelta(days=7 * (weeks_back + 2) + 7)
-    rows = db.query(WeightLog).filter(WeightLog.date >= since, WeightLog.date <= end).all()
+    rows = db.query(WeightLog).filter(
+        WeightLog.user_id == user_id, WeightLog.date >= since, WeightLog.date <= end
+    ).all()
     weeks = weekly_averages({w.date: w.weight_kg for w in rows}, end)
     if len(weeks) < 2:
         return None
@@ -87,10 +90,12 @@ def _bodyweight(db: DBSession, end: date, weeks_back: int) -> dict | None:
     }
 
 
-def _diet(db: DBSession, start: date, end: date, settings) -> dict | None:
+def _diet(db: DBSession, start: date, end: date, settings, user_id: int) -> dict | None:
     """Days within ±10% of the calorie target and ≥90% of the protein target,
     over the days that actually have logged nutrition."""
-    rows = db.query(NutritionDay).filter(NutritionDay.date >= start, NutritionDay.date <= end).all()
+    rows = db.query(NutritionDay).filter(
+        NutritionDay.user_id == user_id, NutritionDay.date >= start, NutritionDay.date <= end
+    ).all()
     if not rows:
         return None
     cal_t, prot_t = settings.calorie_target, settings.protein_target_g
@@ -104,9 +109,11 @@ def _diet(db: DBSession, start: date, end: date, settings) -> dict | None:
     }
 
 
-def _sleep(db: DBSession, start: date, end: date, days: int) -> dict | None:
+def _sleep(db: DBSession, start: date, end: date, days: int, user_id: int) -> dict | None:
     def avg(s: date, e: date):
-        rows = db.query(SleepLog).filter(SleepLog.date >= s, SleepLog.date <= e).all()
+        rows = db.query(SleepLog).filter(
+            SleepLog.user_id == user_id, SleepLog.date >= s, SleepLog.date <= e
+        ).all()
         if not rows:
             return None, 0
         return sum(r.asleep_minutes for r in rows) / len(rows) / 60.0, len(rows)
@@ -122,7 +129,7 @@ def _sleep(db: DBSession, start: date, end: date, days: int) -> dict | None:
     }
 
 
-def _current_week_volume_flags(db: DBSession, settings, today: date) -> list[dict]:
+def _current_week_volume_flags(db: DBSession, settings, today: date, user_id: int) -> list[dict]:
     week_start = iso_week_start(today)
     since = datetime.combine(week_start, time.min)
     rows = (
@@ -131,6 +138,7 @@ def _current_week_volume_flags(db: DBSession, settings, today: date) -> list[dic
         .join(Session, Session.id == SessionExercise.session_id)
         .join(Set, Set.session_exercise_id == SessionExercise.id)
         .filter(
+            Session.user_id == user_id,
             Set.is_completed == True, Set.is_warmup == False,   # noqa: E712
             Session.started_at >= since,
         )
@@ -153,7 +161,7 @@ def _current_week_volume_flags(db: DBSession, settings, today: date) -> list[dic
     return flags
 
 
-def build_report(db: DBSession, period: str = "weekly") -> dict:
+def build_report(db: DBSession, user_id: int, period: str = "weekly") -> dict:
     if period not in PERIOD_DAYS:
         raise ValueError(f"period must be one of {list(PERIOD_DAYS)}")
     days = PERIOD_DAYS[period]
@@ -161,10 +169,10 @@ def build_report(db: DBSession, period: str = "weekly") -> dict:
     today = date.today()
     start = today - timedelta(days=days - 1)
 
-    settings = get_or_create_settings(db)
-    streak = streak_snapshot(db)
+    settings = get_or_create_settings(db, user_id)
+    streak = streak_snapshot(db, user_id)
 
-    prs = _period_prs(db, start, today)
+    prs = _period_prs(db, start, today, user_id)
     return {
         "period": period,
         "period_days": days,
@@ -176,14 +184,14 @@ def build_report(db: DBSession, period: str = "weekly") -> dict:
             "current": streak.current, "longest": streak.longest,
             "alive": streak.alive, "at_risk": streak.at_risk,
         },
-        "bodyweight": _bodyweight(db, today, weeks_back),
-        "diet": _diet(db, start, today, settings),
-        "sleep": _sleep(db, start, today, days),
+        "bodyweight": _bodyweight(db, today, weeks_back, user_id),
+        "diet": _diet(db, start, today, settings, user_id),
+        "sleep": _sleep(db, start, today, days, user_id),
         "plan": {
             "calorie_target": settings.calorie_target,
             "goal_kg_per_week": settings.goal_kg_per_week,
             "next_adapt": (iso_week_start(today) + timedelta(days=7)).isoformat(),
-            "volume_flags": _current_week_volume_flags(db, settings, today),
+            "volume_flags": _current_week_volume_flags(db, settings, today, user_id),
         },
         "coach_available": app_config.coach_enabled,
     }

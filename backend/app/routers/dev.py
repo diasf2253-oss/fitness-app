@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.auth import require_auth
 from app.db import get_db
-from app.models import NutritionDay, SleepLog, StepsLog, WeightLog
+from app.models import NutritionDay, SleepLog, StepsLog, User, WeightLog
 from app.routers.health import upsert_sleep, upsert_steps, upsert_weight
 from app.schemas import NutritionDayCreate
 
@@ -32,11 +32,12 @@ SAMPLE_DAYS = 30
 @router.post("/seed-sample-health")
 def seed_sample_health(
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """Upsert ~30 days of plausible health data ending today. Idempotent."""
     from app.routers.nutrition import upsert_nutrition
 
+    user_id = current_user.id
     rng = random.Random(42)  # fixed seed → same data every run
     today = date.today()
     days = 0
@@ -47,11 +48,11 @@ def seed_sample_health(
         days += 1
 
         weight += rng.uniform(-0.35, 0.25)
-        upsert_weight(db, d, round(weight, 1), SAMPLE_SOURCE)
+        upsert_weight(db, d, round(weight, 1), SAMPLE_SOURCE, user_id)
 
         # Weekdays trend higher than lazy Sundays
         base_steps = 11000 if d.weekday() < 5 else 7000
-        upsert_steps(db, d, base_steps + rng.randint(-3000, 3500), SAMPLE_SOURCE)
+        upsert_steps(db, d, base_steps + rng.randint(-3000, 3500), SAMPLE_SOURCE, user_id)
 
         asleep = rng.randint(360, 510)  # 6h–8.5h
         deep = int(asleep * rng.uniform(0.13, 0.2))
@@ -64,6 +65,7 @@ def seed_sample_health(
             rem_minutes=rem,
             core_minutes=asleep - deep - rem,
             source=SAMPLE_SOURCE,
+            user_id=user_id,
         )
 
         protein = rng.randint(150, 200)
@@ -88,7 +90,7 @@ def seed_sample_health(
                 "vitamin_d_ug": round(rng.uniform(4, 16), 1),
             },
             source=SAMPLE_SOURCE,
-        ))
+        ), user_id)
 
     db.commit()
     return {"status": "ok", "days_seeded": days, "from": str(today - timedelta(days=SAMPLE_DAYS - 1)), "to": str(today)}
@@ -97,14 +99,14 @@ def seed_sample_health(
 @router.delete("/seed-sample-health")
 def clear_sample_health(
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    """Delete only rows created by the seeder (source='sample')."""
+    """Delete only this user's rows created by the seeder (source='sample')."""
     deleted = 0
     for model in (WeightLog, StepsLog, SleepLog, NutritionDay):
         deleted += (
             db.query(model)
-            .filter(model.source == SAMPLE_SOURCE)
+            .filter(model.user_id == current_user.id, model.source == SAMPLE_SOURCE)
             .delete(synchronize_session=False)
         )
     db.commit()

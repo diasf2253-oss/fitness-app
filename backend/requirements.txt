@@ -2,6 +2,7 @@ fastapi==0.115.5
 uvicorn[standard]==0.32.1
 sqlalchemy==2.0.36
 psycopg[binary]==3.2.3   # PostgreSQL driver (production/Railway); SQLite needs none
+argon2-cffi==23.1.0      # password hashing (auth)
 alembic==1.14.0
 pydantic==2.10.3
 pydantic-settings==2.6.1

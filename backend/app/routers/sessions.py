@@ -27,9 +27,11 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session as DBSession
 
+from sqlalchemy import or_
+
 from app.auth import require_auth
 from app.db import get_db
-from app.models import Exercise, Routine, RoutineExercise, Session, SessionExercise, Set
+from app.models import Exercise, Routine, RoutineExercise, Session, SessionExercise, Set, User
 from app.routers.routine_notes import consume_pending_notes
 from app.schemas import (
     SessionCreate, SessionExerciseCreate, SessionExerciseOut, SessionOut,
@@ -47,14 +49,16 @@ router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 def start_session(
     body: SessionCreate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """
     Start a new workout session.
     If routine_id is given, pre-populate exercises and empty set rows
     matching the routine's target sets.
     """
+    user_id = current_user.id
     session = Session(
+        user_id=user_id,
         name=body.name,
         routine_id=body.routine_id,
         notes=body.notes,
@@ -64,10 +68,11 @@ def start_session(
 
     if body.routine_id:
         routine = db.get(Routine, body.routine_id)
-        if not routine:
+        if not routine or routine.user_id != user_id:
             raise HTTPException(status_code=404, detail="Routine not found")
         for re in sorted(routine.exercises, key=lambda x: x.position):
             se = SessionExercise(
+                user_id=user_id,
                 session_id=session.id,
                 exercise_id=re.exercise_id,
                 position=re.position,
@@ -76,13 +81,14 @@ def start_session(
             db.flush()
             for i in range(1, re.target_sets + 1):
                 db.add(Set(
+                    user_id=user_id,
                     session_exercise_id=se.id,
                     set_number=i,
                     weight_kg=0.0,
                     reps=0,
                 ))
         # Surface any pending next-session notes for this routine, once.
-        consume_pending_notes(db, body.routine_id, session.id)
+        consume_pending_notes(db, body.routine_id, session.id, user_id)
 
     db.commit()
     db.refresh(session)
@@ -92,7 +98,7 @@ def start_session(
 @router.get("/active", response_model=Optional[SessionOut])
 def get_active_session(
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """
     Return the most recent in-progress session (ended_at is NULL), or null.
@@ -101,7 +107,7 @@ def get_active_session(
     """
     return (
         db.query(Session)
-        .filter(Session.ended_at.is_(None))
+        .filter(Session.user_id == current_user.id, Session.ended_at.is_(None))
         .order_by(Session.started_at.desc())
         .first()
     )
@@ -112,11 +118,12 @@ def list_sessions(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """Return sessions newest-first, paginated."""
     return (
         db.query(Session)
+        .filter(Session.user_id == current_user.id)
         .order_by(Session.started_at.desc())
         .offset(offset)
         .limit(limit)
@@ -128,10 +135,10 @@ def list_sessions(
 def get_session(
     session_id: int,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     s = db.get(Session, session_id)
-    if not s:
+    if not s or s.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Session not found")
     return s
 
@@ -141,10 +148,10 @@ def update_session(
     session_id: int,
     body: SessionUpdate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     s = db.get(Session, session_id)
-    if not s:
+    if not s or s.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Session not found")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(s, field, value)
@@ -157,10 +164,10 @@ def update_session(
 def delete_session(
     session_id: int,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     s = db.get(Session, session_id)
-    if not s:
+    if not s or s.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Session not found")
     db.delete(s)
     db.commit()
@@ -175,7 +182,7 @@ def get_previous_sets(
     session_id: int,
     exercise_id: int,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """
     Find the most recent completed session (before this one) that included
@@ -183,7 +190,7 @@ def get_previous_sets(
     Used to pre-populate the weight/reps inputs so I can beat my last session.
     """
     current = db.get(Session, session_id)
-    if not current:
+    if not current or current.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Session not found")
 
     # Find the latest SessionExercise for this exercise before the current session
@@ -191,6 +198,7 @@ def get_previous_sets(
         db.query(SessionExercise)
         .join(Session)
         .filter(
+            Session.user_id == current_user.id,
             SessionExercise.exercise_id == exercise_id,
             Session.id != session_id,
             Session.ended_at.isnot(None),  # only finished sessions
@@ -212,16 +220,21 @@ def add_exercise_to_session(
     session_id: int,
     body: SessionExerciseCreate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
+    user_id = current_user.id
     s = db.get(Session, session_id)
-    if not s:
+    if not s or s.user_id != user_id:
         raise HTTPException(status_code=404, detail="Session not found")
-    ex = db.get(Exercise, body.exercise_id)
+    ex = db.query(Exercise).filter(
+        Exercise.id == body.exercise_id,
+        or_(Exercise.user_id.is_(None), Exercise.user_id == user_id),
+    ).first()
     if not ex:
         raise HTTPException(status_code=404, detail="Exercise not found")
 
     se = SessionExercise(
+        user_id=user_id,
         session_id=session_id,
         exercise_id=body.exercise_id,
         position=body.position,
@@ -230,7 +243,7 @@ def add_exercise_to_session(
     db.flush()
 
     for set_data in body.sets:
-        db.add(Set(session_exercise_id=se.id, **set_data.model_dump()))
+        db.add(Set(user_id=user_id, session_exercise_id=se.id, **set_data.model_dump()))
 
     db.commit()
     db.refresh(se)
@@ -242,10 +255,10 @@ def remove_exercise_from_session(
     session_id: int,
     se_id: int,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     se = db.get(SessionExercise, se_id)
-    if not se or se.session_id != session_id:
+    if not se or se.session_id != session_id or se.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Session exercise not found")
     db.delete(se)
     db.commit()
@@ -265,12 +278,12 @@ def add_set(
     se_id: int,
     body: SetCreate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     se = db.get(SessionExercise, se_id)
-    if not se or se.session_id != session_id:
+    if not se or se.session_id != session_id or se.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Session exercise not found")
-    new_set = Set(session_exercise_id=se_id, **body.model_dump())
+    new_set = Set(user_id=current_user.id, session_exercise_id=se_id, **body.model_dump())
     db.add(new_set)
     db.commit()
     db.refresh(new_set)
@@ -287,10 +300,10 @@ def update_set(
     set_id: int,
     body: SetUpdate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     s = db.get(Set, set_id)
-    if not s or s.session_exercise_id != se_id:
+    if not s or s.session_exercise_id != se_id or s.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Set not found")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(s, field, value)
@@ -311,10 +324,10 @@ def delete_set(
     se_id: int,
     set_id: int,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     s = db.get(Set, set_id)
-    if not s or s.session_exercise_id != se_id:
+    if not s or s.session_exercise_id != se_id or s.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Set not found")
     db.delete(s)
     db.commit()

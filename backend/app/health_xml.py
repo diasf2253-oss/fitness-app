@@ -25,7 +25,7 @@ WEIGHT_TYPE = "HKQuantityTypeIdentifierBodyMass"
 SLEEP_TYPE = "HKCategoryTypeIdentifierSleepAnalysis"
 
 
-def import_export_file(fileobj: BinaryIO, filename: str, db: DBSession) -> dict:
+def import_export_file(fileobj: BinaryIO, filename: str, db: DBSession, user_id: int) -> dict:
     """Parse an export.zip / export.xml stream and upsert daily rows."""
     if filename.lower().endswith(".zip") or zipfile.is_zipfile(fileobj):
         fileobj.seek(0)
@@ -82,4 +82,4 @@ def import_export_file(fileobj: BinaryIO, filename: str, db: DBSession) -> dict:
             elem.clear()
             root.clear()
 
-    return agg.finalize(db)
+    return agg.finalize(db, user_id)

@@ -207,10 +207,11 @@ class HealthAggregator:
 
     # -- resolve + persist -------------------------------------------------
 
-    def finalize(self, db: DBSession) -> dict:
+    def finalize(self, db: DBSession, user_id: int) -> dict:
         """
-        Reduce to the best source per day and upsert. Returns the canonical
-        import report shared by every ingest path.
+        Reduce to the best source per day and upsert (scoped to `user_id` —
+        the account whose ingest_token authenticated this push). Returns the
+        canonical import report shared by every ingest path.
         """
         # Lazy import: routers.health imports this module.
         from app.health_metrics import upsert_nutrition_partial
@@ -223,10 +224,10 @@ class HealthAggregator:
             if total > best_steps.get(d, 0):
                 best_steps[d] = total
         for d, steps in best_steps.items():
-            created += upsert_steps(db, d, steps, "apple_health")
+            created += upsert_steps(db, d, steps, "apple_health", user_id)
 
         for d, (_key, kg) in self.weight_by_day.items():
-            created += upsert_weight(db, d, kg, "apple_health")
+            created += upsert_weight(db, d, kg, "apple_health", user_id)
 
         best_sleep: dict[date, dict[str, float]] = {}
         for (d, _src), v in self.sleep_acc.items():
@@ -244,6 +245,7 @@ class HealthAggregator:
                 rem_minutes=round(v["rem"]) or None,
                 core_minutes=round(v["core"]) or None,
                 source="apple_health",
+                user_id=user_id,
             )
 
         best_diet: dict[date, dict[str, float]] = {}
@@ -253,7 +255,7 @@ class HealthAggregator:
             if kept is None or rank > (kept.get("calories", 0.0), len(kept)):
                 best_diet[d] = values
         for d, values in best_diet.items():
-            created += upsert_nutrition_partial(db, d, values, "apple_health")
+            created += upsert_nutrition_partial(db, d, values, "apple_health", user_id)
 
         all_days = (
             list(best_steps) + list(self.weight_by_day)

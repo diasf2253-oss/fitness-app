@@ -24,6 +24,7 @@ from app.routers import calendar, coach, dashboard, dev, exercises, health, insi
 from app.routers import settings as settings_router
 from app.routers import stats, sync, trackers
 from app.routers import streak, routine_notes, generator, report, diet, activities  # restored features
+from app.routers import admin, auth as auth_router  # Phase 1-2 friends beta
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -93,6 +94,8 @@ app.include_router(generator.router)
 app.include_router(report.router)
 app.include_router(diet.router)
 app.include_router(activities.router)
+app.include_router(auth_router.router)
+app.include_router(admin.router)
 
 
 # ---------------------------------------------------------------------------

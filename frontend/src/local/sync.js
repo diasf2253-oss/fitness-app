@@ -1,14 +1,26 @@
 /**
- * Sync client — talks to the laptop's /api/sync endpoints when it can
- * reach them; silently does nothing when it can't. Called on app open,
- * so being near the laptop is all it takes to stay in sync.
+ * Sync client — talks to the /api/sync endpoints when it can reach them
+ * (and a session is active); silently does nothing when it can't. Called
+ * on app open, so being online and logged in is all it takes to stay in
+ * sync.
+ *
+ * Auth: same-origin httpOnly session cookie (credentials: 'include'),
+ * exactly like the rest of the app — see src/api.js and src/auth.js. The
+ * probe step doubles as the reachability check AND the "who am I" check
+ * (GET /api/auth/me), since sync can't proceed without an active session.
+ *
+ * Multi-user local-first: this device's IndexedDB is wiped whenever the
+ * logged-in user differs from whoever it last synced as (see
+ * ensureLocalDbMatchesUser) — switching accounts on a shared device drops
+ * any local unsynced changes for the previous account. Acceptable because
+ * each person installs the PWA on their own device.
  *
  * Protocol (see backend/app/routers/sync.py + app/sync.py):
- *   1. GET  /api/sync/manifest — cheap reachability probe (short timeout)
+ *   1. GET  /api/auth/me — reachability + identity probe (short timeout)
  *   2. POST /api/sync/push     — send locally-dirty rows; server merges
  *      last-write-wins with health source precedence
  *   3. GET  /api/sync/pull?since=<last server_time> — fetch what changed
- *      on the laptop; merge into IndexedDB with the same rules
+ *      server-side; merge into IndexedDB with the same rules
  *   4. Remember the server_time for the next incremental pull
  *
  * Tables mirror app/sync.py SYNC_TABLES: parents before children so the
@@ -46,21 +58,30 @@ const SYNC_TABLES = {
   settings: { key: 'singleton' },
 }
 
-function authHeaders() {
-  return { Authorization: `Bearer ${localStorage.getItem('app_token') || 'changeme'}` }
-}
-
-async function probe() {
+/** Reachability + identity probe. Returns the current user (from
+ * /api/auth/me) or null when offline/unreachable/not logged in. */
+async function probeUser() {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
   try {
-    const r = await fetch(apiUrl('/api/sync/manifest'), { headers: authHeaders(), signal: controller.signal })
-    return r.ok
+    const r = await fetch(apiUrl('/api/auth/me'), { credentials: 'include', signal: controller.signal })
+    if (!r.ok) return null
+    return await r.json()
   } catch {
-    return false
+    return null
   } finally {
     clearTimeout(timer)
   }
+}
+
+/** Wipes every local table when the logged-in user differs from whoever
+ * this device last synced as — see the module docstring. */
+async function ensureLocalDbMatchesUser(userId) {
+  const stored = await getMeta('auth_user_id')
+  if (stored && stored !== userId) {
+    await Promise.all(db.tables.map(t => t.clear()))
+  }
+  await setMeta('auth_user_id', userId)
 }
 
 async function pushDirty() {
@@ -77,7 +98,8 @@ async function pushDirty() {
 
   const r = await fetch(apiUrl('/api/sync/push'), {
     method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tables }),
   })
   if (!r.ok) throw new Error(`push failed: HTTP ${r.status}`)
@@ -110,7 +132,7 @@ async function applyTable(name, rows) {
 
 async function pullSince(since) {
   const qs = since ? `?since=${encodeURIComponent(since)}` : ''
-  const r = await fetch(apiUrl(`/api/sync/pull${qs}`), { headers: authHeaders() })
+  const r = await fetch(apiUrl(`/api/sync/pull${qs}`), { credentials: 'include' })
   if (!r.ok) throw new Error(`pull failed: HTTP ${r.status}`)
   const body = await r.json()
 
@@ -123,11 +145,14 @@ async function pullSince(since) {
 
 /**
  * Full sync pass. Returns a small result object for the UI, or
- * { reachable: false } when the laptop isn't there — never throws
- * for unreachability, only for real protocol errors.
+ * { reachable: false } when the API isn't reachable or no session is
+ * active — never throws for that, only for real protocol errors.
  */
 export async function syncNow() {
-  if (!(await probe())) return { reachable: false }
+  const user = await probeUser()
+  if (!user) return { reachable: false }
+  await ensureLocalDbMatchesUser(user.id)
+
   const pushed = await pushDirty()
   const scopeCurrent = (await getMeta('sync_scope_version')) === SYNC_SCOPE_VERSION
   const since = scopeCurrent ? await getMeta('last_sync_at') : null

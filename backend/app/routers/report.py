@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session as DBSession
 from app.auth import require_auth
 from app.config import settings as app_settings
 from app.db import get_db
+from app.models import User
 from app.report import PERIOD_DAYS, build_report, report_markdown
 
 logger = logging.getLogger(__name__)
@@ -27,18 +28,18 @@ Period = Query("weekly", pattern="^(weekly|biweekly)$")
 def get_report(
     period: str = Period,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    return build_report(db, period)
+    return build_report(db, current_user.id, period)
 
 
 @router.get("/markdown")
 def get_report_markdown(
     period: str = Period,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    report = build_report(db, period)
+    report = build_report(db, current_user.id, period)
     md = report_markdown(report)
     filename = f"{period}-report-{report['end']}.md"
     return Response(
@@ -52,7 +53,7 @@ def get_report_markdown(
 def coach_plan(
     period: str = Period,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """Optional: a short narrative plan from the period's data. Returns 503 if
     no ANTHROPIC_API_KEY is configured — the report works fine without it."""
@@ -61,7 +62,7 @@ def coach_plan(
 
     import anthropic
 
-    md = report_markdown(build_report(db, period))
+    md = report_markdown(build_report(db, current_user.id, period))
     prompt = (
         "Here is my training/health report for the period. In 4-6 sentences, "
         "give me a focused, encouraging plan for next week: what to prioritise, "
