@@ -1,40 +1,13 @@
 """Workout generator — split arrangement, volume/priority logic, and apply."""
-import os
 from types import SimpleNamespace
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-TEST_DB_URL = "sqlite:///:memory:"
-os.environ["DATABASE_URL"] = TEST_DB_URL
-os.environ["APP_TOKEN"] = "testtoken"
-
-from app.db import Base, get_db
 from app.generator import arrange, generate, is_compound
-from app.main import app
 from app.models import Exercise, Routine
 from app.muscles import DEFAULT_VOLUME_TARGETS
 
-engine = create_engine(
-    TEST_DB_URL, connect_args={"check_same_thread": False}, poolclass=StaticPool
-)
-TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base.metadata.create_all(bind=engine)
-
-
-def override_get_db():
-    db = TestingSession()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-client = TestClient(app)
-AUTH = {"Authorization": "Bearer testtoken"}
+from tests.conftest import TestingSession
 
 
 def ex(i, name):
@@ -142,44 +115,40 @@ def test_weekly_sets_match_distributed_routine_sets():
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def db_with_exercises():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    previous = app.dependency_overrides.get(get_db)
-    app.dependency_overrides[get_db] = override_get_db
+def db_with_exercises(auth_client):
+    """Seed the logged-in user's exercise library + one hand-made routine.
+    Table setup/teardown and the get_db override come from conftest.clean_db."""
+    uid = auth_client.test_user_id
     db = TestingSession()
     for grp, items in POOLS.items():
         for e in items:
-            db.add(Exercise(name=e.name, primary_muscle_group=grp, is_custom=True))
-    db.add(Routine(name="My Upper", source="manual"))   # hand-made, must survive
+            db.add(Exercise(user_id=uid, name=e.name, primary_muscle_group=grp, is_custom=True))
+    db.add(Routine(user_id=uid, name="My Upper", source="manual"))   # hand-made, must survive
     db.commit()
     db.close()
-    yield
-    if previous is not None:
-        app.dependency_overrides[get_db] = previous
+    return uid
 
 
-def test_apply_creates_and_replaces_only_generated(db_with_exercises):
+def test_apply_creates_and_replaces_only_generated(auth_client, db_with_exercises):
     body = {"priority_muscles": ["Chest"], "days_per_week": 3, "split_type": "ppl"}
 
-    first = client.post("/api/generator/apply", json=body, headers=AUTH).json()
+    first = auth_client.post("/api/generator/apply", json=body).json()
     assert first["replaced"] == 0
     assert len(first["routines"]) == 3                  # Push / Pull / Legs
 
-    routines = client.get("/api/routines", headers=AUTH).json()
+    routines = auth_client.get("/api/routines").json()
     assert "My Upper" in [r["name"] for r in routines]
     assert sum(1 for r in routines if r["source"] == "generated") == 3
 
     # Re-applying replaces the generated set, never the manual routine
-    second = client.post("/api/generator/apply", json=body, headers=AUTH).json()
+    second = auth_client.post("/api/generator/apply", json=body).json()
     assert second["replaced"] == 3
-    routines2 = client.get("/api/routines", headers=AUTH).json()
+    routines2 = auth_client.get("/api/routines").json()
     assert sum(1 for r in routines2 if r["source"] == "generated") == 3
     assert "My Upper" in [r["name"] for r in routines2]
 
 
-def test_apply_rejects_bad_split(db_with_exercises):
-    r = client.post("/api/generator/apply",
-                    json={"priority_muscles": [], "days_per_week": 3, "split_type": "nope"},
-                    headers=AUTH)
+def test_apply_rejects_bad_split(auth_client, db_with_exercises):
+    r = auth_client.post("/api/generator/apply",
+                         json={"priority_muscles": [], "days_per_week": 3, "split_type": "nope"})
     assert r.status_code == 422

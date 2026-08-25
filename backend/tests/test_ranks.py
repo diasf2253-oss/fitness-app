@@ -1,55 +1,17 @@
 """Rank ladder — tier/division/LP mapping, config, and the endpoint."""
-import os
 from datetime import date, datetime, time, timedelta
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
+from app.models import Exercise, Session, SessionExercise, Set, WeightLog
 from app.ranks import (
     COMMON_ANCHORS, STANDARDS, compute_rank, effective_anchors, epley_1rm,
     exercise_benchmark, resolve_config, tier_lowers,
 )
 
-TEST_DB_URL = "sqlite:///:memory:"
-os.environ["DATABASE_URL"] = TEST_DB_URL
-os.environ["APP_TOKEN"] = "testtoken"
+from tests.conftest import TestingSession
 
-from app.db import Base, get_db
-from app.main import app
-from app.models import Exercise, Session, SessionExercise, Set, WeightLog
-
-engine = create_engine(
-    TEST_DB_URL, connect_args={"check_same_thread": False}, poolclass=StaticPool
-)
-TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base.metadata.create_all(bind=engine)
-
-
-def override_get_db():
-    db = TestingSession()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-client = TestClient(app)
-AUTH = {"Authorization": "Bearer testtoken"}
 SQUAT = STANDARDS["squat"]                    # [1.25, 1.50, 1.75, 2.25, 2.75]
-
-
-@pytest.fixture(autouse=True)
-def clean_db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    previous = app.dependency_overrides.get(get_db)
-    app.dependency_overrides[get_db] = override_get_db
-    yield
-    if previous is not None:
-        app.dependency_overrides[get_db] = previous
 
 
 # ---------------------------------------------------------------------------
@@ -139,26 +101,27 @@ def test_config_overrides_standards():
 # Endpoint
 # ---------------------------------------------------------------------------
 
-def _log(db, ex, weight, reps, days_ago=1):
-    s = Session(name="W", started_at=datetime.combine(date.today() - timedelta(days=days_ago), time(10)))
+def _log(db, user_id, ex, weight, reps, days_ago=1):
+    s = Session(user_id=user_id, name="W", started_at=datetime.combine(date.today() - timedelta(days=days_ago), time(10)))
     db.add(s); db.flush()
-    se = SessionExercise(session_id=s.id, exercise_id=ex.id, position=0)
+    se = SessionExercise(user_id=user_id, session_id=s.id, exercise_id=ex.id, position=0)
     db.add(se); db.flush()
-    db.add(Set(session_exercise_id=se.id, set_number=1, weight_kg=weight, reps=reps,
+    db.add(Set(user_id=user_id, session_exercise_id=se.id, set_number=1, weight_kg=weight, reps=reps,
                is_completed=True, is_warmup=False))
     db.commit()
 
 
-def test_endpoint_ranks_body_part_from_benchmark():
+def test_endpoint_ranks_body_part_from_benchmark(auth_client):
+    uid = auth_client.test_user_id
     db = TestingSession()
-    squat = Exercise(name="Barbell Squat", primary_muscle_group="Quads", is_custom=True)
+    squat = Exercise(user_id=uid, name="Barbell Squat", primary_muscle_group="Quads", is_custom=True)
     db.add(squat); db.flush()
-    db.add(WeightLog(date=date.today(), weight_kg=80.0, source="manual"))
+    db.add(WeightLog(user_id=uid, date=date.today(), weight_kg=80.0, source="manual"))
     db.commit()
-    _log(db, squat, 160, 1)        # 1RM 160, rel 2.0
+    _log(db, uid, squat, 160, 1)        # 1RM 160, rel 2.0
     db.close()
 
-    r = client.get("/api/ranks", headers=AUTH).json()
+    r = auth_client.get("/api/ranks").json()
     assert r["bodyweight"] == 80.0
     # Body part = average of its exercises' scores vs each exercise's benchmark.
     # Squat 160 / 80 bw = 2.0×; benchmark 1.75 → score 1.14 → Platinum.
@@ -176,18 +139,19 @@ def test_endpoint_ranks_body_part_from_benchmark():
     assert forearms["tracked"] is False and forearms["ranked"] is False
 
 
-def test_endpoint_muscle_rank_is_average_of_exercise_scores():
+def test_endpoint_muscle_rank_is_average_of_exercise_scores(auth_client):
+    uid = auth_client.test_user_id
     db = TestingSession()
-    squat = Exercise(name="Barbell Squat", primary_muscle_group="Quads", is_custom=True)
-    legext = Exercise(name="Leg Extension", primary_muscle_group="Quads", is_custom=True)
+    squat = Exercise(user_id=uid, name="Barbell Squat", primary_muscle_group="Quads", is_custom=True)
+    legext = Exercise(user_id=uid, name="Leg Extension", primary_muscle_group="Quads", is_custom=True)
     db.add_all([squat, legext]); db.flush()
-    db.add(WeightLog(date=date.today(), weight_kg=80.0, source="manual"))
+    db.add(WeightLog(user_id=uid, date=date.today(), weight_kg=80.0, source="manual"))
     db.commit()
-    _log(db, squat, 160, 1)        # score (160/80)/1.75 = 1.1429
-    _log(db, legext, 52, 1)        # score (52/80)/1.30  = 0.5000
+    _log(db, uid, squat, 160, 1)        # score (160/80)/1.75 = 1.1429
+    _log(db, uid, legext, 52, 1)        # score (52/80)/1.30  = 0.5000
     db.close()
 
-    r = client.get("/api/ranks", headers=AUTH).json()
+    r = auth_client.get("/api/ranks").json()
     quads = next(b for b in r["body_parts"] if b["muscle"] == "Quads")
     assert quads["n_exercises"] == 2
     mean = (160 / 80 / 1.75 + 52 / 80 / 1.30) / 2
@@ -197,32 +161,34 @@ def test_endpoint_muscle_rank_is_average_of_exercise_scores():
     assert quads["exercises"][0]["exercise_name"] == "Barbell Squat"
 
 
-def test_unranked_without_bodyweight():
+def test_unranked_without_bodyweight(auth_client):
+    uid = auth_client.test_user_id
     db = TestingSession()
-    squat = Exercise(name="Barbell Squat", primary_muscle_group="Quads", is_custom=True)
+    squat = Exercise(user_id=uid, name="Barbell Squat", primary_muscle_group="Quads", is_custom=True)
     db.add(squat); db.flush()
     db.close()
     _logdb = TestingSession()
-    _log(_logdb, squat, 160, 1)
+    _log(_logdb, uid, squat, 160, 1)
     _logdb.close()
 
-    r = client.get("/api/ranks", headers=AUTH).json()
+    r = auth_client.get("/api/ranks").json()
     assert r["bodyweight"] is None and r["note"]
     assert all(not b["ranked"] for b in r["body_parts"])
 
 
-def test_bodyweight_ignores_derived_sources():
+def test_bodyweight_ignores_derived_sources(auth_client):
     """Demo ('sample') and interpolated ('estimated') rows must never set the
     bodyweight every rank divides by — only real readings count, even when a
     derived row is more recent."""
+    uid = auth_client.test_user_id
     db = TestingSession()
-    db.add(WeightLog(date=date.today() - timedelta(days=3), weight_kg=80.0, source="apple_health"))
-    db.add(WeightLog(date=date.today() - timedelta(days=1), weight_kg=90.0, source="sample"))
-    db.add(WeightLog(date=date.today(), weight_kg=95.0, source="estimated"))
+    db.add(WeightLog(user_id=uid, date=date.today() - timedelta(days=3), weight_kg=80.0, source="apple_health"))
+    db.add(WeightLog(user_id=uid, date=date.today() - timedelta(days=1), weight_kg=90.0, source="sample"))
+    db.add(WeightLog(user_id=uid, date=date.today(), weight_kg=95.0, source="estimated"))
     db.commit()
     db.close()
 
-    r = client.get("/api/ranks", headers=AUTH).json()
+    r = auth_client.get("/api/ranks").json()
     assert r["bodyweight"] == 80.0
 
     # With ONLY derived rows there is no bodyweight at all → unranked, honest.
@@ -230,5 +196,5 @@ def test_bodyweight_ignores_derived_sources():
     db.query(WeightLog).filter(WeightLog.source == "apple_health").delete()
     db.commit()
     db.close()
-    r = client.get("/api/ranks", headers=AUTH).json()
+    r = auth_client.get("/api/ranks").json()
     assert r["bodyweight"] is None

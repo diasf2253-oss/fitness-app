@@ -113,9 +113,16 @@ SYNC_TABLES: dict[str, TableSpec] = {
 
 def _owner_filter(query, model: type, user_id: int):
     """Scope a query to rows this user may touch. Exercise is the one
-    owner-optional table: NULL (the shared global library) or their own."""
+    owner-optional table: NULL (the shared global library) or their own.
+    TrackerLog has no user_id column of its own — it is scoped through its
+    parent Tracker (tracker_id -> Tracker.user_id), matching how the FK
+    resolution owner-scopes it on push."""
     if model is Exercise:
         return query.filter(or_(model.user_id.is_(None), model.user_id == user_id))
+    if model is TrackerLog:
+        return query.join(Tracker, TrackerLog.tracker_id == Tracker.id).filter(
+            Tracker.user_id == user_id
+        )
     return query.filter(model.user_id == user_id)
 
 

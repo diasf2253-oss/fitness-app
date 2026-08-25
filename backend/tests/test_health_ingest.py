@@ -3,81 +3,48 @@ Tests for Apple Health ingest endpoint:
   - Correct parsing of step_count, weight_body_mass, sleep_analysis
   - Idempotency: re-posting the same payload changes nothing
   - lb → kg unit conversion for weight
+
+Ingest routes authenticate via the per-user bearer `ingest_token` (a Shortcut
+can't hold a cookie jar), not the session cookie — see require_ingest_auth.
 """
 import json
 import os
+
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-# Use an in-memory SQLite database for tests — never touches fitness.sqlite3
-TEST_DB_URL = "sqlite:///:memory:"
-
-# Override DATABASE_URL before importing the app so config picks it up
-os.environ["DATABASE_URL"] = TEST_DB_URL
-os.environ["APP_TOKEN"] = "testtoken"
-
-from sqlalchemy.pool import StaticPool
-from app.db import Base, get_db
-from app.main import app
 from app.models import StepsLog, WeightLog, SleepLog
 
-# StaticPool ensures all connections share one in-memory SQLite database.
-# Without it, each new connection gets a fresh empty DB and sees no tables.
-engine = create_engine(
-    TEST_DB_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base.metadata.create_all(bind=engine)
-
-
-def override_get_db():
-    db = TestingSession()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
-
-client = TestClient(app)
-AUTH = {"Authorization": "Bearer testtoken"}
+from tests.conftest import TestingSession
 
 SAMPLE_PAYLOAD_PATH = os.path.join(os.path.dirname(__file__), "sample_health_payload.json")
 
 
-@pytest.fixture(autouse=True)
-def clean_db():
-    """Wipe health tables before each test for isolation."""
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    yield
+def ingest_headers(client):
+    """Bearer header carrying the logged-in user's ingest_token."""
+    me = client.get("/api/auth/me").json()
+    return {"Authorization": f"Bearer {me['ingest_token']}"}
 
 
-def post_sample():
+def post_sample(client):
     with open(SAMPLE_PAYLOAD_PATH) as f:
         payload = json.load(f)
-    return client.post("/api/ingest/health", json=payload, headers=AUTH)
+    return client.post("/api/ingest/health", json=payload, headers=ingest_headers(client))
 
 
 class TestHealthIngest:
-    def test_ping_is_public(self):
+    def test_ping_is_public(self, client):
         r = client.get("/api/ping")
         assert r.status_code == 200
         body = r.json()
         assert body["status"] == "ok"
         assert "env" in body  # environment label for the STAGING badge
 
-    def test_ingest_requires_auth(self):
+    def test_ingest_requires_auth(self, client):
         r = client.post("/api/ingest/health", json={"data": {}})
-        assert r.status_code == 403  # no token
+        assert r.status_code == 401  # no token
 
-    def test_ingest_sample_payload(self):
-        r = post_sample()
+    def test_ingest_sample_payload(self, auth_client):
+        r = post_sample(auth_client)
         assert r.status_code == 200
         data = r.json()
         # 2 weight + 2 steps + 2 sleep + 2 nutrition days
@@ -88,8 +55,8 @@ class TestHealthIngest:
         assert "dietary_energy" in data["metrics_handled"]
         assert "sodium" in data["metrics_handled"]
 
-    def test_weight_stored_correctly(self):
-        post_sample()
+    def test_weight_stored_correctly(self, auth_client):
+        post_sample(auth_client)
         db = TestingSession()
         rows = db.query(WeightLog).order_by(WeightLog.date).all()
         db.close()
@@ -98,8 +65,8 @@ class TestHealthIngest:
         assert rows[1].weight_kg == pytest.approx(84.0, abs=0.01)
         assert rows[0].source == "apple_health"
 
-    def test_steps_stored_correctly(self):
-        post_sample()
+    def test_steps_stored_correctly(self, auth_client):
+        post_sample(auth_client)
         db = TestingSession()
         rows = db.query(StepsLog).order_by(StepsLog.date).all()
         db.close()
@@ -107,8 +74,8 @@ class TestHealthIngest:
         assert rows[0].steps == 8432
         assert rows[1].steps == 11205
 
-    def test_sleep_stored_correctly(self):
-        post_sample()
+    def test_sleep_stored_correctly(self, auth_client):
+        post_sample(auth_client)
         db = TestingSession()
         rows = db.query(SleepLog).order_by(SleepLog.date).all()
         db.close()
@@ -117,10 +84,10 @@ class TestHealthIngest:
         assert rows[0].deep_minutes == 68
         assert rows[0].rem_minutes == 95
 
-    def test_idempotent_repost(self):
+    def test_idempotent_repost(self, auth_client):
         """Re-posting the same payload must not create duplicate rows."""
-        r1 = post_sample()
-        r2 = post_sample()
+        r1 = post_sample(auth_client)
+        r2 = post_sample(auth_client)
         assert r1.status_code == 200
         assert r2.status_code == 200
         # Second post: no new rows created
@@ -132,7 +99,7 @@ class TestHealthIngest:
         assert db.query(SleepLog).count() == 2
         db.close()
 
-    def test_lb_to_kg_conversion(self):
+    def test_lb_to_kg_conversion(self, auth_client):
         """Weight in lb should be converted to kg on ingest."""
         payload = {
             "data": {
@@ -144,7 +111,7 @@ class TestHealthIngest:
                 "workouts": [],
             }
         }
-        r = client.post("/api/ingest/health", json=payload, headers=AUTH)
+        r = auth_client.post("/api/ingest/health", json=payload, headers=ingest_headers(auth_client))
         assert r.status_code == 200
         db = TestingSession()
         row = db.query(WeightLog).first()
@@ -152,7 +119,7 @@ class TestHealthIngest:
         # 185 lb × 0.453592 ≈ 83.91 kg
         assert row.weight_kg == pytest.approx(83.91, abs=0.1)
 
-    def test_unknown_metrics_ignored(self):
+    def test_unknown_metrics_ignored(self, auth_client):
         """Unknown metric names should be silently ignored, not crash."""
         payload = {
             "data": {
@@ -163,7 +130,7 @@ class TestHealthIngest:
                 "workouts": [],
             }
         }
-        r = client.post("/api/ingest/health", json=payload, headers=AUTH)
+        r = auth_client.post("/api/ingest/health", json=payload, headers=ingest_headers(auth_client))
         assert r.status_code == 200
         data = r.json()
         assert "heart_rate" in data["metrics_ignored"]

@@ -3,23 +3,28 @@ Shared pytest fixtures — in-memory DB + an authenticated test client.
 
 Phase 1-2 friends beta replaced the single shared APP_TOKEN bearer header
 with per-user cookie sessions, so the old `client = TestClient(app)` +
-`AUTH = {"Authorization": "Bearer testtoken"}` pattern duplicated across
-every test file no longer authenticates anything (every protected route
-now 401s on it). Use the `auth_client` fixture below instead: it's a
-TestClient already logged in as a fresh, active test user (id available via
-`auth_client.test_user_id`) — drop the `headers=AUTH` argument from calls
-and use `auth_client` in place of `client`.
+`AUTH = {"Authorization": "Bearer testtoken"}` pattern no longer
+authenticates anything (every protected route now 401s on it). The whole
+suite has been migrated to the fixtures below; new tests should use them
+too rather than re-introducing per-file DB/TestClient/token setup.
 
-Only tests/test_safety_net.py has been migrated to this pattern so far, as
-a template. The other test files still carry their own old per-file
-DB/TestClient/APP_TOKEN setup and need the same migration:
-  - Remove the file's own `client = TestClient(app)`, `AUTH = {...}`,
-    `os.environ["APP_TOKEN"] = ...`, and duplicated `clean_db`/`override_get_db`
-    (all now provided here).
-  - Replace `client.get(..., headers=AUTH)` with `auth_client.get(...)`.
-  - A test needing a second, independent user should build one directly
-    (see test_safety_net.py's cross-user isolation tests for the pattern:
-    create a User row with app.auth.hash_password, POST /api/auth/login).
+Patterns for new tests:
+  - Take `auth_client` and drop any `headers=AUTH`: it's a TestClient
+    already logged in as a fresh, active user (id via
+    `auth_client.test_user_id`). Use plain `client` for the
+    unauthenticated case (a protected route returns 401).
+  - Seeding rows straight into the DB? Import `TestingSession` from here and
+    set `user_id=auth_client.test_user_id` on every row — every data table
+    is user-scoped and the endpoints filter by the caller's id (the two
+    exceptions: `Exercise.user_id` is optional, and `TrackerLog` has no
+    user_id, being reached through its Tracker).
+  - Apple Health ingest routes (`/api/ingest/health*`) authenticate with the
+    per-user bearer `ingest_token`, not the cookie — read it from
+    `auth_client.get("/api/auth/me").json()["ingest_token"]` and send it as
+    `Authorization: Bearer <token>` (see test_health_ingest.py).
+  - A test needing a second, independent user builds one directly (see
+    test_safety_net.py's cross-user isolation tests: create a User row with
+    app.auth.hash_password, POST /api/auth/login on a second client).
 """
 import os
 
@@ -28,6 +33,12 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 # never be sent back, so every "authenticated" request after login would
 # silently 401. See config.py's session_cookie_secure docstring.
 os.environ.setdefault("SESSION_COOKIE_SECURE", "false")
+# The Coach is gated on ANTHROPIC_API_KEY. Put an empty key on the
+# environment (which outranks any real key in a dev .env) BEFORE the app —
+# and therefore config's settings singleton — imports, so coach endpoints
+# 503 deterministically in tests. An explicit key exported in the shell
+# still wins, for anyone deliberately exercising the live coach.
+os.environ.setdefault("ANTHROPIC_API_KEY", "")
 
 import pytest
 from fastapi.testclient import TestClient

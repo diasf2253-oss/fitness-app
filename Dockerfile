@@ -4,7 +4,8 @@
 #
 # Persist the database! Mount a volume at /app/data and set:
 #   DATABASE_URL=sqlite:////app/data/fitness.sqlite3
-# (or point DATABASE_URL at Postgres). Also set a strong APP_TOKEN.
+# (or point DATABASE_URL at Postgres). Also set ADMIN_EMAIL/ADMIN_PASSWORD
+# (Phase 1-2 friends beta — creates the admin account + first invite code).
 # ---------------------------------------------------------------------------
 
 FROM node:20-alpine AS frontend
@@ -32,6 +33,8 @@ ENV FRONTEND_DIST=/app/static
 
 EXPOSE 8000
 
-# Migrations and the (idempotent) exercise-library seed run on every boot,
-# so a fresh volume comes up ready to use.
-CMD ["sh", "-c", "alembic upgrade head && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Migrations, the admin account + first invite code, and the (idempotent)
+# exercise-library seed all run on every boot, so a fresh volume comes up
+# ready to use. seed_admin requires ADMIN_EMAIL/ADMIN_PASSWORD to be set —
+# the boot fails loudly (rather than inventing credentials) if they aren't.
+CMD ["sh", "-c", "alembic upgrade head && python -m app.seed_admin && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

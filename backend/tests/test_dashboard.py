@@ -5,60 +5,12 @@ Phase 2 tests:
   - /api/dashboard aggregation, both with empty tables and with data
   - Sample-data seeder: idempotent load, surgical clear
 """
-import os
 from datetime import date, timedelta
 
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-TEST_DB_URL = "sqlite:///:memory:"
-os.environ["DATABASE_URL"] = TEST_DB_URL
-os.environ["APP_TOKEN"] = "testtoken"
-
-from app.db import Base, get_db
-from app.main import app
 from app.models import NutritionDay, WeightLog
 from app.routers.dashboard import moving_average_7d
 
-engine = create_engine(
-    TEST_DB_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base.metadata.create_all(bind=engine)
-
-
-def override_get_db():
-    db = TestingSession()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-client = TestClient(app)
-AUTH = {"Authorization": "Bearer testtoken"}
-
-
-@pytest.fixture(autouse=True)
-def clean_db():
-    """
-    Fresh tables per test, and point the app's get_db at THIS module's
-    engine for the duration of each test. Other test modules install
-    their own override at import time (last import wins), so we claim it
-    in the fixture and hand back whatever was there before.
-    """
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    previous = app.dependency_overrides.get(get_db)
-    app.dependency_overrides[get_db] = override_get_db
-    yield
-    if previous is not None:
-        app.dependency_overrides[get_db] = previous
+from tests.conftest import TestingSession
 
 
 # ---------------------------------------------------------------------------
@@ -66,10 +18,10 @@ def clean_db():
 # ---------------------------------------------------------------------------
 
 class TestManualUpserts:
-    def test_weight_upsert_updates_not_duplicates(self):
+    def test_weight_upsert_updates_not_duplicates(self, auth_client):
         d = "2026-06-01"
-        r1 = client.post("/api/health/weight", json={"date": d, "weight_kg": 84.0}, headers=AUTH)
-        r2 = client.post("/api/health/weight", json={"date": d, "weight_kg": 83.4}, headers=AUTH)
+        r1 = auth_client.post("/api/health/weight", json={"date": d, "weight_kg": 84.0})
+        r2 = auth_client.post("/api/health/weight", json={"date": d, "weight_kg": 83.4})
         assert r1.status_code == 201 and r2.status_code == 201
         assert r2.json()["weight_kg"] == 83.4
         assert r2.json()["source"] == "manual"
@@ -80,31 +32,31 @@ class TestManualUpserts:
         assert len(rows) == 1
         assert rows[0].weight_kg == 83.4
 
-    def test_steps_sleep_nutrition_upserts(self):
+    def test_steps_sleep_nutrition_upserts(self, auth_client):
         d = "2026-06-01"
-        client.post("/api/health/steps", json={"date": d, "steps": 9000}, headers=AUTH)
-        r = client.post("/api/health/steps", json={"date": d, "steps": 10500}, headers=AUTH)
+        auth_client.post("/api/health/steps", json={"date": d, "steps": 9000})
+        r = auth_client.post("/api/health/steps", json={"date": d, "steps": 10500})
         assert r.json()["steps"] == 10500
 
         sleep_body = {"date": d, "asleep_minutes": 420, "in_bed_minutes": 460}
-        client.post("/api/health/sleep", json=sleep_body, headers=AUTH)
-        r = client.post("/api/health/sleep", json={**sleep_body, "asleep_minutes": 430}, headers=AUTH)
+        auth_client.post("/api/health/sleep", json=sleep_body)
+        r = auth_client.post("/api/health/sleep", json={**sleep_body, "asleep_minutes": 430})
         assert r.json()["asleep_minutes"] == 430
 
         nut = {"date": d, "calories": 2200, "protein_g": 170, "carbs_g": 220, "fat_g": 80}
-        client.post("/api/nutrition", json=nut, headers=AUTH)
-        r = client.post("/api/nutrition", json={**nut, "calories": 2350}, headers=AUTH)
+        auth_client.post("/api/nutrition", json=nut)
+        r = auth_client.post("/api/nutrition", json={**nut, "calories": 2350})
         assert r.json()["calories"] == 2350
 
         db = TestingSession()
         assert db.query(NutritionDay).count() == 1
         db.close()
 
-    def test_requires_auth(self):
+    def test_requires_auth(self, client):
         r = client.post("/api/health/weight", json={"date": "2026-06-01", "weight_kg": 84})
-        assert r.status_code == 403
+        assert r.status_code == 401
         r = client.get("/api/dashboard")
-        assert r.status_code == 403
+        assert r.status_code == 401
 
 
 # ---------------------------------------------------------------------------
@@ -144,8 +96,8 @@ class TestMovingAverage:
 # ---------------------------------------------------------------------------
 
 class TestDashboard:
-    def test_empty_tables_render_sensibly(self):
-        r = client.get("/api/dashboard", headers=AUTH)
+    def test_empty_tables_render_sensibly(self, auth_client):
+        r = auth_client.get("/api/dashboard")
         assert r.status_code == 200
         data = r.json()
         assert data["weight"]["series"] == []
@@ -162,20 +114,19 @@ class TestDashboard:
         assert data["training"]["sessions_this_week"] == 0
         assert data["training"]["recent_prs"] == []
 
-    def test_with_data(self):
+    def test_with_data(self, auth_client):
         # Weight series across 10 days + today's nutrition
         today = date.today()
         for i in range(10):
             d = (today - timedelta(days=9 - i)).isoformat()
-            client.post("/api/health/weight", json={"date": d, "weight_kg": 84.0 - i * 0.1}, headers=AUTH)
-        client.post("/api/health/steps", json={"date": today.isoformat(), "steps": 12000}, headers=AUTH)
-        client.post(
+            auth_client.post("/api/health/weight", json={"date": d, "weight_kg": 84.0 - i * 0.1})
+        auth_client.post("/api/health/steps", json={"date": today.isoformat(), "steps": 12000})
+        auth_client.post(
             "/api/nutrition",
             json={"date": today.isoformat(), "calories": 2500, "protein_g": 190, "carbs_g": 240, "fat_g": 90},
-            headers=AUTH,
         )
 
-        data = client.get("/api/dashboard", headers=AUTH).json()
+        data = auth_client.get("/api/dashboard").json()
         assert len(data["weight"]["series"]) == 10
         assert len(data["weight"]["moving_avg_7d"]) == 10
         # Moving average lags the raw series on a downward trend
@@ -184,27 +135,24 @@ class TestDashboard:
         assert data["nutrition_today"]["logged"] is True
         assert data["nutrition_today"]["calories"] == 2500
 
-    def test_training_section_reuses_session_stats(self):
+    def test_training_section_reuses_session_stats(self, auth_client):
         # Build a tiny finished session through the real API
-        ex = client.post(
+        ex = auth_client.post(
             "/api/exercises",
             json={"name": "Test Press", "primary_muscle": "chest", "is_custom": True},
-            headers=AUTH,
         ).json()
-        session = client.post("/api/sessions", json={"name": "Quick"}, headers=AUTH).json()
-        se = client.post(
+        session = auth_client.post("/api/sessions", json={"name": "Quick"}).json()
+        se = auth_client.post(
             f"/api/sessions/{session['id']}/exercises",
             json={"exercise_id": ex["id"], "position": 0,
                   "sets": [{"set_number": 1, "weight_kg": 100, "reps": 5}]},
-            headers=AUTH,
         ).json()
-        client.patch(
+        auth_client.patch(
             f"/api/sessions/{session['id']}/exercises/{se['id']}/sets/{se['sets'][0]['id']}",
             json={"is_completed": True},
-            headers=AUTH,
         )
 
-        data = client.get("/api/dashboard", headers=AUTH).json()
+        data = auth_client.get("/api/dashboard").json()
         assert data["training"]["sessions_this_week"] == 1
         assert data["training"]["week_volume_kg"] == 500.0  # 100 kg × 5
         kinds = {pr["kind"] for pr in data["training"]["recent_prs"]}
@@ -216,8 +164,8 @@ class TestDashboard:
 # ---------------------------------------------------------------------------
 
 class TestSampleSeeder:
-    def test_seed_is_idempotent(self):
-        r1 = client.post("/api/dev/seed-sample-health", headers=AUTH)
+    def test_seed_is_idempotent(self, auth_client):
+        r1 = auth_client.post("/api/dev/seed-sample-health")
         assert r1.status_code == 200
         assert r1.json()["days_seeded"] == 30
 
@@ -225,19 +173,19 @@ class TestSampleSeeder:
         count_after_first = db.query(WeightLog).count()
         db.close()
 
-        client.post("/api/dev/seed-sample-health", headers=AUTH)
+        auth_client.post("/api/dev/seed-sample-health")
         db = TestingSession()
         count_after_second = db.query(WeightLog).count()
         db.close()
         assert count_after_first == count_after_second == 30
 
-    def test_clear_removes_only_sample_rows(self):
-        client.post("/api/dev/seed-sample-health", headers=AUTH)
+    def test_clear_removes_only_sample_rows(self, auth_client):
+        auth_client.post("/api/dev/seed-sample-health")
         # A manual correction on a date inside the seeded range must survive
         manual_date = date.today().isoformat()
-        client.post("/api/health/weight", json={"date": manual_date, "weight_kg": 99.9}, headers=AUTH)
+        auth_client.post("/api/health/weight", json={"date": manual_date, "weight_kg": 99.9})
 
-        r = client.delete("/api/dev/seed-sample-health", headers=AUTH)
+        r = auth_client.delete("/api/dev/seed-sample-health")
         assert r.status_code == 200
 
         db = TestingSession()
