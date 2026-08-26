@@ -87,7 +87,8 @@ export default function Join() {
         <ErrorBox error={error} />
         <div className="form-group">
           <label htmlFor="join-name">Name</label>
-          <input id="join-name" value={name} onChange={e => setName(e.target.value)} required />
+          <input id="join-name" autoComplete="name" autoCapitalize="words"
+            value={name} onChange={e => setName(e.target.value)} required />
         </div>
         <div className="form-group">
           <label htmlFor="join-email">Email</label>
