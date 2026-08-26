@@ -33,8 +33,9 @@ ENV FRONTEND_DIST=/app/static
 
 EXPOSE 8000
 
-# Migrations, the admin account + first invite code, and the (idempotent)
-# exercise-library seed all run on every boot, so a fresh volume comes up
-# ready to use. seed_admin requires ADMIN_EMAIL/ADMIN_PASSWORD to be set —
-# the boot fails loudly (rather than inventing credentials) if they aren't.
+# Boot sequence: apply DB migrations, ensure the admin account + first invite
+# code exist, seed the (idempotent) exercise library, then start the server.
+# All three steps are safe to re-run on every deploy. The real database lives
+# on the persistent volume mounted at /app/data and survives redeploys, so no
+# user data is seeded here — that was a one-time bootstrap and is now done.
 CMD ["sh", "-c", "alembic upgrade head && python -m app.seed_admin && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
