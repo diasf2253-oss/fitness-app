@@ -192,11 +192,11 @@ export default function Diet() {
                 <div className="form-row">
                   <div className="form-group">
                     <label>Protein (g)</label>
-                    <input type="number" min="0" value={protein} onChange={ev => setProtein(ev.target.value)} />
+                    <input type="number" inputMode="numeric" min="0" value={protein} onChange={ev => setProtein(ev.target.value)} />
                   </div>
                   <div className="form-group">
                     <label>Fat (g)</label>
-                    <input type="number" min="0" value={fat} onChange={ev => setFat(ev.target.value)} />
+                    <input type="number" inputMode="numeric" min="0" value={fat} onChange={ev => setFat(ev.target.value)} />
                   </div>
                 </div>
                 <p className="muted" style={{ fontSize: '0.74rem', margin: '0 0 0.75rem' }}>
@@ -237,7 +237,7 @@ export default function Diet() {
                 {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{cap(t)}</option>)}
               </select>
               <input type="date" value={actDate} onChange={ev => setActDate(ev.target.value)} style={{ width: 'auto', flex: '1 1 130px' }} />
-              <input type="number" min="1" value={actDur} onChange={ev => setActDur(ev.target.value)} aria-label="Duration in minutes" style={{ width: 'auto', flex: '1 1 70px' }} />
+              <input type="number" inputMode="numeric" min="1" value={actDur} onChange={ev => setActDur(ev.target.value)} aria-label="Duration in minutes" style={{ width: 'auto', flex: '1 1 70px' }} />
               <button type="submit" disabled={addingAct} style={{ flex: '0 0 auto' }}>{addingAct ? '…' : 'Add'}</button>
             </form>
             {data.activities.length === 0 ? (

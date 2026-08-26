@@ -284,7 +284,7 @@ function ProfileCard() {
       </div>
       <div className="row" style={{ alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
         <label style={{ flex: 1 }}>Age</label>
-        <input type="number" min="10" max="100" value={age} onChange={e => setAge(e.target.value)} style={{ width: 80 }} />
+        <input type="number" inputMode="numeric" min="10" max="100" value={age} onChange={e => setAge(e.target.value)} style={{ width: 80 }} />
         <button onClick={save} style={{ minWidth: 90 }}>{saved ? '✓ Saved' : 'Save'}</button>
       </div>
     </div>
@@ -324,10 +324,10 @@ function RestTimerSettingsCard() {
       {error && <p className="muted" style={{ color: 'var(--color-danger)' }}>{error}</p>}
       <div className="row" style={{ alignItems: 'center', gap: '0.4rem' }}>
         <label style={{ flex: 1 }}>Default rest</label>
-        <input type="number" min="0" max="20" value={mins} onChange={e => setMins(e.target.value)}
+        <input type="number" inputMode="numeric" min="0" max="20" value={mins} onChange={e => setMins(e.target.value)}
           aria-label="Minutes" style={{ width: 64 }} />
         <span className="muted">min</span>
-        <input type="number" min="0" max="59" value={secs} onChange={e => setSecs(e.target.value)}
+        <input type="number" inputMode="numeric" min="0" max="59" value={secs} onChange={e => setSecs(e.target.value)}
           aria-label="Seconds" style={{ width: 64 }} />
         <span className="muted">sec</span>
         <button onClick={save} style={{ minWidth: 90 }}>{saved ? '✓ Saved' : 'Save'}</button>
@@ -364,7 +364,7 @@ function StreakSettingsCard() {
       {error && <p className="muted" style={{ color: 'var(--color-danger)' }}>{error}</p>}
       <div className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
         <label style={{ flex: 1 }}>Allowed rest days</label>
-        <input type="number" min="0" max="7" value={gap} onChange={e => setGap(e.target.value)} style={{ width: 80 }} />
+        <input type="number" inputMode="numeric" min="0" max="7" value={gap} onChange={e => setGap(e.target.value)} style={{ width: 80 }} />
         <button onClick={save} style={{ minWidth: 90 }}>{saved ? '✓ Saved' : 'Save'}</button>
       </div>
     </div>
@@ -418,10 +418,10 @@ function VolumeTargetsCard() {
         {Object.entries(targets).map(([m, { low, high }]) => (
           <div key={m} className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
             <span style={{ flex: 1, fontSize: '0.88rem' }}>{m}</span>
-            <input type="number" min="0" value={low} onChange={e => setField(m, 'low', e.target.value)}
+            <input type="number" inputMode="numeric" min="0" value={low} onChange={e => setField(m, 'low', e.target.value)}
               aria-label={`${m} minimum sets`} style={{ width: 66 }} />
             <span className="muted">–</span>
-            <input type="number" min="0" value={high} onChange={e => setField(m, 'high', e.target.value)}
+            <input type="number" inputMode="numeric" min="0" value={high} onChange={e => setField(m, 'high', e.target.value)}
               aria-label={`${m} maximum sets`} style={{ width: 66 }} />
           </div>
         ))}
