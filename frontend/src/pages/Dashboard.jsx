@@ -13,7 +13,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { apiFetch } from '../api'
-import { Loading, ErrorBox } from '../components/States'
+import { Loading, ErrorBox, EmptyNote } from '../components/States'
 import MonthCalendar from '../components/MonthCalendar'
 import WidgetLabel from '../components/WidgetLabel'
 import CheckIn from '../components/CheckIn'
@@ -43,14 +43,6 @@ function weightDot(props) {
   return payload.estimated
     ? <circle key={index} cx={cx} cy={cy} r={2.2} fill="none" stroke={SAGE} strokeWidth={1} strokeOpacity={0.55} />
     : <circle key={index} cx={cx} cy={cy} r={2} fill={SAGE} />
-}
-
-function EmptyNote({ children }) {
-  return (
-    <p className="muted" style={{ textAlign: 'center', padding: '1.1rem 0' }}>
-      {children || <>No data yet. <Link to="/log">Log manually ›</Link></>}
-    </p>
-  )
 }
 
 function MacroBar({ label, value, target, over }) {

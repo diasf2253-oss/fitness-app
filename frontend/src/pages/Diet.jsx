@@ -6,7 +6,7 @@
  */
 import React, { useEffect, useState } from 'react'
 import { apiFetch } from '../api'
-import { Loading, ErrorBox } from '../components/States'
+import { Loading, ErrorBox, EmptyNote } from '../components/States'
 import PageHero from '../components/PageHero'
 import WidgetLabel from '../components/WidgetLabel'
 import NutrientBreakdown from '../components/NutrientBreakdown'
@@ -241,7 +241,7 @@ export default function Diet() {
               <button type="submit" disabled={addingAct} style={{ flex: '0 0 auto' }}>{addingAct ? '…' : 'Add'}</button>
             </form>
             {data.activities.length === 0 ? (
-              <p className="muted" style={{ fontSize: '0.85rem' }}>No sessions logged in the last 14 days.</p>
+              <EmptyNote>No sessions logged in the last 14 days.</EmptyNote>
             ) : (
               data.activities.map(a => (
                 <div key={a.id} className="row" style={{ padding: '0.4rem 0', borderBottom: '1px solid var(--color-border)' }}>

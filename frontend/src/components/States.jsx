@@ -3,6 +3,7 @@
  * Every page that fetches data uses these for consistent UX.
  */
 import React from 'react'
+import { Link } from 'react-router-dom'
 
 export function Loading({ label = 'Loading…' }) {
   return <div className="loading">{label}</div>
@@ -31,5 +32,17 @@ export function EmptyState({ children }) {
       <CairnMark />
       <p className="muted">{children}</p>
     </div>
+  )
+}
+
+/**
+ * Lighter, inline empty note for a single card or tile (vs the full-view
+ * EmptyState card). With no children it falls back to a "log manually" nudge.
+ */
+export function EmptyNote({ children }) {
+  return (
+    <p className="muted" style={{ textAlign: 'center', padding: '1.1rem 0' }}>
+      {children || <>No data yet. <Link to="/log">Log manually ›</Link></>}
+    </p>
   )
 }

@@ -10,7 +10,7 @@ import React, { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { apiFetch } from '../api'
 import ExercisePicker from '../components/ExercisePicker'
-import { Loading, ErrorBox, EmptyState } from '../components/States'
+import { Loading, ErrorBox, EmptyState, EmptyNote } from '../components/States'
 
 export default function Routines() {
   const [routines, setRoutines] = useState([])
@@ -200,7 +200,7 @@ function RoutineEditor({ routine, onSaved, onCancel }) {
 
       <h3 style={{ marginTop: '1rem' }}>Exercises</h3>
       {items.length === 0 && (
-        <p className="muted" style={{ padding: '0.5rem 0' }}>No exercises yet. Add some below.</p>
+        <EmptyNote>No exercises yet. Add some below.</EmptyNote>
       )}
 
       <div className="col" style={{ gap: '0.75rem' }}>

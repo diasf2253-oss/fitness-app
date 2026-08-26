@@ -6,7 +6,7 @@
  */
 import React, { useEffect, useState } from 'react'
 import { apiFetch } from '../api'
-import { Loading, ErrorBox } from '../components/States'
+import { Loading, ErrorBox, EmptyNote } from '../components/States'
 import PageHero from '../components/PageHero'
 import WidgetLabel from '../components/WidgetLabel'
 import { reportMarkdown } from '../local/api/report'
@@ -22,8 +22,6 @@ function Section({ title, aside, children }) {
     </div>
   )
 }
-
-const NoData = () => <p className="muted" style={{ fontSize: '0.85rem' }}>No data for this period.</p>
 
 export default function Report() {
   const [period, setPeriod] = useState('weekly')
@@ -115,7 +113,7 @@ export default function Report() {
 
           {/* Bodyweight */}
           <Section title="Bodyweight trend" aside="weekly avg">
-            {!r.bodyweight ? <NoData /> : (
+            {!r.bodyweight ? <EmptyNote>No data for this period.</EmptyNote> : (
               <div className="row" style={{ alignItems: 'baseline', gap: '0.5rem' }}>
                 <span className="tnum">{r.bodyweight.start_avg} kg</span>
                 <span className="muted">→</span>
@@ -129,7 +127,7 @@ export default function Report() {
 
           {/* Diet adherence */}
           <Section title="Diet adherence" aside={r.diet ? `${r.diet.logged_days} logged days` : null}>
-            {!r.diet ? <NoData /> : (
+            {!r.diet ? <EmptyNote>No data for this period.</EmptyNote> : (
               <div className="row" style={{ gap: '1.5rem' }}>
                 <div><div className="stat-num" style={{ fontSize: '1.8rem' }}>{r.diet.calorie_pct}%</div><WidgetLabel>calories on target</WidgetLabel></div>
                 <div><div className="stat-num" style={{ fontSize: '1.8rem' }}>{r.diet.protein_pct}%</div><WidgetLabel>protein on target</WidgetLabel></div>
@@ -139,7 +137,7 @@ export default function Report() {
 
           {/* Sleep */}
           <Section title="Sleep" aside={r.sleep ? `${r.sleep.nights} nights` : null}>
-            {!r.sleep ? <NoData /> : (
+            {!r.sleep ? <EmptyNote>No data for this period.</EmptyNote> : (
               <div className="row" style={{ alignItems: 'baseline', gap: '0.5rem' }}>
                 <span className="stat-num" style={{ fontSize: '1.8rem' }}>{r.sleep.avg_hours} h</span>
                 {r.sleep.change_h != null && (
