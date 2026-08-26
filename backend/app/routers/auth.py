@@ -21,13 +21,14 @@ from app.auth import (
 )
 from app.config import settings
 from app.db import get_db
+from app.ratelimit import rate_limit
 from app.models import AuthSession, InviteCode, User
 from app.schemas import ChangePasswordRequest, JoinRequest, LoginRequest, UserMeOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-@router.post("/join")
+@router.post("/join", dependencies=[Depends(rate_limit(5, scope="join"))])
 def join(body: JoinRequest, db: DBSession = Depends(get_db)):
     """
     Creates a 'pending' account if — and only if — `code` is a valid, active,
@@ -59,7 +60,7 @@ def join(body: JoinRequest, db: DBSession = Depends(get_db)):
     return {"status": "pending"}
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(rate_limit(10, scope="login"))])
 def login(body: LoginRequest, response: Response, db: DBSession = Depends(get_db)):
     email = body.email.strip().lower()
     user = db.query(User).filter(User.email == email).first()

@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     # immediately look logged-out. Always true on Railway/Vercel (HTTPS).
     session_cookie_secure: bool = True
 
+    # Brute-force speed bump on the auth endpoints (login/join), enforced in
+    # app/ratelimit.py. Disabled in tests (conftest sets it false) so the
+    # suite's many logins don't trip the limit.
+    auth_rate_limit_enabled: bool = True
+
     # Seeds the first admin account (python -m app.seed_admin) and the
     # migration backfill that attaches all pre-multi-user data to it.
     # Never hardcode these — env vars only.

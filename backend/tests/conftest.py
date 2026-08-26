@@ -33,6 +33,10 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 # never be sent back, so every "authenticated" request after login would
 # silently 401. See config.py's session_cookie_secure docstring.
 os.environ.setdefault("SESSION_COOKIE_SECURE", "false")
+# The auth endpoints carry an IP rate limit; the suite logs in on nearly every
+# test, so disable it globally here. test_rate_limit.py flips
+# settings.auth_rate_limit_enabled back on per-test to exercise it.
+os.environ.setdefault("AUTH_RATE_LIMIT_ENABLED", "false")
 # The Coach is gated on ANTHROPIC_API_KEY. Put an empty key on the
 # environment (which outranks any real key in a dev .env) BEFORE the app —
 # and therefore config's settings singleton — imports, so coach endpoints
