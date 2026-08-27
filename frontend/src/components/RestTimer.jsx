@@ -4,7 +4,11 @@
  * Behaviour:
  *  - Counts down from `seconds`
  *  - −15 / +15 quick adjust; pause/resume; while paused, add a custom amount
- *  - Plays a beep + browser notification when it reaches zero
+ *  - Plays a beep + vibration + browser notification when it reaches zero
+ *
+ * Mobile-first layout: the time sits on its own row, and the controls share a
+ * full-width row below (each button flex:1), so nothing overflows a ~360px
+ * phone — the old single-row pill pushed −15/+15 off-screen.
  *
  * Props:
  *   seconds  — starting duration in seconds
@@ -50,6 +54,18 @@ function fmt(total) {
   const m = Math.floor(total / 60)
   const s = total % 60
   return `${m}:${String(s).padStart(2, '0')}`
+}
+
+// Shared style for the bar's ghost buttons — flex:1 so a row shares width evenly
+// and never overflows the phone, with a comfortable tap height.
+const ctrlBtn = {
+  flex: 1,
+  minHeight: 42,
+  background: 'rgba(27,33,29,0.12)',
+  color: 'var(--color-on-primary)',
+  boxShadow: 'none',
+  padding: '0.4rem 0.3rem',
+  fontSize: '0.95rem',
 }
 
 export default function RestTimer({ seconds, onDone, onClose, onAdjust }) {
@@ -101,77 +117,60 @@ export default function RestTimer({ seconds, onDone, onClose, onAdjust }) {
         margin: '0 auto',
         background: isDone ? 'var(--color-success)' : 'var(--color-primary)',
         color: 'var(--color-on-primary)',
-        opacity: paused ? 0.85 : 1,
-        padding: '0.55rem 0.6rem 0.55rem 1.2rem',
-        borderRadius: 'var(--radius-pill)',
+        opacity: paused && !isDone ? 0.9 : 1,
+        padding: '0.6rem 0.7rem',
+        borderRadius: 'var(--radius-lg)',
         display: 'flex',
-        alignItems: 'center',
-        gap: '0.45rem',
+        flexDirection: 'column',
+        gap: '0.5rem',
         zIndex: 150,
         boxShadow: 'var(--shadow-lg)',
         animation: 'rise-in 0.22s var(--ease)',
       }}
     >
-      <span style={{ fontSize: '1.35rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', minWidth: 64 }}>
-        {isDone ? 'Done' : fmt(remaining)}
-      </span>
-      <span style={{ fontSize: '0.72rem', letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.65 }}>
-        {paused && !isDone ? 'paused' : 'rest'}
-      </span>
-      <span className="spacer" />
+      {/* Row 1 — time + status + skip/dismiss */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', paddingLeft: '0.35rem' }}>
+        <span style={{ fontSize: '1.7rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', minWidth: 70 }}>
+          {isDone ? 'Done' : fmt(remaining)}
+        </span>
+        <span style={{ fontSize: '0.72rem', letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.65 }}>
+          {paused && !isDone ? 'paused' : 'rest'}
+        </span>
+        <span className="spacer" />
+        <button
+          style={{ ...ctrlBtn, flex: '0 0 auto', minWidth: 76, background: 'rgba(27,33,29,0.2)' }}
+          onClick={onClose}
+        >
+          {isDone ? 'Dismiss' : 'Skip'}
+        </button>
+      </div>
+
+      {/* Row 2 — controls; full-width buttons that never overflow */}
       {!isDone && !paused && (
-        <>
-          <button
-            style={{ background: 'rgba(27,33,29,0.10)', color: 'var(--color-on-primary)', minWidth: 56, boxShadow: 'none' }}
-            onClick={() => adjust(-15)}
-          >
-            −15
-          </button>
-          <button
-            style={{ background: 'rgba(27,33,29,0.10)', color: 'var(--color-on-primary)', minWidth: 56, boxShadow: 'none' }}
-            onClick={() => adjust(15)}
-          >
-            +15
-          </button>
-        </>
+        <div style={{ display: 'flex', gap: '0.4rem' }}>
+          <button style={ctrlBtn} onClick={() => adjust(-15)}>−15s</button>
+          <button style={ctrlBtn} onClick={() => adjust(15)}>+15s</button>
+          <button style={ctrlBtn} onClick={() => setPaused(true)}>⏸ Pause</button>
+        </div>
       )}
       {!isDone && paused && (
-        <>
+        <div style={{ display: 'flex', gap: '0.4rem' }}>
           <input
             type="number" inputMode="numeric" min="0" value={addInput}
             onChange={e => setAddInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') addCustom() }}
-            placeholder="sec" aria-label="Seconds to add"
+            placeholder="+ sec" aria-label="Seconds to add"
             style={{
-              width: 58, padding: '0.35rem 0.4rem', boxShadow: 'none', margin: 0,
-              background: 'rgba(27,33,29,0.14)', color: 'var(--color-on-primary)',
-              border: '1px solid rgba(27,33,29,0.2)', borderRadius: 'var(--radius-sm)',
-              fontVariantNumeric: 'tabular-nums',
+              flex: '0 0 78px', padding: '0.4rem', boxShadow: 'none', margin: 0,
+              background: 'rgba(27,33,29,0.16)', color: 'var(--color-on-primary)',
+              border: '1px solid rgba(27,33,29,0.22)', borderRadius: 'var(--radius-sm)',
+              fontVariantNumeric: 'tabular-nums', textAlign: 'center',
             }}
           />
-          <button
-            style={{ background: 'rgba(27,33,29,0.10)', color: 'var(--color-on-primary)', minWidth: 52, boxShadow: 'none' }}
-            onClick={addCustom}
-          >
-            Add
-          </button>
-        </>
+          <button style={ctrlBtn} onClick={addCustom}>Add</button>
+          <button style={ctrlBtn} onClick={() => setPaused(false)}>▶ Resume</button>
+        </div>
       )}
-      {!isDone && (
-        <button
-          aria-label={paused ? 'Resume timer' : 'Pause timer'}
-          style={{ background: 'rgba(27,33,29,0.10)', color: 'var(--color-on-primary)', minWidth: 52, boxShadow: 'none' }}
-          onClick={() => setPaused(p => !p)}
-        >
-          {paused ? '▶' : '⏸'}
-        </button>
-      )}
-      <button
-        style={{ background: 'rgba(27,33,29,0.18)', color: 'var(--color-on-primary)', boxShadow: 'none' }}
-        onClick={onClose}
-      >
-        {isDone ? 'Dismiss' : 'Skip'}
-      </button>
     </div>
   )
 }
