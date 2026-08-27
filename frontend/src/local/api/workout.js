@@ -91,6 +91,7 @@ async function presentRoutine(r) {
       id: re.uuid, exercise_id: re.exercise_uuid, position: re.position,
       target_sets: re.target_sets, target_rep_low: re.target_rep_low,
       target_rep_high: re.target_rep_high, rest_seconds: re.rest_seconds,
+      target_rir: re.target_rir ?? null,
       exercise: presentExercise(await exerciseByUuid(re.exercise_uuid)),
     }))),
   }
@@ -293,6 +294,7 @@ export const workoutRoutes = [
           position: def.position, target_sets: def.target_sets ?? 3,
           target_rep_low: def.target_rep_low ?? 8, target_rep_high: def.target_rep_high ?? 12,
           rest_seconds: def.rest_seconds ?? 120,
+          target_rir: def.target_rir ?? null,
         }))
       }
       return presentRoutine(routine)
@@ -327,6 +329,7 @@ export const workoutRoutes = [
             position: def.position, target_sets: def.target_sets ?? 3,
             target_rep_low: def.target_rep_low ?? 8, target_rep_high: def.target_rep_high ?? 12,
             rest_seconds: def.rest_seconds ?? 120,
+            target_rir: def.target_rir ?? null,
           }))
         }
       }

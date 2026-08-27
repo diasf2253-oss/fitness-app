@@ -195,6 +195,9 @@ class RoutineExercise(SyncMixin, Base):
     target_rep_low: Mapped[int] = mapped_column(Integer, default=8)
     target_rep_high: Mapped[int] = mapped_column(Integer, default=12)
     rest_seconds: Mapped[int] = mapped_column(Integer, default=120)
+    # Target Reps In Reserve — how many reps to leave in the tank (0 = train to
+    # failure). Optional programming guidance; null when not set.
+    target_rir: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     routine: Mapped["Routine"] = relationship(back_populates="exercises")
     exercise: Mapped["Exercise"] = relationship(back_populates="routine_exercises")

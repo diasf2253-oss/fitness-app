@@ -120,6 +120,7 @@ function RoutineEditor({ routine, onSaved, onCancel }) {
       target_rep_low: re.target_rep_low,
       target_rep_high: re.target_rep_high,
       rest_seconds: re.rest_seconds,
+      target_rir: re.target_rir,
     })) || []
   )
   const [showPicker, setShowPicker] = useState(false)
@@ -133,6 +134,7 @@ function RoutineEditor({ routine, onSaved, onCancel }) {
       target_rep_low: 8,
       target_rep_high: 12,
       rest_seconds: 120,
+      target_rir: null,
     }])
     setShowPicker(false)
   }
@@ -168,6 +170,7 @@ function RoutineEditor({ routine, onSaved, onCancel }) {
         target_rep_low: Number(it.target_rep_low),
         target_rep_high: Number(it.target_rep_high),
         rest_seconds: Number(it.rest_seconds),
+        target_rir: it.target_rir === '' || it.target_rir == null ? null : Number(it.target_rir),
       })),
     }
     try {
@@ -231,6 +234,11 @@ function RoutineEditor({ routine, onSaved, onCancel }) {
                 <label>Rep high</label>
                 <input type="number" inputMode="numeric" value={it.target_rep_high} onChange={e => updateItem(idx, 'target_rep_high', e.target.value)} />
               </div>
+            </div>
+            <div className="form-group" style={{ margin: '0.5rem 0 0' }}>
+              <label>Target RIR (reps in reserve)</label>
+              <input type="number" inputMode="numeric" min="0" placeholder="optional — e.g. 2"
+                value={it.target_rir ?? ''} onChange={e => updateItem(idx, 'target_rir', e.target.value)} />
             </div>
           </div>
         ))}

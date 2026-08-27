@@ -55,6 +55,7 @@ class RoutineExerciseBase(BaseModel):
     target_rep_low: int = 8
     target_rep_high: int = 12
     rest_seconds: int = 120
+    target_rir: Optional[int] = None
 
 
 class RoutineExerciseCreate(RoutineExerciseBase):

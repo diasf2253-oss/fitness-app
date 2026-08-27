@@ -52,6 +52,7 @@ def _build_routine_exercises(
                 target_rep_low=ex_def.target_rep_low,
                 target_rep_high=ex_def.target_rep_high,
                 rest_seconds=ex_def.rest_seconds,
+                target_rir=ex_def.target_rir,
             )
         )
 

@@ -174,6 +174,7 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
   const [restSeconds, setRestSeconds] = useState(null)   // active rest timer duration, or null
   const [restKey, setRestKey] = useState(0)              // bumped only when a set completes, to (re)start the timer
   const [restByExercise, setRestByExercise] = useState({})  // exercise_id -> rest seconds (from routine)
+  const [targetsByExercise, setTargetsByExercise] = useState({})  // exercise_id -> {sets, rep_low, rep_high, rir}
   const [defaultRest, setDefaultRest] = useState(120)       // settings.default_rest_seconds
   // Learned rest habits: exercise_id -> seconds, from the user's timer
   // adjustments. Device-local by design (a habit, not synced data).
@@ -219,9 +220,17 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
     if (!session.routine_id) return
     apiFetch(`/api/routines/${session.routine_id}`)
       .then(routine => {
-        const map = {}
-        routine.exercises.forEach(re => { map[re.exercise_id] = re.rest_seconds })
-        setRestByExercise(map)
+        const rest = {}
+        const targets = {}
+        routine.exercises.forEach(re => {
+          rest[re.exercise_id] = re.rest_seconds
+          targets[re.exercise_id] = {
+            sets: re.target_sets, rep_low: re.target_rep_low,
+            rep_high: re.target_rep_high, rir: re.target_rir,
+          }
+        })
+        setRestByExercise(rest)
+        setTargetsByExercise(targets)
       })
       .catch(() => {})  // non-critical; default rest applies
   }, [session.routine_id])
@@ -364,6 +373,7 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
             onChanged={refresh}
             onRemove={() => removeExercise(se.id)}
             onSetCompleted={() => startRest(se.exercise_id)}
+            target={targetsByExercise[se.exercise_id]}
             setError={setError}
           />
         ))}
@@ -401,7 +411,7 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
 // Exercise card with set rows
 // ---------------------------------------------------------------------------
 
-function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, setError }) {
+function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, target, setError }) {
   const [prevSets, setPrevSets] = useState([])
 
   // Fetch what was lifted last time, to pre-fill placeholders
@@ -447,6 +457,12 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, setE
       <div className="muted" style={{ fontSize: '0.75rem', marginBottom: '0.5rem' }}>
         {se.exercise.primary_muscle}{se.exercise.equipment ? ` · ${se.exercise.equipment}` : ''}
       </div>
+      {target && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.5rem' }}>
+          <span className="badge">{target.sets}×{target.rep_low}–{target.rep_high}</span>
+          {target.rir != null && <span className="badge">RIR {target.rir}</span>}
+        </div>
+      )}
 
       {/* Column headers */}
       <div className="row" style={{ fontSize: '0.7rem', color: 'var(--color-muted)', padding: '0 0.25rem', gap: '0.4rem' }}>
