@@ -15,7 +15,7 @@ from __future__ import annotations
 # volume tracking but is deliberately not done yet.
 MUSCLE_GROUPS: list[str] = [
     "Chest", "Back", "Shoulders", "Biceps", "Triceps",
-    "Quads", "Hamstrings", "Glutes", "Calves", "Abs",
+    "Quads", "Hamstrings", "Glutes", "Calves", "Abs", "Adductors",
 ]
 
 # Default weekly working-set target ranges (working sets / muscle / week).
@@ -33,12 +33,16 @@ DEFAULT_VOLUME_TARGETS: dict[str, tuple[int, int]] = {
     "Glutes": (8, 16),
     "Calves": (8, 16),
     "Abs": (6, 20),
+    "Adductors": (6, 16),
 }
 
 # Ordered (specific → general) keyword rules for auto-tagging by exercise name.
 # The first matching rule wins, so more specific movements are listed first
 # (e.g. "leg curl" → Hamstrings is checked before "curl" → Biceps).
 _NAME_RULES: list[tuple[tuple[str, ...], str]] = [
+    # First: "hip adduction" must not fall through to a leg rule. Deliberately
+    # NOT keyed on "sumo" — a sumo deadlift is still a Back/posterior lift.
+    (("adductor", "adduction", "copenhagen"), "Adductors"),
     (("calf", "calve"), "Calves"),
     (("hamstring", "leg curl", "lying curl", "romanian", "rdl", "good morning", "nordic"), "Hamstrings"),
     (("glute", "hip thrust", "pull-through", "pull through", "kickback"), "Glutes"),

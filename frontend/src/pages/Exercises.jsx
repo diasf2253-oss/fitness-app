@@ -13,7 +13,7 @@ import { RankBadge, rankAccent, useExerciseRanks } from '../components/RankBadge
 
 const MUSCLE_OPTIONS = [
   'chest', 'back', 'shoulders', 'biceps', 'triceps',
-  'quads', 'hamstrings', 'glutes', 'calves', 'core',
+  'quads', 'hamstrings', 'glutes', 'calves', 'core', 'adductors',
 ]
 
 const EQUIPMENT_OPTIONS = ['barbell', 'dumbbell', 'cable', 'machine', 'smith', 'bodyweight']

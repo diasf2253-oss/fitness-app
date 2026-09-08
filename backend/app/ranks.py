@@ -35,7 +35,7 @@ STANDARDS: dict[str, list[float]] = {
 # Extra body-map regions shown on the anatomy map but not part of the core
 # MUSCLE_GROUPS taxonomy (so training analytics/generator are unaffected).
 # No exercise is ever tagged with them, so they render as untracked anatomy.
-BODY_MAP_EXTRA = ("Forearms", "Adductors")
+BODY_MAP_EXTRA = ("Forearms",)
 
 # --- Per-exercise benchmarks (the body-map rank engine) --------------------
 # A body part's rank is the AVERAGE of its exercises' scores, where each score is

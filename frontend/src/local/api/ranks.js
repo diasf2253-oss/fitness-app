@@ -30,7 +30,7 @@ export const STANDARDS = {
   deadlift: [1.50, 1.75, 2.00, 2.50, 3.00],
   ohp: [0.55, 0.65, 0.80, 1.00, 1.30],
 }
-const BODY_MAP_EXTRA = ['Forearms', 'Adductors']
+const BODY_MAP_EXTRA = ['Forearms']
 
 export const COMMON_ANCHORS = [0.55, 0.78, 1.05, 1.45, 1.95]
 const DEFAULT_BENCHMARK = 1.0

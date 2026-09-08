@@ -249,3 +249,46 @@ def test_exercise_ranks_unranked_without_bodyweight(auth_client):
     entry = auth_client.get("/api/ranks/exercises").json()[str(squat_id)]
     assert entry["ranked"] is False
     assert entry["color"] == R.UNRANKED_COLOR
+
+
+# ---------------------------------------------------------------------------
+# Adductors promoted from body-map-only anatomy to a real tracked group
+# ---------------------------------------------------------------------------
+
+def test_adductors_is_a_tracked_rankable_group(auth_client):
+    """It used to live in BODY_MAP_EXTRA (drawn but never rankable). It must now
+    behave like any other muscle: tracked, listed once, and able to rank."""
+    import app.ranks as R
+    from app.muscles import MUSCLE_GROUPS
+
+    assert "Adductors" in MUSCLE_GROUPS
+    assert "Adductors" not in R.BODY_MAP_EXTRA      # else the body map lists it twice
+
+    uid = auth_client.test_user_id
+    db = TestingSession()
+    ex = Exercise(user_id=uid, name="Hip Adduction", primary_muscle_group="Adductors", is_custom=True)
+    db.add(ex); db.flush()
+    db.add(WeightLog(user_id=uid, date=date.today(), weight_kg=80.0, source="manual"))
+    _log(db, uid, ex, weight=90.0, reps=8)
+    db.close()
+
+    body = auth_client.get("/api/ranks").json()["body_parts"]
+    matches = [b for b in body if b["muscle"] == "Adductors"]
+    assert len(matches) == 1, "Adductors must appear exactly once"
+    add = matches[0]
+    assert add["tracked"] is True
+    assert add["ranked"] is True and add["tier"] in R.TIERS
+
+
+def test_adductors_has_weekly_volume_targets(auth_client):
+    assert "Adductors" in auth_client.get("/api/stats/volume-targets").json()
+
+
+def test_adductor_names_auto_tag(auth_client):
+    """Auto-tagging routes adduction work to the new group — and leaves a sumo
+    deadlift alone (it's a posterior-chain lift, not an adductor exercise)."""
+    from app.muscles import suggest_muscle_group
+
+    assert suggest_muscle_group("Hip Adduction Machine", None) == "Adductors"
+    assert suggest_muscle_group("Copenhagen Plank", None) == "Adductors"
+    assert suggest_muscle_group("Sumo Deadlift", None) == "Back"

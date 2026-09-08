@@ -5,7 +5,7 @@
 
 export const MUSCLE_GROUPS = [
   'Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps',
-  'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Abs',
+  'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Abs', 'Adductors',
 ]
 
 // Per-muscle weekly working-set target ranges [low, high] — mirrors
@@ -14,6 +14,7 @@ export const DEFAULT_VOLUME_TARGETS = {
   Chest: [10, 20], Back: [10, 22], Shoulders: [8, 20],
   Biceps: [8, 20], Triceps: [8, 18], Quads: [8, 18],
   Hamstrings: [6, 16], Glutes: [8, 16], Calves: [8, 16], Abs: [6, 20],
+  Adductors: [6, 16],
 }
 
 /** Default ranges with per-user overrides merged on top — mirrors
@@ -35,6 +36,8 @@ export function resolvedVolumeTargets(overrides) {
 // Ordered (specific → general): first matching rule wins, so "leg curl"
 // hits Hamstrings before "curl" hits Biceps.
 const NAME_RULES = [
+  // Keep ahead of the leg rules; deliberately not keyed on 'sumo'.
+  [['adductor', 'adduction', 'copenhagen'], 'Adductors'],
   [['calf', 'calve'], 'Calves'],
   [['hamstring', 'leg curl', 'lying curl', 'romanian', 'rdl', 'good morning', 'nordic'], 'Hamstrings'],
   [['glute', 'hip thrust', 'pull-through', 'pull through', 'kickback'], 'Glutes'],
