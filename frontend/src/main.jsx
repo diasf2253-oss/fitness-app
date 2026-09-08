@@ -62,13 +62,56 @@ document.addEventListener('pointerdown', (e) => {
   if (el && !el.disabled && el.getAttribute('aria-disabled') !== 'true') playTap()
 }, { passive: true })
 
-// Sync on open (local-first mode): if the laptop answers on this network,
-// exchange changes; if not, carry on fully local. Never blocks the UI.
+// Sync on open (local-first mode): if the server answers, exchange changes;
+// if not, carry on fully local. Never blocks the UI.
+//
+// "On open" has to mean more than module load. An installed PWA is usually
+// *resumed*, not reloaded — iOS keeps the page alive in the background — so a
+// load-time-only sync would run once on install day and then effectively
+// never again. Re-running on visibilitychange is what makes reopening the app
+// actually fetch what the phone pushed overnight.
 if (isLocalFirst()) {
-  syncNow()
-    .then(r => {
-      if (r.reachable) console.info(`[sync] pushed ${r.pushed}, pulled ${r.pulled}`)
-      else console.info('[sync] API not reachable or not logged in — staying local')
-    })
-    .catch(err => console.warn('[sync] failed:', err))
+  // Enough to catch a genuine reopen, short enough that a tab switch or a
+  // trip out to Shortcuts and back doesn't hammer the API.
+  const RESYNC_AFTER_MS = 2 * 60 * 1000
+  let lastSyncAt = 0
+  let inFlight = false
+
+  // Set by HealthSync.jsx's runHealthShortcut() right before it navigates to
+  // shortcuts://, so the visibilitychange that fires when iOS bounces back
+  // (via x-success) isn't swallowed by the throttle above — see runSync.
+  const FORCE_RESYNC_KEY = 'force_resync_on_resume'
+  function consumeForcedResync() {
+    try {
+      if (sessionStorage.getItem(FORCE_RESYNC_KEY) !== '1') return false
+      sessionStorage.removeItem(FORCE_RESYNC_KEY)
+      return true
+    } catch {
+      return false  // private mode / blocked storage — falls back to the throttle
+    }
+  }
+
+  const runSync = (reason) => {
+    // An explicit user tap (e.g. "Sync now", returning from the Shortcut)
+    // bypasses the throttle — the throttle exists to stop passive foreground
+    // events from hammering the API, not to ignore the one action whose
+    // entire point is "sync right now." See FORCE_RESYNC_KEY below.
+    const forced = reason === 'resume' && consumeForcedResync()
+    if (!forced && (inFlight || Date.now() - lastSyncAt < RESYNC_AFTER_MS)) return
+    inFlight = true
+    syncNow()
+      .then(r => {
+        if (r.reachable) console.info(`[sync:${reason}] pushed ${r.pushed}, pulled ${r.pulled}`)
+        else console.info(`[sync:${reason}] API not reachable or not logged in — staying local`)
+      })
+      .catch(err => console.warn(`[sync:${reason}] failed:`, err))
+      // Throttle from the attempt, not the success — an offline phone would
+      // otherwise retry on every single foreground.
+      .finally(() => { inFlight = false; lastSyncAt = Date.now() })
+  }
+
+  runSync('open')
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) runSync('resume')
+  })
 }

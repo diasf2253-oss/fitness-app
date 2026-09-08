@@ -22,6 +22,8 @@ import ChangePassword from './pages/ChangePassword'
 import Admin from './pages/Admin'
 import Onboarding from './components/Onboarding'
 import StagingBadge from './components/StagingBadge'
+import HealthSyncBanner from './components/HealthSyncBanner'
+import { freshnessLabel, useSyncStatus } from './components/HealthSync'
 
 // Crisp stroke icons (inherit currentColor → active state recolors for free)
 const Icon = {
@@ -108,29 +110,39 @@ const SIDEBAR_SECTIONS = [
 ]
 
 /**
- * Quiet "is data flowing" line at the sidebar foot — last Apple Health
- * ingest time, or a nudge when nothing has ever synced. Fails silent.
+ * Quiet "is data flowing" line at the sidebar foot.
+ *
+ * Reads /api/health/sync-status rather than settings.health_last_ingest: the
+ * latter is served from IndexedDB in local-first mode, where it defaults to
+ * null, so this used to read "Not synced yet" even on a perfectly synced
+ * phone. Freshness of the actual rows is both truer and computable offline.
  */
 function SyncStatus() {
-  const [last, setLast] = useState(undefined)
+  const { status, unreachable } = useSyncStatus()
 
-  useEffect(() => {
-    apiFetch('/api/settings')
-      .then(s => setLast(s.health_last_ingest))
-      .catch(() => setLast(null))
-  }, [])
-
-  if (last === undefined) return null
-  const label = last
-    ? `Synced ${new Date(last + 'Z').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
-    : 'Not synced yet'
+  // Every check has failed — say so rather than disappearing, which would
+  // otherwise look identical to "still loading" forever.
+  if (unreachable) {
+    return (
+      <div className="sidebar-sync">
+        <span className="sync-dot" style={{ background: 'var(--color-warning)' }} />
+        Sync check failed
+      </div>
+    )
+  }
+  if (!status) return null
+  const days = status.stalest_days
+  const fresh = days !== null && days <= 1
   return (
     <div className="sidebar-sync">
       <span
         className="sync-dot"
-        style={{ background: last ? 'var(--color-success)' : 'var(--color-muted)' }}
+        style={{
+          background: fresh ? 'var(--color-success)'
+            : days === null ? 'var(--color-muted)' : 'var(--color-warning)',
+        }}
       />
-      {label}
+      {status.has_any_data ? `Health ${freshnessLabel(days)}` : 'Not synced yet'}
     </div>
   )
 }
@@ -222,6 +234,7 @@ function AuthedApp({ user }) {
       <Sidebar isAdmin={isAdmin} />
 
       <div className="main-content">
+        <HealthSyncBanner />
         <Routes>
           <Route path="/"             element={<Dashboard />} />
           <Route path="/workout"      element={<Workout />} />

@@ -33,6 +33,10 @@ import { apiUrl } from '../env'
 
 const PROBE_TIMEOUT_MS = 3000
 
+/** Fired on `window` after a successful sync pass, so views reading
+ *  IndexedDB can refresh once the pulled rows have actually landed. */
+export const SYNC_COMPLETE_EVENT = 'local-sync-complete'
+
 // Bump when SYNC_TABLES widens: a device that last synced under a narrower
 // scope must do one full pull (since=null) to backfill the new tables —
 // its incremental cursor predates them.
@@ -161,5 +165,12 @@ export async function syncNow() {
   await setMeta('last_sync_at', serverTime)
   await setMeta('sync_scope_version', SYNC_SCOPE_VERSION)
   await setMeta('last_sync_result', { at: serverTime, pushed, pulled: applied })
+  // Tell the UI the local tables just changed underneath it. Without this the
+  // health-sync banner, which reads IndexedDB, keeps showing whatever it saw
+  // at mount — on a cold open that is an empty DB, so a perfectly synced
+  // phone flashes "No health data yet" until something else re-renders.
+  window.dispatchEvent(new CustomEvent(SYNC_COMPLETE_EVENT, {
+    detail: { pushed, pulled: applied },
+  }))
   return { reachable: true, pushed, pulled: applied }
 }

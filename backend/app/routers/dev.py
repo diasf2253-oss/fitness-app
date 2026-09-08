@@ -10,14 +10,22 @@ confuse with real entries ('apple_health' | 'manual') and can be cleared
 surgically without touching anything the user logged themselves.
 The generator is seeded, so re-running produces identical values and the
 date-keyed upserts keep it idempotent.
+
+Access is deliberately narrow. Sample rows render like real measurements on
+the Dashboard, Diet, Insights and Report (only ranks/streak/calendar exclude
+them), so a beta user who taps "load sample data" ends up staring at 30 days
+of numbers they never recorded. Both endpoints therefore require an admin,
+and seeding additionally requires settings.enable_dev_seed. Clearing stays
+available to admins everywhere so leftover rows can always be removed.
 """
 import random
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session as DBSession
 
-from app.auth import require_auth
+from app.auth import require_admin
+from app.config import settings
 from app.db import get_db
 from app.models import NutritionDay, SleepLog, StepsLog, User, WeightLog
 from app.routers.health import upsert_sleep, upsert_steps, upsert_weight
@@ -32,9 +40,13 @@ SAMPLE_DAYS = 30
 @router.post("/seed-sample-health")
 def seed_sample_health(
     db: DBSession = Depends(get_db),
-    current_user: User = Depends(require_auth),
+    current_user: User = Depends(require_admin),
 ):
     """Upsert ~30 days of plausible health data ending today. Idempotent."""
+    if not settings.enable_dev_seed:
+        # 404, not 403: on a real deployment this endpoint should look absent.
+        raise HTTPException(status_code=404, detail="Not Found")
+
     from app.routers.nutrition import upsert_nutrition
 
     user_id = current_user.id
@@ -99,7 +111,7 @@ def seed_sample_health(
 @router.delete("/seed-sample-health")
 def clear_sample_health(
     db: DBSession = Depends(get_db),
-    current_user: User = Depends(require_auth),
+    current_user: User = Depends(require_admin),
 ):
     """Delete only this user's rows created by the seeder (source='sample')."""
     deleted = 0

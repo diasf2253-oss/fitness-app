@@ -7,6 +7,9 @@ Phase 2 tests:
 """
 from datetime import date, timedelta
 
+import pytest
+
+from app.config import settings
 from app.models import NutritionDay, WeightLog
 from app.routers.dashboard import moving_average_7d
 
@@ -164,8 +167,18 @@ class TestDashboard:
 # ---------------------------------------------------------------------------
 
 class TestSampleSeeder:
-    def test_seed_is_idempotent(self, auth_client):
-        r1 = auth_client.post("/api/dev/seed-sample-health")
+    """
+    The seeder writes 30 days of invented health data that renders like real
+    measurements, so it is admin-only AND off unless enable_dev_seed is set.
+    These tests hold that gate shut as much as they exercise the seeding.
+    """
+
+    @pytest.fixture
+    def seeder_on(self, monkeypatch):
+        monkeypatch.setattr(settings, "enable_dev_seed", True)
+
+    def test_seed_is_idempotent(self, admin_client, seeder_on):
+        r1 = admin_client.post("/api/dev/seed-sample-health")
         assert r1.status_code == 200
         assert r1.json()["days_seeded"] == 30
 
@@ -173,19 +186,19 @@ class TestSampleSeeder:
         count_after_first = db.query(WeightLog).count()
         db.close()
 
-        auth_client.post("/api/dev/seed-sample-health")
+        admin_client.post("/api/dev/seed-sample-health")
         db = TestingSession()
         count_after_second = db.query(WeightLog).count()
         db.close()
         assert count_after_first == count_after_second == 30
 
-    def test_clear_removes_only_sample_rows(self, auth_client):
-        auth_client.post("/api/dev/seed-sample-health")
+    def test_clear_removes_only_sample_rows(self, admin_client, seeder_on):
+        admin_client.post("/api/dev/seed-sample-health")
         # A manual correction on a date inside the seeded range must survive
         manual_date = date.today().isoformat()
-        auth_client.post("/api/health/weight", json={"date": manual_date, "weight_kg": 99.9})
+        admin_client.post("/api/health/weight", json={"date": manual_date, "weight_kg": 99.9})
 
-        r = auth_client.delete("/api/dev/seed-sample-health")
+        r = admin_client.delete("/api/dev/seed-sample-health")
         assert r.status_code == 200
 
         db = TestingSession()
@@ -196,3 +209,29 @@ class TestSampleSeeder:
         assert len(remaining) == 1
         assert remaining[0].weight_kg == 99.9
         assert nutrition_left == 0
+
+    def test_seeding_is_off_by_default(self, admin_client):
+        """No flag ⇒ the endpoint looks absent, even to an admin."""
+        assert settings.enable_dev_seed is False
+        r = admin_client.post("/api/dev/seed-sample-health")
+        assert r.status_code == 404
+
+        db = TestingSession()
+        assert db.query(WeightLog).count() == 0
+        db.close()
+
+    def test_non_admin_cannot_seed(self, auth_client, seeder_on):
+        """A beta user must never be able to fill their account with demo data."""
+        r = auth_client.post("/api/dev/seed-sample-health")
+        assert r.status_code == 403
+
+        db = TestingSession()
+        assert db.query(WeightLog).count() == 0
+        db.close()
+
+    def test_non_admin_cannot_clear(self, auth_client):
+        assert auth_client.delete("/api/dev/seed-sample-health").status_code == 403
+
+    def test_clearing_stays_available_without_the_flag(self, admin_client):
+        """Cleanup must work everywhere, including where seeding is refused."""
+        assert admin_client.delete("/api/dev/seed-sample-health").status_code == 200

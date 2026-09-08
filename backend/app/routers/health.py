@@ -8,6 +8,8 @@ POST /api/ingest/health          — Health Auto Export JSON push (daily)
 POST /api/ingest/health/shortcut — iOS Shortcut push (weight/steps/sleep)
 POST /api/ingest/health-export   — export.zip/.xml upload (history backfill)
 GET  /api/health/weight|steps|sleep|nutrition — date-range series
+GET  /api/health/sync-status     — per-metric freshness (drives the UI's
+                                   "your data is N days old" nudge)
 POST /api/health/weight|steps|sleep           — manual upserts
 
 The Shortcut push and the export backfill share the validated ingest core in
@@ -25,8 +27,9 @@ from sqlalchemy.orm import Session as DBSession
 from app.auth import require_auth, require_ingest_auth
 from app.db import get_db
 from app.health_metrics import HAE_NUTRITION, convert_amount, upsert_nutrition_partial
-from app.models import NutritionDay, SleepLog, StepsLog, User, WeightLog
+from app.models import AppSettings, NutritionDay, SleepLog, StepsLog, User, WeightLog
 from app.schemas import (
+    HealthMetricFreshness, HealthSyncStatusOut,
     NutritionDayOut, SleepLogCreate, SleepLogOut,
     StepsLogCreate, StepsLogOut, WeightEstimateOut, WeightLogCreate, WeightLogOut,
 )
@@ -543,6 +546,59 @@ def ingest_health_export(
 # ---------------------------------------------------------------------------
 # Read endpoints
 # ---------------------------------------------------------------------------
+
+@router.get("/api/health/sync-status", response_model=HealthSyncStatusOut)
+def health_sync_status(
+    db: DBSession = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """
+    How current each health metric is.
+
+    A PWA can't read HealthKit, so health data only exists here once the
+    phone pushes it (iOS Shortcut / Health Auto Export). This is how the app
+    tells the user whether that is actually happening — it drives the
+    stale-data banner and the Settings sync card.
+
+    Freshness counts REAL readings only: DERIVED_SOURCES rows (our own
+    interpolated weights, demo seed data) are excluded, so a chart full of
+    estimates can never report itself as up to date.
+    """
+    today = date.today()
+    metrics: dict[str, HealthMetricFreshness] = {}
+
+    for name, model in (
+        ("weight", WeightLog), ("steps", StepsLog),
+        ("sleep", SleepLog), ("nutrition", NutritionDay),
+    ):
+        last = (
+            db.query(model.date)
+            .filter(
+                model.user_id == current_user.id,
+                model.source.notin_(DERIVED_SOURCES),
+            )
+            .order_by(model.date.desc())
+            .first()
+        )
+        last_date = last[0] if last else None
+        metrics[name] = HealthMetricFreshness(
+            last_date=last_date,
+            days_stale=(today - last_date).days if last_date else None,
+        )
+
+    seen = [m.days_stale for m in metrics.values() if m.days_stale is not None]
+    # Read the settings row rather than get_or_create — a GET shouldn't write.
+    row = db.query(AppSettings).filter(AppSettings.user_id == current_user.id).first()
+
+    return HealthSyncStatusOut(
+        last_ingest=row.health_last_ingest if row else None,
+        # The worst of the four — what the banner should complain about. None
+        # when nothing has ever arrived, which the UI words differently.
+        stalest_days=max(seen) if seen else None,
+        has_any_data=bool(seen),
+        **metrics,
+    )
+
 
 @router.get("/api/health/weight", response_model=list[WeightLogOut])
 def get_weight_log(

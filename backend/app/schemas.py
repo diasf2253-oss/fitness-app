@@ -286,6 +286,28 @@ class SleepLogOut(OrmBase):
     source: str
 
 
+class HealthMetricFreshness(BaseModel):
+    """How current one health metric is. `last_date` counts real readings
+    only — an interpolated or demo row must never make data look fresh."""
+    last_date: Optional[date] = None
+    days_stale: Optional[int] = None
+
+
+class HealthSyncStatusOut(BaseModel):
+    """
+    Per-metric freshness, so the UI can say something specific ("steps are 3
+    days old") instead of a single opaque "synced/not synced". Drives the
+    stale-data banner and the Settings sync card.
+    """
+    last_ingest: Optional[datetime] = None
+    stalest_days: Optional[int] = None
+    has_any_data: bool = False
+    weight: HealthMetricFreshness = HealthMetricFreshness()
+    steps: HealthMetricFreshness = HealthMetricFreshness()
+    sleep: HealthMetricFreshness = HealthMetricFreshness()
+    nutrition: HealthMetricFreshness = HealthMetricFreshness()
+
+
 class NutritionDayCreate(BaseModel):
     date: date
     calories: float

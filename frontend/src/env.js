@@ -27,6 +27,36 @@ export function apiUrl(path) {
   return API_BASE ? API_BASE + path : path
 }
 
+/**
+ * Absolute API origin, always — what the iOS Shortcut must POST to.
+ *
+ * apiUrl() returns a relative path when the API is same-origin, which is
+ * right for fetch() but useless to paste into Shortcuts. This resolves it
+ * against the page. Note it deliberately does NOT use window.location.origin
+ * unconditionally: on the Vercel frontends the API lives on the Railway
+ * origin, and a Shortcut pointed at the frontend host would silently 404.
+ */
+export function absoluteApiUrl(path) {
+  if (API_BASE) return API_BASE + path
+  if (typeof window === 'undefined') return path
+  return window.location.origin + path
+}
+
+/**
+ * iCloud link to the shared "Tracker Health Sync" Shortcut. A PWA cannot read
+ * HealthKit, so this Shortcut is how health data leaves the phone at all —
+ * one build of it, installed by everyone, prompting each person for their own
+ * server URL and ingest token at install time.
+ *
+ * Overridable per deployment (VITE_HEALTH_SHORTCUT_URL) so the link can be
+ * replaced without a code change. Empty ⇒ the UI falls back to the manual
+ * build recipe in docs/HEALTH_INGEST_SHORTCUT.md.
+ */
+export const HEALTH_SHORTCUT_URL = import.meta.env.VITE_HEALTH_SHORTCUT_URL || ''
+
+/** Shortcut name the deep link runs. Must match the shared Shortcut exactly. */
+export const HEALTH_SHORTCUT_NAME = 'Tracker Health Sync'
+
 /** True when the build itself (or its hosts) declares staging. Synchronous —
  *  this is what mounts the badge instantly, before any network round-trip. */
 export function isStagingBuild() {

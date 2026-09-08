@@ -16,7 +16,7 @@ export const DERIVED_SOURCES = ['estimated', 'sample']
 
 const DAY_MS = 86400000
 
-function dayDiff(aIso, bIso) {
+export function dayDiff(aIso, bIso) {
   return Math.round((Date.parse(bIso) - Date.parse(aIso)) / DAY_MS)
 }
 

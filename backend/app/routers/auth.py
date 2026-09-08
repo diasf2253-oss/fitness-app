@@ -22,7 +22,7 @@ from app.auth import (
 from app.config import settings
 from app.db import get_db
 from app.ratelimit import rate_limit
-from app.models import AuthSession, InviteCode, User
+from app.models import AuthSession, InviteCode, User, _new_ingest_token
 from app.schemas import ChangePasswordRequest, JoinRequest, LoginRequest, UserMeOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -103,6 +103,27 @@ def logout(
 @router.get("/me", response_model=UserMeOut)
 def me(current_user: User = Depends(require_auth)):
     """A 401 here is the normal logged-out state, not an error."""
+    return current_user
+
+
+@router.post("/ingest-token/rotate", response_model=UserMeOut)
+def rotate_ingest_token(
+    db: DBSession = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """
+    Issue a fresh Apple Health ingest token, invalidating the old one.
+
+    The ingest token is a long-lived bearer credential that gets pasted into
+    an iOS Shortcut (a Shortcut can't hold a cookie jar), so it travels
+    further than a session does — into screenshots, shared setup notes, a
+    Shortcut someone re-shares. Until now there was no way to revoke one
+    short of disabling the whole account. Rotating breaks any Shortcut still
+    holding the old value, which is the point.
+    """
+    current_user.ingest_token = _new_ingest_token()
+    db.commit()
+    db.refresh(current_user)
     return current_user
 
 

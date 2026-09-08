@@ -1,16 +1,20 @@
 /**
  * Settings page.
  * - API token config
- * - Apple Health sync: last-sync status, Health Auto Export setup steps,
- *   and the one-time export.zip history backfill upload
+ * - Apple Health sync: the shared iOS Shortcut (install link, this account's
+ *   URL + token, "Sync now"), per-metric freshness, the one-time export.zip
+ *   history backfill, and the folded-away manual/HAE recipes
  * - Manual log link
- * - Developer utilities: load/clear sample health data
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch, apiUpload } from '../api'
 import { useAuth } from '../auth'
 import { isMuted, setMuted, subscribeMuted, playTap } from '../audio'
+import { absoluteApiUrl, HEALTH_SHORTCUT_NAME, HEALTH_SHORTCUT_URL } from '../env'
+import {
+  freshnessLabel, hasShortcutLink, SyncNowButton, useSyncStatus,
+} from '../components/HealthSync'
 
 // Copy-paste starter body for the iOS Shortcut push (see the Apple Health
 // sync card + docs/HEALTH_INGEST_SHORTCUT.md). Swap the dates for today.
@@ -442,24 +446,245 @@ function fmtTimestamp(iso) {
   })
 }
 
+/**
+ * Apple Health sync — the card that decides whether this app has any data.
+ *
+ * iOS gives web apps no HealthKit access, so nothing here can read the
+ * phone's health data directly. Everything below is about getting the phone
+ * to *push*: install the shared Shortcut, give it this account's URL + token,
+ * let a daily automation run it (or tap Sync now). The manual recipes are
+ * kept, but folded away — leading with a wall of JSON is why nobody set this
+ * up.
+ */
+function AppleHealthCard({
+  ingestToken, importFile, setImportFile,
+  importBusy, importMsg, runImport, fileRef,
+}) {
+  const { refresh: refreshUser } = useAuth()
+  const { status, refresh: refreshStatus } = useSyncStatus()
+  const [rotating, setRotating] = useState(false)
+  const [rotateMsg, setRotateMsg] = useState(null)
+
+  const shortcutUrl = absoluteApiUrl('/api/ingest/health/shortcut')
+  const haeUrl = absoluteApiUrl('/api/ingest/health')
+  const apiOrigin = absoluteApiUrl('')
+
+  async function rotateToken() {
+    if (!window.confirm(
+      'Issue a new token? Any Shortcut or automation still using the old one '
+      + 'will stop working until you paste the new token into it.'
+    )) return
+    setRotating(true)
+    setRotateMsg(null)
+    try {
+      await apiFetch('/api/auth/ingest-token/rotate', { method: 'POST' })
+      await refreshUser()
+      setRotateMsg('New token issued — paste it into your Shortcut.')
+    } catch (err) {
+      setRotateMsg(`Error: ${err.message}`)
+    } finally {
+      setRotating(false)
+    }
+  }
+
+  const badge = !status ? null
+    : !status.has_any_data ? { cls: '', text: 'never synced' }
+    : status.stalest_days <= 1 ? { cls: ' success', text: `synced ${freshnessLabel(status.stalest_days)}` }
+    : { cls: ' warning', text: `${status.stalest_days} days behind` }
+
+  return (
+    <div className="card">
+      <div className="row" style={{ marginBottom: '0.5rem' }}>
+        <h2 style={{ margin: 0, flex: 1 }}>Apple Health sync</h2>
+        {badge && <span className={`badge${badge.cls}`}>{badge.text}</span>}
+      </div>
+      <p className="muted">
+        Weight, steps, sleep and nutrition all live in Apple Health. This app
+        runs in the browser, which iOS never lets read Health directly — so a
+        small Shortcut on your phone posts the numbers here instead.
+      </p>
+
+      {/* --- 1. Install --- */}
+      <h3>1. Install the Shortcut</h3>
+      {hasShortcutLink() ? (
+        <a href={HEALTH_SHORTCUT_URL} target="_blank" rel="noreferrer">
+          <button style={{ width: '100%' }}>Get “{HEALTH_SHORTCUT_NAME}”</button>
+        </a>
+      ) : (
+        <p className="muted" style={{ fontSize: '0.85rem' }}>
+          No shared Shortcut link is configured for this deployment. Build it
+          once from the recipe in <code style={{ fontSize: '0.72rem' }}>docs/HEALTH_INGEST_SHORTCUT.md</code>.
+        </p>
+      )}
+
+      {/* --- 2. Two values it asks for --- */}
+      <h3 style={{ marginTop: '1rem' }}>2. Paste these when it asks</h3>
+      <div className="row" style={{ gap: '0.5rem', marginBottom: '0.4rem' }}>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          Server: <code style={{ fontSize: '0.72rem' }}>{apiOrigin}</code>
+        </span>
+        <CopyButton text={apiOrigin} />
+      </div>
+      <div className="row" style={{ gap: '0.5rem' }}>
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          Token: <code style={{ fontSize: '0.72rem' }}>{ingestToken}</code>
+        </span>
+        <CopyButton text={ingestToken} />
+      </div>
+      <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.5rem' }}>
+        This token is yours alone and never expires — treat it like a password.
+        Regenerate it if it leaks; your Shortcut then needs the new one.
+      </p>
+      <button
+        className="secondary"
+        onClick={rotateToken}
+        disabled={rotating}
+        style={{ width: '100%', marginTop: '0.35rem' }}
+      >
+        {rotating ? 'Regenerating…' : 'Regenerate token'}
+      </button>
+      {rotateMsg && (
+        <p className="muted" style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>{rotateMsg}</p>
+      )}
+
+      {/* --- 3. Automate + run --- */}
+      <h3 style={{ marginTop: '1rem' }}>3. Let it run daily</h3>
+      <p className="muted" style={{ fontSize: '0.85rem', marginBottom: '0.6rem' }}>
+        Shortcuts app → Automation → new <strong>Time of Day</strong> automation
+        at 08:00, run the Shortcut, and turn <strong>off</strong> “Ask Before
+        Running”. Each run posts the last 7 days, so a missed morning repairs
+        itself the next time.
+      </p>
+      <SyncNowButton style={{ width: '100%' }} />
+
+      {/* --- Freshness --- */}
+      {status && (
+        <>
+          <hr />
+          <h3>Latest data</h3>
+          <div className="col" style={{ gap: '0.3rem' }}>
+            {[['Weight', 'weight'], ['Steps', 'steps'], ['Sleep', 'sleep'], ['Nutrition', 'nutrition']]
+              .map(([label, key]) => (
+                <div key={key} className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ flex: 1, fontSize: '0.88rem' }}>{label}</span>
+                  <span className="muted" style={{ fontSize: '0.82rem' }}>
+                    {freshnessLabel(status[key].days_stale)}
+                  </span>
+                </div>
+              ))}
+          </div>
+          {/* Server-mode only: health_last_ingest is excluded from the sync
+              payload, so the installed local-first PWA never has it. The
+              freshness rows above are the signal that always works. */}
+          {status.last_ingest && (
+            <p className="muted" style={{ marginTop: '0.5rem', fontSize: '0.78rem' }}>
+              Last push received {fmtTimestamp(status.last_ingest)}.
+            </p>
+          )}
+        </>
+      )}
+
+      {/* --- History backfill --- */}
+      <hr />
+      <h3>History backfill</h3>
+      <p className="muted" style={{ marginBottom: '0.6rem' }}>
+        Import your full history once: Health app → profile picture →
+        “Export All Health Data”, then upload the <code>export.zip</code> here.
+        Days you corrected manually are never overwritten.
+      </p>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".zip,.xml"
+        style={{ display: 'none' }}
+        onChange={e => setImportFile(e.target.files?.[0] || null)}
+      />
+      <div className="row">
+        <button className="secondary" style={{ flex: 1 }} onClick={() => fileRef.current?.click()}>
+          {importFile ? importFile.name : 'Choose export.zip'}
+        </button>
+        <button
+          onClick={() => runImport().then(refreshStatus)}
+          disabled={!importFile || importBusy}
+          style={{ minWidth: 110 }}
+        >
+          {importBusy ? 'Importing…' : 'Import'}
+        </button>
+      </div>
+      {importBusy && (
+        <p className="muted" style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
+          Large exports can take a minute — leave this page open.
+        </p>
+      )}
+      {importMsg && (
+        <p className="muted" style={{ marginTop: '0.6rem', fontSize: '0.8rem' }}>{importMsg}</p>
+      )}
+
+      {/* --- Manual / alternative setups, folded away --- */}
+      <hr />
+      <details>
+        <summary style={{ cursor: 'pointer', fontSize: '0.88rem' }}>
+          Manual setup (build your own Shortcut, or use Health Auto Export)
+        </summary>
+
+        <h3 style={{ marginTop: '0.8rem' }}>Build the Shortcut yourself</h3>
+        <p className="muted" style={{ fontSize: '0.82rem', marginBottom: '0.5rem' }}>
+          Full recipe in <code style={{ fontSize: '0.72rem' }}>docs/HEALTH_INGEST_SHORTCUT.md</code>.
+          POST this body to the URL below with the bearer header.
+        </p>
+        <div className="row" style={{ gap: '0.5rem', marginBottom: '0.4rem' }}>
+          <span style={{ flex: 1, minWidth: 0 }}>POST: <code style={{ fontSize: '0.72rem' }}>{shortcutUrl}</code></span>
+          <CopyButton text={shortcutUrl} />
+        </div>
+        <div className="row" style={{ gap: '0.5rem', marginBottom: '0.4rem' }}>
+          <span style={{ flex: 1, minWidth: 0 }}>Header: <code style={{ fontSize: '0.72rem' }}>Authorization: Bearer …</code></span>
+          <CopyButton text={`Bearer ${ingestToken}`} />
+        </div>
+        <div className="row" style={{ gap: '0.5rem', alignItems: 'flex-start' }}>
+          <pre style={{
+            flex: 1, margin: 0, padding: '0.5rem', borderRadius: 6,
+            background: 'var(--surface-2, rgba(127,127,127,0.12))',
+            fontSize: '0.68rem', overflowX: 'auto', whiteSpace: 'pre',
+          }}>{SHORTCUT_JSON_TEMPLATE}</pre>
+          <CopyButton text={SHORTCUT_JSON_TEMPLATE} label="Copy JSON" />
+        </div>
+
+        <h3 style={{ marginTop: '1rem' }}>Health Auto Export</h3>
+        <p className="muted" style={{ fontSize: '0.82rem' }}>
+          The paid HAE app can push nutrition and micronutrients too, which the
+          Shortcut doesn’t cover. Its background pushes are unreliable on their
+          own — use it alongside the Shortcut, not instead of it.
+        </p>
+        <ol className="muted" style={{ fontSize: '0.85rem', paddingLeft: '1.25rem', margin: '0.6rem 0' }}>
+          <li>Automations → new automation, format <strong>JSON</strong></li>
+          <li style={{ marginTop: '0.4rem' }}>
+            <div className="row" style={{ gap: '0.5rem' }}>
+              <span style={{ flex: 1, minWidth: 0 }}>URL: <code style={{ fontSize: '0.72rem' }}>{haeUrl}</code></span>
+              <CopyButton text={haeUrl} />
+            </div>
+          </li>
+          <li style={{ marginTop: '0.4rem' }}>
+            <div className="row" style={{ gap: '0.5rem' }}>
+              <span style={{ flex: 1, minWidth: 0 }}>Header: <code style={{ fontSize: '0.72rem' }}>Authorization: Bearer …</code></span>
+              <CopyButton text={`Bearer ${ingestToken}`} />
+            </div>
+          </li>
+          <li style={{ marginTop: '0.4rem' }}>Select metrics: steps, weight, sleep, plus the dietary ones</li>
+          <li>Date range <strong>last 7 days</strong>, aggregation <strong>Daily</strong>, scheduled daily</li>
+        </ol>
+      </details>
+    </div>
+  )
+}
+
 export default function Settings() {
   const { user } = useAuth()
   const ingestToken = user.ingest_token
 
-  const [lastIngest, setLastIngest] = useState(null)
   const [importFile, setImportFile] = useState(null)
   const [importBusy, setImportBusy] = useState(false)
   const [importMsg, setImportMsg] = useState(null)
   const fileRef = useRef(null)
-
-  const [sampleBusy, setSampleBusy] = useState(false)
-  const [sampleMsg, setSampleMsg] = useState(null)
-
-  useEffect(() => {
-    apiFetch('/api/settings')
-      .then(s => setLastIngest(s.health_last_ingest))
-      .catch(() => {})  // non-critical; card just shows "never"
-  }, [])
 
   async function runImport() {
     if (!importFile) return
@@ -476,8 +701,6 @@ export default function Settings() {
           `${d.weight} weight, ${d.steps} step, ${d.sleep} sleep, ${d.nutrition} nutrition days ` +
           `(${r.rows_created} new rows).`
         )
-        const s = await apiFetch('/api/settings')
-        setLastIngest(s.health_last_ingest)
       } else {
         setImportMsg(`Error: ${r.detail || 'import failed'}`)
       }
@@ -490,32 +713,6 @@ export default function Settings() {
     }
   }
 
-  async function loadSample() {
-    setSampleBusy(true)
-    setSampleMsg(null)
-    try {
-      const r = await apiFetch('/api/dev/seed-sample-health', { method: 'POST' })
-      setSampleMsg(`Loaded ${r.days_seeded} days of sample data (${r.from} → ${r.to}).`)
-    } catch (err) {
-      setSampleMsg(`Error: ${err.message}`)
-    } finally {
-      setSampleBusy(false)
-    }
-  }
-
-  async function clearSample() {
-    setSampleBusy(true)
-    setSampleMsg(null)
-    try {
-      const r = await apiFetch('/api/dev/seed-sample-health', { method: 'DELETE' })
-      setSampleMsg(`Removed ${r.rows_deleted} sample rows. Manual and synced data untouched.`)
-    } catch (err) {
-      setSampleMsg(`Error: ${err.message}`)
-    } finally {
-      setSampleBusy(false)
-    }
-  }
-
   return (
     <div className="page">
       <h1>Settings</h1>
@@ -524,95 +721,15 @@ export default function Settings() {
 
       <SoundCard />
 
-      <div className="card">
-        <div className="row" style={{ marginBottom: '0.5rem' }}>
-          <h2 style={{ margin: 0, flex: 1 }}>Apple Health sync</h2>
-          <span className={`badge${lastIngest ? ' success' : ''}`}>
-            {lastIngest ? `synced ${fmtTimestamp(lastIngest)}` : 'never synced'}
-          </span>
-        </div>
-        <p className="muted">
-          Everything — weight, steps, sleep, and nutrition down to
-          micronutrients (YAZIO writes into Apple Health) — syncs from your
-          phone. Set up the <strong>Health Auto Export</strong> app once:
-        </p>
-        <ol className="muted" style={{ fontSize: '0.85rem', paddingLeft: '1.25rem', margin: '0.6rem 0' }}>
-          <li>Automations → new automation, format <strong>JSON</strong></li>
-          <li style={{ marginTop: '0.4rem' }}>
-            <div className="row" style={{ gap: '0.5rem' }}>
-              <span style={{ flex: 1 }}>URL: <code style={{ fontSize: '0.72rem' }}>{window.location.origin}/api/ingest/health</code></span>
-              <CopyButton text={`${window.location.origin}/api/ingest/health`} />
-            </div>
-          </li>
-          <li style={{ marginTop: '0.4rem' }}>
-            <div className="row" style={{ gap: '0.5rem' }}>
-              <span style={{ flex: 1 }}>Header: <code style={{ fontSize: '0.72rem' }}>Authorization: Bearer {ingestToken}</code></span>
-              <CopyButton text={`Bearer ${ingestToken}`} />
-            </div>
-          </li>
-          <li style={{ marginTop: '0.4rem' }}>Select metrics: steps, weight, sleep, plus the dietary ones</li>
-          <li>Schedule it daily</li>
-        </ol>
-
-        <hr />
-
-        <h3>iOS Shortcut push</h3>
-        <p className="muted" style={{ marginBottom: '0.6rem' }}>
-          More reliable than Health Auto Export's background pushes: an iOS
-          Shortcut automation posts weight, steps, and sleep straight here on
-          the phone's own schedule. Same validated pipeline, so manual
-          corrections still win. Full recipe in{' '}
-          <code style={{ fontSize: '0.72rem' }}>docs/HEALTH_INGEST_SHORTCUT.md</code>.
-        </p>
-        <div className="row" style={{ gap: '0.5rem', marginBottom: '0.4rem' }}>
-          <span style={{ flex: 1 }}>POST: <code style={{ fontSize: '0.72rem' }}>{window.location.origin}/api/ingest/health/shortcut</code></span>
-          <CopyButton text={`${window.location.origin}/api/ingest/health/shortcut`} />
-        </div>
-        <div className="row" style={{ gap: '0.5rem', marginBottom: '0.4rem' }}>
-          <span style={{ flex: 1 }}>Header: <code style={{ fontSize: '0.72rem' }}>Authorization: Bearer {ingestToken}</code></span>
-          <CopyButton text={`Bearer ${ingestToken}`} />
-        </div>
-        <div className="row" style={{ gap: '0.5rem', alignItems: 'flex-start' }}>
-          <pre style={{
-            flex: 1, margin: 0, padding: '0.5rem', borderRadius: 6,
-            background: 'var(--surface-2, rgba(127,127,127,0.12))',
-            fontSize: '0.68rem', overflowX: 'auto', whiteSpace: 'pre',
-          }}>{SHORTCUT_JSON_TEMPLATE}</pre>
-          <CopyButton text={SHORTCUT_JSON_TEMPLATE} label="Copy JSON" />
-        </div>
-
-        <hr />
-
-        <h3>History backfill</h3>
-        <p className="muted" style={{ marginBottom: '0.6rem' }}>
-          Import your full history once: Health app → profile picture →
-          “Export All Health Data”, then upload the <code>export.zip</code> here.
-          Days you corrected manually are never overwritten.
-        </p>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".zip,.xml"
-          style={{ display: 'none' }}
-          onChange={e => setImportFile(e.target.files?.[0] || null)}
-        />
-        <div className="row">
-          <button className="secondary" style={{ flex: 1 }} onClick={() => fileRef.current?.click()}>
-            {importFile ? importFile.name : 'Choose export.zip'}
-          </button>
-          <button onClick={runImport} disabled={!importFile || importBusy} style={{ minWidth: 110 }}>
-            {importBusy ? 'Importing…' : 'Import'}
-          </button>
-        </div>
-        {importBusy && (
-          <p className="muted" style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
-            Large exports can take a minute — leave this page open.
-          </p>
-        )}
-        {importMsg && (
-          <p className="muted" style={{ marginTop: '0.6rem', fontSize: '0.8rem' }}>{importMsg}</p>
-        )}
-      </div>
+      <AppleHealthCard
+        ingestToken={ingestToken}
+        importFile={importFile}
+        setImportFile={setImportFile}
+        importBusy={importBusy}
+        importMsg={importMsg}
+        runImport={runImport}
+        fileRef={fileRef}
+      />
 
       <ProfileCard />
       <RestTimerSettingsCard />
@@ -634,25 +751,6 @@ export default function Settings() {
         </Link>
       </div>
 
-      <div className="card">
-        <h3>Developer</h3>
-        <p className="muted" style={{ marginBottom: '0.75rem' }}>
-          Sample data fills the dashboard with ~30 days of plausible numbers
-          (tagged <code>source: sample</code>) so you can preview it before real
-          data exists. Clearing removes only those rows.
-        </p>
-        <div className="row">
-          <button className="secondary" onClick={loadSample} disabled={sampleBusy} style={{ flex: 1 }}>
-            Load sample data
-          </button>
-          <button className="danger" onClick={clearSample} disabled={sampleBusy} style={{ flex: 1 }}>
-            Clear sample data
-          </button>
-        </div>
-        {sampleMsg && (
-          <p className="muted" style={{ marginTop: '0.6rem', fontSize: '0.8rem' }}>{sampleMsg}</p>
-        )}
-      </div>
     </div>
   )
 }

@@ -59,6 +59,16 @@ class Settings(BaseSettings):
     # can show its STAGING badge no matter which build is talking to us.
     app_env: str = "production"
 
+    # Sample-data seeding (POST /api/dev/seed-sample-health) writes ~30 days of
+    # invented weight/steps/sleep/nutrition into a real account. That is a demo
+    # convenience, never something a beta user should be able to trigger — so it
+    # is off unless explicitly switched on (ENABLE_DEV_SEED=true in a local .env).
+    # Note we deliberately do NOT key this off app_env: that defaults to
+    # 'production' on the laptop too, so it cannot tell "my machine" from "the
+    # Railway prod service". The matching DELETE stays available everywhere so
+    # leftover sample rows can always be cleaned up.
+    enable_dev_seed: bool = False
+
     # Cross-origin frontends (the Vercel staging/preview deployments call the
     # Railway API from another origin). Comma-separated exact origins:
     #   CORS_ORIGINS=https://fitness-staging.vercel.app

@@ -4,7 +4,7 @@
  * weight estimate endpoint (math lives in ../weights.js).
  */
 import { db, nowIso } from '../db'
-import { weightEstimateFor, writeBlocked } from '../weights'
+import { dayDiff, DERIVED_SOURCES, weightEstimateFor, writeBlocked } from '../weights'
 import { addDays, todayIso } from './util'
 
 async function rangeRows(table, days) {
@@ -36,7 +36,73 @@ async function upsertByDate(table, dateIso, fields, source) {
   return row
 }
 
+/**
+ * Newest REAL reading date in a set of health rows, or null.
+ *
+ * "Real" excludes DERIVED_SOURCES (our own interpolated weights, demo seed
+ * rows). The whole point of sync-status is to say whether the phone is
+ * actually pushing, so a chart full of estimates must never be able to
+ * report itself as up to date.
+ */
+export function lastRealDate(rows) {
+  let best = null
+  for (const r of rows) {
+    if (DERIVED_SOURCES.includes(r.source)) continue
+    if (best === null || r.date > best) best = r.date
+  }
+  return best
+}
+
+/**
+ * Pure twin of routers/health.py's health_sync_status. Kept separate from
+ * the Dexie read so the parity tests can drive it with plain arrays.
+ *
+ * `rows` is { weight, steps, sleep, nutrition } → arrays of health rows.
+ */
+export function buildSyncStatus(rows, today, lastIngest = null) {
+  const metrics = {}
+  for (const name of ['weight', 'steps', 'sleep', 'nutrition']) {
+    const last = lastRealDate(rows[name] || [])
+    metrics[name] = {
+      last_date: last,
+      days_stale: last ? dayDiff(last, today) : null,
+    }
+  }
+  const seen = Object.values(metrics)
+    .map(m => m.days_stale)
+    .filter(d => d !== null)
+  return {
+    last_ingest: lastIngest,
+    stalest_days: seen.length ? Math.max(...seen) : null,
+    has_any_data: seen.length > 0,
+    ...metrics,
+  }
+}
+
 export const healthRoutes = [
+  {
+    // Twin of routers/health.py's health_sync_status. Needed locally because
+    // production builds are local-first: without it the installed PWA would
+    // hit the network for this on every page and fail when offline.
+    //
+    // `last_ingest` is always null here: sync.py deliberately excludes
+    // settings.health_last_ingest from the sync payload, so the local row
+    // never carries it. The per-metric `days_stale` values are the real
+    // signal anyway — they're computed from rows that DID sync down.
+    method: 'GET', pattern: /^\/api\/health\/sync-status$/,
+    handler: async () => {
+      const [weight, steps, sleep, nutrition] = await Promise.all([
+        db.weight_log.toArray(), db.steps_log.toArray(),
+        db.sleep_log.toArray(), db.nutrition_day.toArray(),
+      ])
+      const settings = await db.settings.get(1)
+      return buildSyncStatus(
+        { weight, steps, sleep, nutrition },
+        todayIso(),
+        settings?.health_last_ingest ?? null,
+      )
+    },
+  },
   {
     method: 'GET', pattern: /^\/api\/health\/weight\/estimate$/,
     handler: async (_m, query) => weightEstimateFor(query.get('date')),

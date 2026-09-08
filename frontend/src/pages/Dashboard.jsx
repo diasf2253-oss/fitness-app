@@ -13,7 +13,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { apiFetch } from '../api'
-import { Loading, ErrorBox, EmptyNote } from '../components/States'
+import { Loading, ErrorBox, EmptyNote, NoHealthDataNote } from '../components/States'
 import MonthCalendar from '../components/MonthCalendar'
 import WidgetLabel from '../components/WidgetLabel'
 import CheckIn from '../components/CheckIn'
@@ -390,7 +390,7 @@ export default function Dashboard() {
               )}
               </>
             ) : (
-              <EmptyNote />
+              <NoHealthDataNote metric="weight readings" />
             )}
           </div>
 
@@ -411,7 +411,7 @@ export default function Dashboard() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <EmptyNote />
+              <NoHealthDataNote metric="step data" />
             )}
           </div>
 
@@ -432,7 +432,7 @@ export default function Dashboard() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <EmptyNote />
+              <NoHealthDataNote metric="sleep data" />
             )}
           </div>
 

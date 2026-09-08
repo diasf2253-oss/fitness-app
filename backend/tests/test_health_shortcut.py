@@ -13,7 +13,7 @@ corrections use the normal cookie-authenticated endpoints.
 """
 import json
 import os
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -181,3 +181,98 @@ class TestRobustness:
         db = TestingSession()
         assert db.query(WeightLog).count() == 1
         db.close()
+
+
+class TestSyncStatus:
+    """
+    GET /api/health/sync-status — the honesty check on the whole pipeline.
+
+    A PWA can't read HealthKit, so the app can only tell the user whether
+    their phone is actually pushing by reporting how old each metric is.
+    Two things must hold: it reports per-metric (not one opaque flag), and
+    freshness counts real readings only.
+    """
+
+    def test_never_synced_shape(self, auth_client):
+        s = auth_client.get("/api/health/sync-status").json()
+        assert s["last_ingest"] is None
+        assert s["has_any_data"] is False
+        assert s["stalest_days"] is None
+        for metric in ("weight", "steps", "sleep", "nutrition"):
+            assert s[metric] == {"last_date": None, "days_stale": None}
+
+    def test_requires_auth(self, client):
+        assert client.get("/api/health/sync-status").status_code == 401
+
+    def test_reflects_a_shortcut_push(self, auth_client):
+        today = date.today().isoformat()
+        post(auth_client, {
+            "weight": [{"date": today, "kg": 82.4}],
+            "steps": [{"date": today, "count": 11205}],
+        })
+        s = auth_client.get("/api/health/sync-status").json()
+        assert s["weight"] == {"last_date": today, "days_stale": 0}
+        assert s["steps"] == {"last_date": today, "days_stale": 0}
+        # Nothing posted sleep or nutrition — they stay unknown, not "fresh"
+        assert s["sleep"]["last_date"] is None
+        assert s["has_any_data"] is True
+        assert s["last_ingest"] is not None
+
+    def test_stalest_days_is_the_worst_metric(self, auth_client):
+        today = date.today()
+        post(auth_client, {
+            "weight": [{"date": today.isoformat(), "kg": 82.4}],
+            "steps": [{"date": (today - timedelta(days=4)).isoformat(), "count": 9000}],
+        })
+        s = auth_client.get("/api/health/sync-status").json()
+        assert s["weight"]["days_stale"] == 0
+        assert s["steps"]["days_stale"] == 4
+        assert s["stalest_days"] == 4
+
+    def test_derived_rows_do_not_count_as_fresh(self, auth_client):
+        """
+        An interpolated or demo row must never make the app claim the data is
+        current — that is exactly the "it looks synced but it's made up"
+        failure this endpoint exists to prevent.
+        """
+        today = date.today().isoformat()
+        auth_client.post("/api/health/weight",
+                         json={"date": today, "weight_kg": 80.0, "source": "estimated"})
+        s = auth_client.get("/api/health/sync-status").json()
+        assert s["weight"] == {"last_date": None, "days_stale": None}
+        assert s["has_any_data"] is False
+
+    def test_manual_entries_count_as_real(self, auth_client):
+        today = date.today().isoformat()
+        auth_client.post("/api/health/weight", json={"date": today, "weight_kg": 80.0})
+        s = auth_client.get("/api/health/sync-status").json()
+        assert s["weight"] == {"last_date": today, "days_stale": 0}
+
+
+class TestIngestTokenRotation:
+    """
+    The ingest token is a long-lived bearer credential pasted into a Shortcut,
+    so it travels further than a session does. Rotation is the only way to
+    revoke one without disabling the account.
+    """
+
+    def test_rotation_issues_a_new_token(self, auth_client):
+        before = auth_client.get("/api/auth/me").json()["ingest_token"]
+        rotated = auth_client.post("/api/auth/ingest-token/rotate").json()["ingest_token"]
+        assert rotated != before
+        assert auth_client.get("/api/auth/me").json()["ingest_token"] == rotated
+
+    def test_old_token_stops_working(self, auth_client):
+        stale = ingest_headers(auth_client)
+        auth_client.post("/api/auth/ingest-token/rotate")
+
+        body = {"steps": [{"date": date.today().isoformat(), "count": 8000}]}
+        assert auth_client.post("/api/ingest/health/shortcut",
+                                json=body, headers=stale).status_code == 401
+        # ...and the fresh one does
+        assert auth_client.post("/api/ingest/health/shortcut",
+                                json=body,
+                                headers=ingest_headers(auth_client)).status_code == 200
+
+    def test_requires_auth(self, client):
+        assert client.post("/api/auth/ingest-token/rotate").status_code == 401

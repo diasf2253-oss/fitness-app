@@ -22,6 +22,8 @@ Patterns for new tests:
     per-user bearer `ingest_token`, not the cookie — read it from
     `auth_client.get("/api/auth/me").json()["ingest_token"]` and send it as
     `Authorization: Bearer <token>` (see test_health_ingest.py).
+  - A route behind `require_admin` needs `admin_client` instead of
+    `auth_client` (same shape, role='admin').
   - A test needing a second, independent user builds one directly (see
     test_safety_net.py's cross-user isolation tests: create a User row with
     app.auth.hash_password, POST /api/auth/login on a second client).
@@ -89,17 +91,17 @@ def client():
 
 TEST_USER_EMAIL = "test@example.com"
 TEST_USER_PASSWORD = "testpassword123"
+ADMIN_USER_EMAIL = "admin@example.com"
 
 
-@pytest.fixture
-def auth_client(client):
-    """A TestClient logged in (session cookie set) as a fresh, active user."""
+def _make_user(email, password, *, role="user", name="Test User"):
+    """Create an active account and return its id."""
     db = TestingSession()
     user = User(
-        email=TEST_USER_EMAIL,
-        password_hash=hash_password(TEST_USER_PASSWORD),
-        name="Test User",
-        role="user",
+        email=email,
+        password_hash=hash_password(password),
+        name=name,
+        role=role,
         status="active",
     )
     db.add(user)
@@ -107,6 +109,26 @@ def auth_client(client):
     db.refresh(user)
     user_id = user.id
     db.close()
+    return user_id
+
+
+@pytest.fixture
+def admin_client(client):
+    """A TestClient logged in as an admin — for routes behind require_admin."""
+    user_id = _make_user(ADMIN_USER_EMAIL, TEST_USER_PASSWORD,
+                         role="admin", name="Test Admin")
+    r = client.post("/api/auth/login", json={
+        "email": ADMIN_USER_EMAIL, "password": TEST_USER_PASSWORD, "remember": True,
+    })
+    assert r.status_code == 200, r.text
+    client.test_user_id = user_id
+    return client
+
+
+@pytest.fixture
+def auth_client(client):
+    """A TestClient logged in (session cookie set) as a fresh, active user."""
+    user_id = _make_user(TEST_USER_EMAIL, TEST_USER_PASSWORD)
 
     r = client.post("/api/auth/login", json={
         "email": TEST_USER_EMAIL, "password": TEST_USER_PASSWORD, "remember": True,

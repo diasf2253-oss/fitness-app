@@ -1,23 +1,68 @@
 # Health ingest via iOS Shortcut
 
-A stable, always-on way to get **weight, steps, and sleep** off the phone and
-into the app — without depending on Health Auto Export's background pushes.
+How **weight, steps and sleep** get off an iPhone and into the app.
 
 ## Why this exists
 
-The H4 diagnosis (`docs/APPLE_HEALTH_DIAGNOSIS.md`) found the health pipeline
-was untrustworthy mostly because of *delivery*, not math: HAE's scheduled
-pushes only fire reliably when its app is open, and quick-tunnel URLs rot. An
-iOS **Shortcut** driven by a Personal Automation runs on the phone's own
-schedule and can post straight at the **production Railway URL** (stable,
-always on). It reuses the exact same validated ingest pipeline as the
-`export.xml` history backfill — unit conversion, wake-date sleep bucketing,
-multi-source dedup, and manual-precedence — so what it writes obeys the same
-rules a backfill does.
+**A web app cannot read Apple Health.** iOS gives HealthKit access to native
+apps only — never to a website or an installed PWA. So this app can never pull
+your health data; the phone has to *push* it.
 
-This is additive. HAE and the `export.zip` backfill still work unchanged;
+The H4 diagnosis (`docs/APPLE_HEALTH_DIAGNOSIS.md`) found the old push path
+(Health Auto Export's scheduled background jobs) was untrustworthy mostly
+because of *delivery*: HAE's pushes only fire reliably when its app is open,
+and quick-tunnel URLs rot. An iOS **Shortcut** driven by a Personal Automation
+runs on the phone's own schedule and posts straight at the production URL
+(stable, always on).
+
+It reuses the exact same validated ingest pipeline as the `export.xml` history
+backfill — unit conversion, wake-date sleep bucketing, multi-source dedup and
+manual-precedence — so what it writes obeys the same rules a backfill does.
+
+This is additive. HAE and the `export.zip` backfill still work unchanged, and
 nutrition/micronutrients still arrive through those. The Shortcut just covers
 the three core numbers reliably.
+
+---
+
+## For a beta user: three steps
+
+Everything you need is in the app under **Settings → Apple Health sync**.
+
+1. **Install the Shortcut.** Tap **Get "Tracker Health Sync"** in Settings.
+   It opens the Shortcuts app and asks two questions on install:
+   - *Server* — copy it from Settings (the **Server** row).
+   - *Token* — copy it from Settings (the **Token** row). It's yours alone;
+     treat it like a password.
+2. **Add the automation.** Shortcuts app → **Automation** tab → **+** →
+   **Time of Day** → 08:00 → Run *Tracker Health Sync* → turn **off**
+   "Ask Before Running". A second one around 21:00 is a good safety net.
+3. **Check it worked.** Settings shows a **Latest data** table — weight,
+   steps, sleep and nutrition each with how recent they are. You can also tap
+   **Sync Health now** any time to run it immediately.
+
+### The in-app "Sync now" button
+
+iOS exposes a `shortcuts://` URL scheme, so the app really can start the sync:
+
+```
+shortcuts://x-callback-url/run-shortcut?name=Tracker%20Health%20Sync&x-success=<return url>
+```
+
+`x-success` bounces you back to the app when the push finishes. iOS shows a
+one-time confirmation the first time the site opens Shortcuts.
+
+**Note on automatic triggering:** iOS's "When I open an app" automation trigger
+does **not** reliably list home-screen web apps, so there is no way to make the
+sync fire simply because you opened this app. The supported combination is the
+**time-of-day automation** (hands-free, daily) plus the **Sync now** button
+(on demand). Don't promise more than that.
+
+If the Shortcut ever stops working, the usual cause is a **regenerated token** —
+paste the new one from Settings into the Shortcut (Shortcuts → long-press →
+Edit → the Token text field).
+
+---
 
 ## Endpoint spec
 
@@ -25,13 +70,18 @@ the three core numbers reliably.
 |---|---|
 | **Method** | `POST` |
 | **URL** | `https://<your-app>/api/ingest/health/shortcut` |
-| **Auth header** | `Authorization: Bearer <APP_TOKEN>` |
+| **Auth header** | `Authorization: Bearer <ingest_token>` |
 | **Content-Type** | `application/json` |
 
-Use your **production** origin as `<your-app>` (the same host the installed PWA
-talks to), and the **same token** you set in Settings → API token (it must match
-the backend's `APP_TOKEN`). The Settings → *Apple Health sync* card shows your
-exact URL and header, pre-filled and copyable.
+The bearer value is the **per-user `ingest_token`**, shown in
+Settings → Apple Health sync. It is *not* a shared app-wide secret — every
+account has its own, and it is what tells the server whose data this is. (A
+Shortcut can't hold a cookie jar, which is why ingest uses a bearer token when
+the rest of the app uses a session cookie.) It never expires; rotate it with
+**Regenerate token** in Settings if it leaks.
+
+Use your **production** origin as `<your-app>` — the same host the installed
+PWA talks to. Settings shows your exact URL, pre-filled and copyable.
 
 ### Request body
 
@@ -81,7 +131,7 @@ produces most easily):
 ### Response — the import report
 
 `200 OK` with a report of exactly what landed. This is the trust gate: check
-it (or the Settings "synced …" badge) to confirm a push worked.
+it (or Settings' *Latest data* table) to confirm a push worked.
 
 ```json
 {
@@ -103,41 +153,71 @@ it (or the Settings "synced …" badge) to confirm a push worked.
 - Bad items are skipped with a note in `warnings` rather than failing the
   whole push; unknown top-level keys are echoed in `ignored`.
 
-## Building the Shortcut
+---
 
-1. **Shortcuts app → new Shortcut.** Add, per metric you want:
-   - *Get Health Sample* → Body Mass → most recent → into a variable.
-   - *Get Health Sample* → Steps → today's total.
-   - *Get Health Sample* → Sleep → last night (asleep + in-bed minutes).
-2. *Text* / *Dictionary* actions to assemble the JSON body above from those
-   variables (today's date via the *Current Date* → *Format Date* → `yyyy-MM-dd`).
-3. *Get Contents of URL*:
-   - URL = your endpoint (above), Method = **POST**.
-   - Headers: `Authorization` = `Bearer <APP_TOKEN>`, `Content-Type` =
-     `application/json`.
-   - Request Body = **JSON** (or the assembled text).
-4. Optionally *Show Result* to eyeball the report while testing.
-5. **Automation:** Personal Automations → new → *Time of Day* (e.g. 08:00),
-   run the Shortcut, and turn **off** "Ask Before Running".
+## Building the Shortcut (once, for everyone)
 
-### Recommendation (from the H4 diagnosis)
+`.shortcut` files are a signed binary format, so this can't be generated from
+the repo. Build it once on your own phone, then **Share → Copy iCloud Link**
+and put that link in `VITE_HEALTH_SHORTCUT_URL` — every beta user installs
+from it.
 
-Post a **rolling last few days**, one item per day per metric, not just
-"today". Because the upserts are idempotent and `apple_health` overwrites
-`apple_health`, every run then self-heals any day a previous run missed —
-which is what made HAE fragile.
+The design points that matter:
+
+1. **Name it exactly `Tracker Health Sync`.** The in-app Sync button
+   deep-links by name (`HEALTH_SHORTCUT_NAME` in `frontend/src/env.js`).
+2. **Use Import Questions for `Server` and `Token`.** Shortcuts prompts for
+   these at install time and stores the answers, so one shared link works for
+   everyone without any per-person editing. (Shortcut details → *Import
+   Questions* → add one per text field you want asked.)
+3. **Post a rolling last 7 days**, one item per day per metric — not just
+   "today". Because the upserts are idempotent and `apple_health` overwrites
+   `apple_health`, every run repairs any day a previous run missed. This
+   self-healing is exactly what HAE lacked (diagnosis §2).
+4. **Aggregate steps daily.** Apple Health stores overlapping samples from
+   both iPhone and Watch; a raw sum double-counts them (diagnosis §4). Use
+   *Get Health Sample* with a **daily** total, or aggregate in the Shortcut.
+5. **Key sleep to the wake-up morning.** The backend's `_night_of` in
+   `app/health_ingest.py` expects that, and it's how Apple presents sleep.
+
+Rough action sequence:
+
+- *Text* actions holding the two Import Question answers → variables
+  `Server`, `Token`.
+- *Get Health Sample* → **Body Mass**, last 7 days → *Repeat with Each* →
+  build `{ "date": …, "kg": … }` dictionaries into a list.
+- *Get Health Sample* → **Steps**, last 7 days, daily totals → same shape with
+  `count`.
+- *Get Health Sample* → **Sleep Analysis**, last 7 nights → `asleep_minutes` /
+  `in_bed_minutes` per wake date.
+- *Dictionary* combining the three lists under `weight` / `steps` / `sleep`.
+- *Get Contents of URL*:
+  - URL = `<Server>/api/ingest/health/shortcut`, Method = **POST**
+  - Headers: `Authorization` = `Bearer <Token>`, `Content-Type` =
+    `application/json`
+  - Request Body = **JSON** (the dictionary above)
+- Optionally *Show Result* while testing, then remove it so the automation can
+  run silently.
 
 ## Testing it
 
 ```bash
 curl -X POST https://<your-app>/api/ingest/health/shortcut \
-  -H "Authorization: Bearer <APP_TOKEN>" \
+  -H "Authorization: Bearer <ingest_token>" \
   -H "Content-Type: application/json" \
   -d '{"weight":[{"date":"2026-07-18","kg":82.4}],
        "steps":[{"date":"2026-07-18","count":11205}],
        "sleep":[{"date":"2026-07-18","asleep_minutes":427,"in_bed_minutes":465}]}'
 ```
 
-The response report should show the rows, and the values then appear in the
-app (dashboard weight chart, `GET /api/health/weight|steps|sleep`) and the
-Settings "synced …" badge updates.
+The response report should show the rows. Then check freshness:
+
+```bash
+curl -b cookies.txt https://<your-app>/api/health/sync-status
+```
+
+`days_stale` should be `0` for whatever you just posted. The same numbers
+drive the Settings card, the sidebar sync line and the stale-data banner.
+Note that `sync-status` counts **real readings only** — interpolated
+(`estimated`) and demo (`sample`) rows are excluded, so it can never claim
+fabricated data is fresh.
