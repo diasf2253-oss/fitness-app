@@ -88,6 +88,9 @@ GROUP_BENCHMARK: dict[str, float] = {
 # are logged per hand, cables read low on the stack, machines extrapolate high.
 EQUIPMENT_FACTOR: dict[str, float] = {
     "barbell": 1.00, "machine": 1.20, "cable": 0.75, "dumbbell": 0.42,
+    # Smith: fixed bar path removes stabiliser demand, so a bit more moves than
+    # free barbell but less than a loaded machine.
+    "smith": 1.10,
     "kettlebell": 0.42, "bodyweight": 1.00,
 }
 # One limb at a time ⇒ roughly half the bilateral load, minus a stability tax.

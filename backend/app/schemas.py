@@ -41,6 +41,10 @@ class ExerciseUpdate(ExerciseBase):
 
 class ExerciseOut(OrmBase, ExerciseBase):
     id: int
+    # Stable cross-device identity. The local-first twin hands `id` a uuid, so
+    # anything persisted against an exercise (e.g. settings.exercise_brands)
+    # must key on this, not on the device-local integer id.
+    uuid: str
     is_custom: bool
 
 
@@ -303,6 +307,7 @@ class AppSettingsUpdate(BaseModel):
     calorie_ceiling: Optional[int] = None
     # Training
     volume_targets: Optional[dict] = None
+    exercise_brands: Optional[dict] = None
     streak_rest_gap: Optional[int] = None
     default_rest_seconds: Optional[int] = None
     goal_rate_kg_per_week: Optional[float] = None
@@ -329,6 +334,7 @@ class AppSettingsOut(OrmBase):
     last_adapted_week: Optional[date] = None
     # Training
     volume_targets: Optional[dict] = None
+    exercise_brands: Optional[dict] = None
     streak_rest_gap: int = 1
     default_rest_seconds: int = 120
     # Legacy (retired, unused)

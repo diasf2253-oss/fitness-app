@@ -512,6 +512,12 @@ class AppSettings(UpdatedAtMixin, Base):
     # {muscle: [low, high]} weekly volume-target overrides; null ⇒ defaults in
     # app.muscles. Read by the sets-per-week analytics and the generator.
     volume_targets: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # {exercise_uuid: "Hammer Strength"} — which brand of machine/cable/smith
+    # this user trains on. Lives here, not on Exercise, because seeded exercises
+    # are the SHARED library (user_id IS NULL): a brand written there would leak
+    # to every other user. Keyed by uuid (stable across devices), not by the
+    # device-local integer id.
+    exercise_brands: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     # Allowed rest days between workouts before the training streak breaks.
     streak_rest_gap: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     # Default rest-timer duration (seconds) for exercises with no routine rest.

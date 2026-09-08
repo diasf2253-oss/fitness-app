@@ -36,7 +36,7 @@ async function exerciseByUuid(uuid) {
 }
 
 const presentExercise = (ex) => ({
-  id: ex.uuid, name: ex.name,
+  id: ex.uuid, uuid: ex.uuid, name: ex.name,
   primary_muscle: ex.primary_muscle ?? null,
   primary_muscle_group: ex.primary_muscle_group ?? null,
   secondary_muscles: ex.secondary_muscles || [],

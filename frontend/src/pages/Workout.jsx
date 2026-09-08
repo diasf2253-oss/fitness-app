@@ -177,6 +177,7 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
   const [restByExercise, setRestByExercise] = useState({})  // exercise_id -> rest seconds (from routine)
   const [targetsByExercise, setTargetsByExercise] = useState({})  // exercise_id -> {sets, rep_low, rep_high, rir}
   const exerciseRanks = useExerciseRanks()   // exercise_id -> rank (colour + tier)
+  const [brands, setBrands] = useState({})   // exercise_uuid -> machine brand
   const [defaultRest, setDefaultRest] = useState(120)       // settings.default_rest_seconds
   // Learned rest habits: exercise_id -> seconds, from the user's timer
   // adjustments. Device-local by design (a habit, not synced data).
@@ -191,7 +192,7 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
   // The configurable default rest duration (used when a routine has none).
   useEffect(() => {
     apiFetch('/api/settings')
-      .then(s => setDefaultRest(s.default_rest_seconds ?? 120))
+      .then(s => { setDefaultRest(s.default_rest_seconds ?? 120); setBrands(s.exercise_brands || {}) })
       .catch(() => {})  // non-critical; 120s fallback applies
   }, [])
 
@@ -377,6 +378,7 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
             onSetCompleted={() => startRest(se.exercise_id)}
             target={targetsByExercise[se.exercise_id]}
             rank={exerciseRanks[se.exercise_id]}
+            brand={brands[se.exercise.uuid]}
             setError={setError}
           />
         ))}
@@ -414,7 +416,7 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
 // Exercise card with set rows
 // ---------------------------------------------------------------------------
 
-function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, target, rank, setError }) {
+function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, target, rank, brand, setError }) {
   const [prevSets, setPrevSets] = useState([])
 
   // Fetch what was lifted last time, to pre-fill placeholders
@@ -460,6 +462,7 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, targ
       </div>
       <div className="muted" style={{ fontSize: '0.75rem', marginBottom: '0.5rem' }}>
         {se.exercise.primary_muscle}{se.exercise.equipment ? ` · ${se.exercise.equipment}` : ''}
+        {brand ? ` · ${brand}` : ''}
       </div>
       {target && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.5rem' }}>

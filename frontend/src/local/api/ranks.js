@@ -70,6 +70,8 @@ export const GROUP_BENCHMARK = {
 export const EQUIPMENT_FACTOR = {
   barbell: 1.00, machine: 1.20, cable: 0.75, dumbbell: 0.42,
   kettlebell: 0.42, bodyweight: 1.00,
+  // Fixed bar path: more than free barbell, less than a loaded machine.
+  smith: 1.10,
 }
 export const UNILATERAL_FACTOR = 0.55
 const UNILATERAL_HINTS = [
