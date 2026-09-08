@@ -48,7 +48,8 @@ const presentExercise = (ex) => ({
 const presentSet = (s) => ({
   id: s.uuid, session_exercise_id: s.session_exercise_uuid,
   set_number: s.set_number, weight_kg: s.weight_kg, reps: s.reps,
-  rpe: s.rpe ?? null, is_warmup: !!s.is_warmup, is_completed: !!s.is_completed,
+  rpe: s.rpe ?? null, rir: s.rir ?? null,
+  is_warmup: !!s.is_warmup, is_completed: !!s.is_completed,
   completed_at: s.completed_at ?? null,
 })
 
@@ -378,7 +379,7 @@ export const workoutRoutes = [
           for (let i = 1; i <= re.target_sets; i++) {
             await db.set.put(stamp({
               uuid: newUuid(), session_exercise_uuid: se.uuid, set_number: i,
-              weight_kg: 0.0, reps: 0, rpe: null,
+              weight_kg: 0.0, reps: 0, rpe: null, rir: null,
               is_warmup: false, is_completed: false, completed_at: null,
             }))
           }
@@ -468,7 +469,7 @@ export const workoutRoutes = [
         await db.set.put(stamp({
           uuid: newUuid(), session_exercise_uuid: se.uuid,
           set_number: sd.set_number, weight_kg: sd.weight_kg ?? 0, reps: sd.reps ?? 0,
-          rpe: sd.rpe ?? null, is_warmup: sd.is_warmup ?? false,
+          rpe: sd.rpe ?? null, rir: sd.rir ?? null, is_warmup: sd.is_warmup ?? false,
           is_completed: sd.is_completed ?? false, completed_at: null,
         }))
       }
@@ -493,7 +494,7 @@ export const workoutRoutes = [
       const row = stamp({
         uuid: newUuid(), session_exercise_uuid: m[2],
         set_number: body.set_number, weight_kg: body.weight_kg ?? 0, reps: body.reps ?? 0,
-        rpe: body.rpe ?? null, is_warmup: body.is_warmup ?? false,
+        rpe: body.rpe ?? null, rir: body.rir ?? null, is_warmup: body.is_warmup ?? false,
         is_completed: body.is_completed ?? false, completed_at: null,
       })
       await db.set.put(row)

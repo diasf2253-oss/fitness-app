@@ -122,6 +122,7 @@ class SetBase(BaseModel):
     weight_kg: float = 0.0
     reps: int = 0
     rpe: Optional[float] = None
+    rir: Optional[int] = None
     is_warmup: bool = False
     is_completed: bool = False
 
@@ -134,6 +135,7 @@ class SetUpdate(BaseModel):
     weight_kg: Optional[float] = None
     reps: Optional[int] = None
     rpe: Optional[float] = None
+    rir: Optional[int] = None
     is_warmup: Optional[bool] = None
     is_completed: Optional[bool] = None
     completed_at: Optional[datetime] = None

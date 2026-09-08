@@ -15,7 +15,7 @@ import { apiFetch } from '../api'
 import { SetRow } from './Workout'
 
 const SET = {
-  id: 3, set_number: 1, weight_kg: 0, reps: 0, rpe: null,
+  id: 3, set_number: 1, weight_kg: 0, reps: 0, rpe: null, rir: null,
   is_completed: false, is_warmup: false,
 }
 const PATCH_URL = '/api/sessions/1/exercises/2/sets/3'
@@ -47,7 +47,7 @@ describe('SetRow input handling', () => {
     fireEvent.blur(weight)
 
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(PATCH_URL, expect.anything()))
-    expect(lastPatchBody()).toEqual({ weight_kg: 82.5, reps: 0, rpe: null })
+    expect(lastPatchBody()).toEqual({ weight_kg: 82.5, reps: 0, rir: null })
   })
 
   it('never saves NaN — garbage falls back to 0', async () => {

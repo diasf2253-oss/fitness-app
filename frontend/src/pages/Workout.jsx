@@ -469,7 +469,7 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, targ
         <span style={{ width: 28, textAlign: 'center' }}>Set</span>
         <span style={{ flex: 1 }}>kg</span>
         <span style={{ flex: 1 }}>reps</span>
-        <span style={{ width: 48, textAlign: 'center' }}>RPE</span>
+        <span style={{ width: 48, textAlign: 'center' }}>RIR</span>
         <span style={{ width: 44, textAlign: 'center' }}>✓</span>
         <span style={{ width: 30 }} />
       </div>
@@ -498,7 +498,7 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, targ
 }
 
 // ---------------------------------------------------------------------------
-// Single set row — weight, reps, RPE, warmup, complete checkbox
+// Single set row — weight, reps, RIR, warmup, complete checkbox
 // ---------------------------------------------------------------------------
 
 export function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, setError }) {
@@ -506,7 +506,7 @@ export function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onD
   // so the previous-session value shows as a placeholder.
   const [weight, setWeight] = useState(set.weight_kg || '')
   const [reps, setReps] = useState(set.reps || '')
-  const [rpe, setRpe] = useState(set.rpe ?? '')
+  const [rir, setRir] = useState(set.rir ?? '')
   const [completed, setCompleted] = useState(set.is_completed)
   const [isWarmup, setIsWarmup] = useState(set.is_warmup)
 
@@ -521,12 +521,12 @@ export function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onD
     }
   }
 
-  // Save weight/reps/rpe on blur (avoids a request per keystroke)
+  // Save weight/reps/rir on blur (avoids a request per keystroke)
   function saveField() {
     patch({
       weight_kg: parseDecimal(weight) ?? 0,
       reps: reps === '' ? 0 : Number(reps),
-      rpe: parseDecimal(rpe),
+      rir: rir === '' ? null : Number(rir),
     })
   }
 
@@ -541,7 +541,7 @@ export function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onD
     await patch({
       weight_kg: w,
       reps: r,
-      rpe: parseDecimal(rpe),
+      rir: rir === '' ? null : Number(rir),
       is_completed: next,
       is_warmup: isWarmup,
     })
@@ -597,10 +597,10 @@ export function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onD
       />
       <input
         style={{ width: 48, minHeight: 44, textAlign: 'center', padding: '0.3rem' }}
-        type="text" inputMode="decimal" aria-label="RPE"
+        type="number" inputMode="numeric" aria-label="RIR"
         placeholder="–"
-        value={rpe}
-        onChange={e => setRpe(e.target.value)}
+        value={rir}
+        onChange={e => setRir(e.target.value)}
         onBlur={saveField}
       />
       <button

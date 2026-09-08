@@ -274,8 +274,11 @@ class Set(SyncMixin, Base):
     set_number: Mapped[int] = mapped_column(Integer, nullable=False)
     weight_kg: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     reps: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    # RPE (Rate of Perceived Exertion) 1-10, optional
+    # RPE (Rate of Perceived Exertion) 1-10, optional. Superseded in the UI by
+    # rir below (RPE ~= 10 - RIR); kept so existing logged data still reads back.
     rpe: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # RIR (Reps In Reserve) — reps left in the tank on this set, 0 = to failure.
+    rir: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     is_warmup: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
