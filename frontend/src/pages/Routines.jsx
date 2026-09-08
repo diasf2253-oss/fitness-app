@@ -126,19 +126,32 @@ function RoutineEditor({ routine, onSaved, onCancel }) {
     })) || []
   )
   const [showPicker, setShowPicker] = useState(false)
+  // Index the picker should REPLACE, or null when it's adding a new exercise.
+  const [replacingIdx, setReplacingIdx] = useState(null)
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
 
-  function addExercise(ex) {
-    setItems(prev => [...prev, {
-      exercise: ex,
-      target_sets: 3,
-      target_rep_low: 8,
-      target_rep_high: 12,
-      rest_seconds: 120,
-      target_rir: null,
-    }])
+  /** One handler for both picker modes: replace the movement in place
+   *  (keeping its position and targets) or append a new one. */
+  function pickExercise(ex) {
+    if (replacingIdx != null) {
+      setItems(prev => prev.map((it, i) => (i === replacingIdx ? { ...it, exercise: ex } : it)))
+    } else {
+      setItems(prev => [...prev, {
+        exercise: ex,
+        target_sets: 3,
+        target_rep_low: 8,
+        target_rep_high: 12,
+        rest_seconds: 120,
+        target_rir: null,
+      }])
+    }
+    closePicker()
+  }
+
+  function closePicker() {
     setShowPicker(false)
+    setReplacingIdx(null)
   }
 
   function updateItem(idx, field, value) {
@@ -211,9 +224,14 @@ function RoutineEditor({ routine, onSaved, onCancel }) {
       <div className="col" style={{ gap: '0.75rem' }}>
         {items.map((it, idx) => (
           <div key={idx} className="card" style={{ margin: 0, ...rankAccent(exerciseRanks[it.exercise.id]) }}>
-            <div className="row">
-              <strong style={{ flex: 1 }}>{idx + 1}. {it.exercise.name}</strong>
+            <div className="row" style={{ flexWrap: 'wrap', gap: '0.3rem' }}>
+              <strong style={{ flex: '1 1 140px' }}>{idx + 1}. {it.exercise.name}</strong>
               <RankBadge rank={exerciseRanks[it.exercise.id]} style={{ marginRight: 4 }} />
+              <button
+                className="secondary" style={{ minWidth: 40, padding: '0.3rem 0.5rem' }}
+                title="Replace exercise" aria-label={`Replace ${it.exercise.name}`}
+                onClick={() => { setReplacingIdx(idx); setShowPicker(true) }}
+              >⇄</button>
               <button className="secondary" style={{ minWidth: 40, padding: '0.3rem 0.5rem' }} onClick={() => move(idx, -1)} disabled={idx === 0}>↑</button>
               <button className="secondary" style={{ minWidth: 40, padding: '0.3rem 0.5rem' }} onClick={() => move(idx, 1)} disabled={idx === items.length - 1}>↓</button>
               <button className="danger" style={{ minWidth: 40, padding: '0.3rem 0.5rem' }} onClick={() => removeItem(idx)}>✕</button>
@@ -255,7 +273,7 @@ function RoutineEditor({ routine, onSaved, onCancel }) {
         {saving ? 'Saving…' : 'Save routine'}
       </button>
 
-      {showPicker && <ExercisePicker onSelect={addExercise} onClose={() => setShowPicker(false)} />}
+      {showPicker && <ExercisePicker onSelect={pickExercise} onClose={closePicker} />}
     </div>
   )
 }
