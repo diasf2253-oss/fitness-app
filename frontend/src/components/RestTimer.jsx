@@ -1,21 +1,16 @@
 /**
  * RestTimer — a sticky countdown bar shown after completing a set.
  *
- * Behaviour:
- *  - Counts down from `seconds`
- *  - −15 / +15 quick adjust; pause/resume; while paused, add a custom amount
- *  - Plays a beep + vibration + browser notification when it reaches zero
- *
- * Mobile-first layout: the time sits on its own row, and the controls share a
- * full-width row below (each button flex:1), so nothing overflows a ~360px
- * phone — the old single-row pill pushed −15/+15 off-screen.
+ * Deliberately minimal: the countdown plus exactly two controls, Pause/Resume
+ * and Skip. There is no −15/+15 or "add seconds" — the owner asked for a bar
+ * that doesn't need reading mid-set. Rest duration comes from the routine's
+ * rest_seconds when set, otherwise the Settings default (see restForExercise
+ * in pages/Workout.jsx); it is not adjusted from here.
  *
  * Props:
  *   seconds  — starting duration in seconds
  *   onDone   — called once when the timer hits zero
- *   onClose  — called when user dismisses/skips the timer
- *   onAdjust — called with the delta (±seconds) on every manual adjustment,
- *              so the caller can learn real rest habits per exercise
+ *   onClose  — called when the user dismisses/skips the timer
  */
 import React, { useEffect, useRef, useState } from 'react'
 
@@ -56,34 +51,22 @@ function fmt(total) {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-// Shared style for the bar's ghost buttons — flex:1 so a row shares width evenly
-// and never overflows the phone, with a comfortable tap height.
+// Ghost button on the coloured bar. Generous height for gym thumbs; the two
+// buttons sit at a fixed width so the row never overflows a ~360px phone.
 const ctrlBtn = {
-  flex: 1,
-  minHeight: 42,
-  background: 'rgba(27,33,29,0.12)',
+  flex: '0 0 auto',
+  minWidth: 92,
+  minHeight: 44,
+  background: 'rgba(27,33,29,0.14)',
   color: 'var(--color-on-primary)',
   boxShadow: 'none',
-  padding: '0.4rem 0.3rem',
-  fontSize: '0.95rem',
+  padding: '0.4rem 0.6rem',
 }
 
-export default function RestTimer({ seconds, onDone, onClose, onAdjust }) {
+export default function RestTimer({ seconds, onDone, onClose }) {
   const [remaining, setRemaining] = useState(seconds)
   const [paused, setPaused] = useState(false)
-  const [addInput, setAddInput] = useState('')   // custom seconds to add while paused
   const firedRef = useRef(false)
-
-  function adjust(delta) {
-    setRemaining(r => Math.max(0, r + delta))
-    onAdjust?.(delta)
-  }
-
-  function addCustom() {
-    const n = parseInt(addInput, 10)
-    if (n) adjust(n)
-    setAddInput('')
-  }
 
   useEffect(() => {
     // Tick every second; a paused timer keeps its remaining time.
@@ -118,59 +101,38 @@ export default function RestTimer({ seconds, onDone, onClose, onAdjust }) {
         background: isDone ? 'var(--color-success)' : 'var(--color-primary)',
         color: 'var(--color-on-primary)',
         opacity: paused && !isDone ? 0.9 : 1,
-        padding: '0.6rem 0.7rem',
-        borderRadius: 'var(--radius-lg)',
+        padding: '0.5rem 0.6rem 0.5rem 1.1rem',
+        borderRadius: 'var(--radius-pill)',
         display: 'flex',
-        flexDirection: 'column',
+        alignItems: 'center',
         gap: '0.5rem',
         zIndex: 150,
         boxShadow: 'var(--shadow-lg)',
         animation: 'rise-in 0.22s var(--ease)',
       }}
     >
-      {/* Row 1 — time + status + skip/dismiss */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', paddingLeft: '0.35rem' }}>
-        <span style={{ fontSize: '1.7rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', minWidth: 70 }}>
-          {isDone ? 'Done' : fmt(remaining)}
-        </span>
-        <span style={{ fontSize: '0.72rem', letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.65 }}>
-          {paused && !isDone ? 'paused' : 'rest'}
-        </span>
-        <span className="spacer" />
+      <span style={{ fontSize: '1.5rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', minWidth: 66 }}>
+        {isDone ? 'Done' : fmt(remaining)}
+      </span>
+      <span style={{ fontSize: '0.72rem', letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.65 }}>
+        {paused && !isDone ? 'paused' : 'rest'}
+      </span>
+      <span className="spacer" />
+      {!isDone && (
         <button
-          style={{ ...ctrlBtn, flex: '0 0 auto', minWidth: 76, background: 'rgba(27,33,29,0.2)' }}
-          onClick={onClose}
+          aria-label={paused ? 'Resume timer' : 'Pause timer'}
+          style={ctrlBtn}
+          onClick={() => setPaused(p => !p)}
         >
-          {isDone ? 'Dismiss' : 'Skip'}
+          {paused ? '▶ Resume' : '⏸ Pause'}
         </button>
-      </div>
-
-      {/* Row 2 — controls; full-width buttons that never overflow */}
-      {!isDone && !paused && (
-        <div style={{ display: 'flex', gap: '0.4rem' }}>
-          <button style={ctrlBtn} onClick={() => adjust(-15)}>−15s</button>
-          <button style={ctrlBtn} onClick={() => adjust(15)}>+15s</button>
-          <button style={ctrlBtn} onClick={() => setPaused(true)}>⏸ Pause</button>
-        </div>
       )}
-      {!isDone && paused && (
-        <div style={{ display: 'flex', gap: '0.4rem' }}>
-          <input
-            type="number" inputMode="numeric" min="0" value={addInput}
-            onChange={e => setAddInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') addCustom() }}
-            placeholder="+ sec" aria-label="Seconds to add"
-            style={{
-              flex: '0 0 78px', padding: '0.4rem', boxShadow: 'none', margin: 0,
-              background: 'rgba(27,33,29,0.16)', color: 'var(--color-on-primary)',
-              border: '1px solid rgba(27,33,29,0.22)', borderRadius: 'var(--radius-sm)',
-              fontVariantNumeric: 'tabular-nums', textAlign: 'center',
-            }}
-          />
-          <button style={ctrlBtn} onClick={addCustom}>Add</button>
-          <button style={ctrlBtn} onClick={() => setPaused(false)}>▶ Resume</button>
-        </div>
-      )}
+      <button
+        style={{ ...ctrlBtn, minWidth: 76, background: 'rgba(27,33,29,0.22)' }}
+        onClick={onClose}
+      >
+        {isDone ? 'Dismiss' : 'Skip'}
+      </button>
     </div>
   )
 }

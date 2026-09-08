@@ -9,7 +9,7 @@
  * Persistence: every change is written to the DB immediately, so closing the
  * tab mid-workout is safe — on reload we fetch the in-progress session back.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { apiFetch } from '../api'
 import ExercisePicker from '../components/ExercisePicker'
@@ -179,12 +179,6 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
   const exerciseRanks = useExerciseRanks()   // exercise_id -> rank (colour + tier)
   const [brands, setBrands] = useState({})   // exercise_uuid -> machine brand
   const [defaultRest, setDefaultRest] = useState(120)       // settings.default_rest_seconds
-  // Learned rest habits: exercise_id -> seconds, from the user's timer
-  // adjustments. Device-local by design (a habit, not synced data).
-  const [restMemory, setRestMemory] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('rest_memory') || '{}') } catch (_) { return {} }
-  })
-  const activeRestRef = useRef(null)  // { exerciseId, seconds } for the running timer
   const [elapsed, setElapsed] = useState('')
   const [renaming, setRenaming] = useState(false)
   const navigate = useNavigate()
@@ -253,30 +247,16 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
   }, [session.started_at])
 
   function restForExercise(exerciseId) {
-    // Learned habit beats the routine's target beats the global default
-    return restMemory[exerciseId] ?? restByExercise[exerciseId] ?? defaultRest
+    // The routine's rest time beats the global default. (The timer no longer
+    // learns a per-exercise habit — the ±15 controls that taught it are gone.)
+    return restByExercise[exerciseId] ?? defaultRest
   }
 
   // Start (or restart) the rest timer for a given exercise. Bumping restKey
   // remounts the timer so it counts down from the full duration again.
   function startRest(exerciseId) {
-    const seconds = restForExercise(exerciseId)
-    activeRestRef.current = { exerciseId, seconds }
-    setRestSeconds(seconds)
+    setRestSeconds(restForExercise(exerciseId))
     setRestKey(k => k + 1)
-  }
-
-  // A −15/+15/custom adjustment is the user teaching us their real rest
-  // habit for this exercise — remember the adjusted duration for next time.
-  function onRestAdjust(delta) {
-    const active = activeRestRef.current
-    if (!active) return
-    active.seconds = Math.max(15, active.seconds + delta)
-    setRestMemory(m => {
-      const next = { ...m, [active.exerciseId]: active.seconds }
-      try { localStorage.setItem('rest_memory', JSON.stringify(next)) } catch (_) { /* ignore */ }
-      return next
-    })
   }
 
   // Add an exercise mid-workout
@@ -404,7 +384,6 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
         <RestTimer
           key={restKey}             // stable across re-renders; only changes when a set completes
           seconds={restSeconds}
-          onAdjust={onRestAdjust}   // adjustments teach the per-exercise rest memory
           onClose={() => setRestSeconds(null)}
         />
       )}
