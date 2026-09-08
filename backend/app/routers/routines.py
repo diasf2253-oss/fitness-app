@@ -48,11 +48,17 @@ def _build_routine_exercises(
                 user_id=user_id,
                 exercise_id=ex_def.exercise_id,
                 position=ex_def.position,
-                target_sets=ex_def.target_sets,
                 target_rep_low=ex_def.target_rep_low,
                 target_rep_high=ex_def.target_rep_high,
                 rest_seconds=ex_def.rest_seconds,
                 target_rir=ex_def.target_rir,
+                planned_sets=ex_def.planned_sets,
+                # The plan is the source of truth for how many sets there are;
+                # target_sets mirrors it so the generator, coach and the
+                # workout badge keep working off one number.
+                target_sets=(
+                    len(ex_def.planned_sets) if ex_def.planned_sets else ex_def.target_sets
+                ),
             )
         )
 

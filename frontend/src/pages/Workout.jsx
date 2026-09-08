@@ -224,6 +224,7 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
           targets[re.exercise_id] = {
             sets: re.target_sets, rep_low: re.target_rep_low,
             rep_high: re.target_rep_high, rir: re.target_rir,
+            planned: re.planned_sets || null,
           }
         })
         setRestByExercise(rest)
@@ -395,6 +396,18 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
 // Exercise card with set rows
 // ---------------------------------------------------------------------------
 
+/** Rep range for the target badge: taken from the planned sets when the
+ *  routine has a per-set plan, otherwise the stored rep_low–rep_high. */
+function plannedRepRange(target) {
+  const reps = (target.planned || []).map(p => p?.reps).filter(r => r != null)
+  if (reps.length) {
+    const lo = Math.min(...reps)
+    const hi = Math.max(...reps)
+    return lo === hi ? String(lo) : `${lo}–${hi}`
+  }
+  return `${target.rep_low}–${target.rep_high}`
+}
+
 function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, target, rank, brand, setError }) {
   const [prevSets, setPrevSets] = useState([])
 
@@ -445,7 +458,7 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, targ
       </div>
       {target && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.5rem' }}>
-          <span className="badge">{target.sets}×{target.rep_low}–{target.rep_high}</span>
+          <span className="badge">{target.sets}×{plannedRepRange(target)}</span>
           {target.rir != null && <span className="badge">RIR {target.rir}</span>}
         </div>
       )}
@@ -468,6 +481,7 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, targ
             seId={se.id}
             set={set}
             prev={prevFor(set.set_number)}
+            planned={target?.planned?.[set.set_number - 1]}
             onChanged={onChanged}
             onCompleted={onSetCompleted}
             onDelete={() => deleteSet(set.id)}
@@ -487,7 +501,7 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, targ
 // Single set row — weight, reps, RIR, warmup, complete checkbox
 // ---------------------------------------------------------------------------
 
-export function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, setError }) {
+export function SetRow({ sessionId, seId, set, prev, planned, onChanged, onCompleted, onDelete, setError }) {
   // Local input state. Initialise from the set; if untouched (0) leave blank
   // so the previous-session value shows as a placeholder.
   const [weight, setWeight] = useState(set.weight_kg || '')
@@ -519,15 +533,19 @@ export function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onD
   async function toggleComplete() {
     const next = !completed
     setCompleted(next)
-    // When completing: use the prefilled previous value if the field is blank
-    const w = parseDecimal(weight) ?? (prev?.weight_kg || 0)
-    const r = reps === '' ? (prev?.reps || 0) : Number(reps)
-    if (weight === '' && prev) setWeight(prev.weight_kg)
-    if (reps === '' && prev) setReps(prev.reps)
+    // A blank field commits whatever the placeholder showed: the routine's
+    // plan if there is one, else last session's value. Nothing is logged until
+    // the lifter types or ticks — see the placeholders above.
+    const fallbackW = planned?.weight_kg ?? prev?.weight_kg ?? 0
+    const fallbackR = planned?.reps ?? prev?.reps ?? 0
+    const w = parseDecimal(weight) ?? fallbackW
+    const r = reps === '' ? fallbackR : Number(reps)
+    if (weight === '' && fallbackW) setWeight(fallbackW)
+    if (reps === '' && fallbackR) setReps(fallbackR)
     await patch({
       weight_kg: w,
       reps: r,
-      rir: rir === '' ? null : Number(rir),
+      rir: rir === '' ? (planned?.rir ?? null) : Number(rir),
       is_completed: next,
       is_warmup: isWarmup,
     })
@@ -568,7 +586,8 @@ export function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onD
       <input
         style={{ flex: 1, minHeight: 44, textAlign: 'center' }}
         type="text" inputMode="decimal" aria-label="Weight (kg)"
-        placeholder={prev ? String(prev.weight_kg) : '0'}
+        placeholder={planned?.weight_kg != null ? String(planned.weight_kg)
+                     : prev ? String(prev.weight_kg) : '0'}
         value={weight}
         onChange={e => setWeight(e.target.value)}
         onBlur={saveField}
@@ -576,7 +595,8 @@ export function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onD
       <input
         style={{ flex: 1, minHeight: 44, textAlign: 'center' }}
         type="number" inputMode="numeric"
-        placeholder={prev ? String(prev.reps) : '0'}
+        placeholder={planned?.reps != null ? String(planned.reps)
+                     : prev ? String(prev.reps) : '0'}
         value={reps}
         onChange={e => setReps(e.target.value)}
         onBlur={saveField}
@@ -584,7 +604,7 @@ export function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onD
       <input
         style={{ width: 48, minHeight: 44, textAlign: 'center', padding: '0.3rem' }}
         type="number" inputMode="numeric" aria-label="RIR"
-        placeholder="–"
+        placeholder={planned?.rir != null ? String(planned.rir) : '–'}
         value={rir}
         onChange={e => setRir(e.target.value)}
         onBlur={saveField}

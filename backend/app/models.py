@@ -198,6 +198,14 @@ class RoutineExercise(SyncMixin, Base):
     # Target Reps In Reserve — how many reps to leave in the tank (0 = train to
     # failure). Optional programming guidance; null when not set.
     target_rir: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # The per-set plan the routine editor writes:
+    #   [{"weight_kg": 100.0, "reps": 5, "rir": 2}, ...] — one entry per set,
+    # any field nullable. Shown as grey placeholders in the workout; never
+    # logged as lifted until the user types or ticks. JSON rather than a child
+    # table so it syncs with the row (sync serializes every column).
+    # target_sets is kept in step with len(planned_sets) for the generator,
+    # the coach and the workout's "4 x 4-6" badge.
+    planned_sets: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
 
     routine: Mapped["Routine"] = relationship(back_populates="exercises")
     exercise: Mapped["Exercise"] = relationship(back_populates="routine_exercises")

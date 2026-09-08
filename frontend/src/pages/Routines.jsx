@@ -9,6 +9,7 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { apiFetch } from '../api'
+import { parseDecimal } from '../num'
 import ExercisePicker from '../components/ExercisePicker'
 import { Loading, ErrorBox, EmptyState, EmptyNote } from '../components/States'
 import { RankBadge, rankAccent, useExerciseRanks } from '../components/RankBadge'
@@ -107,14 +108,30 @@ export default function Routines() {
 }
 
 // ---------------------------------------------------------------------------
-// Routine editor — add/reorder exercises, set targets
+// Routine editor — add/reorder/replace exercises and plan each set
 // ---------------------------------------------------------------------------
+
+/** Editable set rows for an exercise: its saved plan, or blank rows matching
+ *  how many sets it used to target. Empty strings (not nulls) so the inputs
+ *  stay controlled. */
+function blankOrExisting(plannedSets, targetSets) {
+  if (plannedSets?.length) {
+    return plannedSets.map(ps => ({
+      weight_kg: ps.weight_kg ?? '', reps: ps.reps ?? '', rir: ps.rir ?? '',
+    }))
+  }
+  return Array.from({ length: targetSets || 3 }, () => ({ weight_kg: '', reps: '', rir: '' }))
+}
 
 function RoutineEditor({ routine, onSaved, onCancel }) {
   const [name, setName] = useState(routine?.name || '')
   const exerciseRanks = useExerciseRanks()   // exercise_id -> rank (colour + tier)
   // Local working copy of the exercise list.
   // Each item: { exercise (obj), target_sets, target_rep_low, target_rep_high, rest_seconds }
+  // Each item keeps the aggregate fields (the generator/coach still read them)
+  // but the editor only touches planned_sets — one {weight_kg, reps, rir} row
+  // per set, mirroring the workout grid. Routines written before per-set
+  // planning get blank rows derived from their target_sets.
   const [items, setItems] = useState(
     routine?.exercises.map(re => ({
       exercise: re.exercise,
@@ -123,6 +140,7 @@ function RoutineEditor({ routine, onSaved, onCancel }) {
       target_rep_high: re.target_rep_high,
       rest_seconds: re.rest_seconds,
       target_rir: re.target_rir,
+      planned_sets: blankOrExisting(re.planned_sets, re.target_sets),
     })) || []
   )
   const [showPicker, setShowPicker] = useState(false)
@@ -144,6 +162,7 @@ function RoutineEditor({ routine, onSaved, onCancel }) {
         target_rep_high: 12,
         rest_seconds: 120,
         target_rir: null,
+        planned_sets: blankOrExisting(null, 3),
       }])
     }
     closePicker()
@@ -152,6 +171,24 @@ function RoutineEditor({ routine, onSaved, onCancel }) {
   function closePicker() {
     setShowPicker(false)
     setReplacingIdx(null)
+  }
+
+  function updateSet(idx, setIdx, field, value) {
+    setItems(prev => prev.map((it, i) => (i === idx
+      ? { ...it, planned_sets: it.planned_sets.map((ps, j) => (j === setIdx ? { ...ps, [field]: value } : ps)) }
+      : it)))
+  }
+
+  function addSet(idx) {
+    setItems(prev => prev.map((it, i) => (i === idx
+      ? { ...it, planned_sets: [...it.planned_sets, { weight_kg: '', reps: '', rir: '' }] }
+      : it)))
+  }
+
+  function removeSet(idx, setIdx) {
+    setItems(prev => prev.map((it, i) => (i === idx
+      ? { ...it, planned_sets: it.planned_sets.filter((_, j) => j !== setIdx) }
+      : it)))
   }
 
   function updateItem(idx, field, value) {
@@ -181,11 +218,17 @@ function RoutineEditor({ routine, onSaved, onCancel }) {
       exercises: items.map((it, idx) => ({
         exercise_id: it.exercise.id,
         position: idx,
-        target_sets: Number(it.target_sets),
         target_rep_low: Number(it.target_rep_low),
         target_rep_high: Number(it.target_rep_high),
         rest_seconds: Number(it.rest_seconds),
         target_rir: it.target_rir === '' || it.target_rir == null ? null : Number(it.target_rir),
+        // Blank cells stay null — a plan is guidance, not a logged lift.
+        planned_sets: it.planned_sets.map(ps => ({
+          weight_kg: ps.weight_kg === '' || ps.weight_kg == null ? null : parseDecimal(ps.weight_kg),
+          reps: ps.reps === '' || ps.reps == null ? null : Number(ps.reps),
+          rir: ps.rir === '' || ps.rir == null ? null : Number(ps.rir),
+        })),
+        target_sets: it.planned_sets.length,
       })),
     }
     try {
@@ -236,31 +279,50 @@ function RoutineEditor({ routine, onSaved, onCancel }) {
               <button className="secondary" style={{ minWidth: 40, padding: '0.3rem 0.5rem' }} onClick={() => move(idx, 1)} disabled={idx === items.length - 1}>↓</button>
               <button className="danger" style={{ minWidth: 40, padding: '0.3rem 0.5rem' }} onClick={() => removeItem(idx)}>✕</button>
             </div>
-            <div className="form-row" style={{ marginTop: '0.5rem' }}>
-              <div className="form-group" style={{ margin: 0 }}>
-                <label>Sets</label>
-                <input type="number" inputMode="numeric" value={it.target_sets} onChange={e => updateItem(idx, 'target_sets', e.target.value)} />
-              </div>
-              <div className="form-group" style={{ margin: 0 }}>
-                <label>Rest (s)</label>
-                <input type="number" inputMode="numeric" value={it.rest_seconds} onChange={e => updateItem(idx, 'rest_seconds', e.target.value)} />
-              </div>
+            {/* Per-set plan — same columns as the workout's set rows */}
+            <div className="row" style={{ fontSize: '0.7rem', color: 'var(--color-muted)', padding: '0 0.25rem', gap: '0.4rem', marginTop: '0.6rem' }}>
+              <span style={{ width: 28, textAlign: 'center' }}>Set</span>
+              <span style={{ flex: 1 }}>kg</span>
+              <span style={{ flex: 1 }}>reps</span>
+              <span style={{ width: 48, textAlign: 'center' }}>RIR</span>
+              <span style={{ width: 30 }} />
             </div>
-            <div className="form-row" style={{ marginTop: '0.5rem' }}>
-              <div className="form-group" style={{ margin: 0 }}>
-                <label>Rep low</label>
-                <input type="number" inputMode="numeric" value={it.target_rep_low} onChange={e => updateItem(idx, 'target_rep_low', e.target.value)} />
-              </div>
-              <div className="form-group" style={{ margin: 0 }}>
-                <label>Rep high</label>
-                <input type="number" inputMode="numeric" value={it.target_rep_high} onChange={e => updateItem(idx, 'target_rep_high', e.target.value)} />
-              </div>
+            <div className="col" style={{ gap: '0.4rem', marginTop: '0.25rem' }}>
+              {it.planned_sets.map((ps, sIdx) => (
+                <div key={sIdx} className="row" style={{ gap: '0.4rem' }}>
+                  <span style={{ width: 28, textAlign: 'center', fontSize: '0.85rem', color: 'var(--color-muted)' }}>{sIdx + 1}</span>
+                  <input
+                    style={{ flex: 1, minHeight: 40, textAlign: 'center' }}
+                    type="text" inputMode="decimal" placeholder="–"
+                    aria-label={`Set ${sIdx + 1} weight`}
+                    value={ps.weight_kg} onChange={e => updateSet(idx, sIdx, 'weight_kg', e.target.value)}
+                  />
+                  <input
+                    style={{ flex: 1, minHeight: 40, textAlign: 'center' }}
+                    type="number" inputMode="numeric" placeholder="–"
+                    aria-label={`Set ${sIdx + 1} reps`}
+                    value={ps.reps} onChange={e => updateSet(idx, sIdx, 'reps', e.target.value)}
+                  />
+                  <input
+                    style={{ width: 48, minHeight: 40, textAlign: 'center', padding: '0.3rem' }}
+                    type="number" inputMode="numeric" placeholder="–"
+                    aria-label={`Set ${sIdx + 1} RIR`}
+                    value={ps.rir} onChange={e => updateSet(idx, sIdx, 'rir', e.target.value)}
+                  />
+                  <button
+                    className="secondary" aria-label={`Remove set ${sIdx + 1}`}
+                    style={{ width: 30, minWidth: 30, height: 40, minHeight: 40, padding: 0,
+                             background: 'transparent', border: 'none', boxShadow: 'none',
+                             color: 'var(--color-muted)' }}
+                    onClick={() => removeSet(idx, sIdx)}
+                  >✕</button>
+                </div>
+              ))}
             </div>
-            <div className="form-group" style={{ margin: '0.5rem 0 0' }}>
-              <label>Target RIR (reps in reserve)</label>
-              <input type="number" inputMode="numeric" min="0" placeholder="optional — e.g. 2"
-                value={it.target_rir ?? ''} onChange={e => updateItem(idx, 'target_rir', e.target.value)} />
-            </div>
+            <button
+              className="secondary" onClick={() => addSet(idx)}
+              style={{ width: '100%', marginTop: '0.5rem', padding: '0.35rem' }}
+            >+ Add set</button>
           </div>
         ))}
       </div>

@@ -93,6 +93,7 @@ async function presentRoutine(r) {
       target_sets: re.target_sets, target_rep_low: re.target_rep_low,
       target_rep_high: re.target_rep_high, rest_seconds: re.rest_seconds,
       target_rir: re.target_rir ?? null,
+      planned_sets: re.planned_sets ?? null,
       exercise: presentExercise(await exerciseByUuid(re.exercise_uuid)),
     }))),
   }
@@ -292,10 +293,12 @@ export const workoutRoutes = [
         await exerciseByUuid(def.exercise_id)   // validate like the backend
         await db.routine_exercise.put(stamp({
           uuid: newUuid(), routine_uuid: routine.uuid, exercise_uuid: def.exercise_id,
-          position: def.position, target_sets: def.target_sets ?? 3,
+          position: def.position,
           target_rep_low: def.target_rep_low ?? 8, target_rep_high: def.target_rep_high ?? 12,
           rest_seconds: def.rest_seconds ?? 120,
           target_rir: def.target_rir ?? null,
+          planned_sets: def.planned_sets ?? null,
+          target_sets: def.planned_sets?.length || def.target_sets || 3,
         }))
       }
       return presentRoutine(routine)
@@ -327,10 +330,12 @@ export const workoutRoutes = [
           await exerciseByUuid(def.exercise_id)
           await db.routine_exercise.put(stamp({
             uuid: newUuid(), routine_uuid: m[1], exercise_uuid: def.exercise_id,
-            position: def.position, target_sets: def.target_sets ?? 3,
+            position: def.position,
             target_rep_low: def.target_rep_low ?? 8, target_rep_high: def.target_rep_high ?? 12,
             rest_seconds: def.rest_seconds ?? 120,
             target_rir: def.target_rir ?? null,
+            planned_sets: def.planned_sets ?? null,
+            target_sets: def.planned_sets?.length || def.target_sets || 3,
           }))
         }
       }
