@@ -163,9 +163,14 @@ class TestSampleTreatedAsInterpolation:
     def test_pure_demo_database_still_shows_sample(self, auth_client):
         """With no real readings at all (seed-only DB), sample must still show
         so the seeder's preview isn't blanked."""
-        log_weight(auth_client, "2026-06-01", 84.0, source="sample")
-        log_weight(auth_client, "2026-06-02", 83.6, source="sample")
-        r = estimate(auth_client, "2026-06-01")
+        # Relative dates: the dashboard series is a trailing window, so fixed
+        # calendar dates fall out of range as time passes (same reason the
+        # sibling dashboard test above uses date.today()).
+        today = date.today()
+        first = (today - timedelta(days=1)).isoformat()
+        log_weight(auth_client, first, 84.0, source="sample")
+        log_weight(auth_client, today.isoformat(), 83.6, source="sample")
+        r = estimate(auth_client, first)
         assert r["weight_kg"] == 84.0
         assert r["estimated"] is False
         assert r["source"] == "sample"
