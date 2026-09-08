@@ -72,8 +72,30 @@ class RoutineExerciseOut(OrmBase, RoutineExerciseBase):
     exercise: ExerciseOut
 
 
+class SplitCreate(BaseModel):
+    # Optional when `template` is given — the template supplies its own name.
+    name: Optional[str] = None
+    # Optional key from split_templates.SPLIT_TEMPLATES — builds the days and
+    # their exercises in one go. Omit for an empty split.
+    template: Optional[str] = None
+
+
+class SplitUpdate(BaseModel):
+    name: Optional[str] = None
+    position: Optional[int] = None
+
+
+class SplitOut(OrmBase):
+    id: int
+    name: str
+    position: int
+    created_at: datetime
+    routine_count: int = 0
+
+
 class RoutineBase(BaseModel):
     name: str
+    split_id: Optional[int] = None
     notes: Optional[str] = None
 
 
@@ -83,6 +105,7 @@ class RoutineCreate(RoutineBase):
 
 class RoutineUpdate(BaseModel):
     name: Optional[str] = None
+    split_id: Optional[int] = None
     notes: Optional[str] = None
     exercises: Optional[list[RoutineExerciseCreate]] = None
 

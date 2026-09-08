@@ -22,7 +22,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.config import settings
 from app.routers import calendar, coach, dashboard, dev, exercises, health, insights, nutrition, plan, ranks, routines, sessions
 from app.routers import settings as settings_router
-from app.routers import stats, sync, trackers
+from app.routers import stats, sync, trackers, splits
 from app.routers import streak, routine_notes, generator, report, diet, activities  # restored features
 from app.routers import admin, auth as auth_router  # Phase 1-2 friends beta
 
@@ -74,6 +74,7 @@ def ping():
 
 app.include_router(exercises.router)
 app.include_router(routines.router)
+app.include_router(splits.router)
 app.include_router(sessions.router)
 app.include_router(stats.router)
 app.include_router(health.router)

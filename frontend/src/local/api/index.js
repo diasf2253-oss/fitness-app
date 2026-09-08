@@ -20,6 +20,7 @@ import { planRoutes } from './plan'
 import { rankRoutes } from './ranks'
 import { reportRoutes } from './report'
 import { routineNoteRoutes } from './routine_notes'
+import { splitRoutes } from './splits'
 import { streakRoutes } from './streak'
 import { trackerRoutes } from './trackers'
 import { workoutRoutes } from './workout'
@@ -30,6 +31,7 @@ const ROUTES = [
   ...healthRoutes,
   ...workoutRoutes,
   ...routineNoteRoutes,
+  ...splitRoutes,
   ...trackerRoutes,
   ...planRoutes,
   ...rankRoutes,

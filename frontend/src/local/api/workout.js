@@ -87,6 +87,7 @@ async function presentRoutine(r) {
   res.sort((a, b) => a.position - b.position)
   return {
     id: r.uuid, name: r.name, source: r.source ?? 'manual',
+    split_id: r.split_uuid ?? null,
     notes: r.notes ?? null, created_at: r.created_at,
     exercises: await Promise.all(res.map(async (re) => ({
       id: re.uuid, exercise_id: re.exercise_uuid, position: re.position,
@@ -286,7 +287,7 @@ export const workoutRoutes = [
     handler: async (_m, _q, body) => {
       const routine = stamp({
         uuid: newUuid(), name: body.name, source: 'manual', notes: body.notes ?? null,
-        created_at: nowIso(),
+        split_uuid: body.split_id ?? null, created_at: nowIso(),
       })
       await db.routine.put(routine)
       for (const def of body.exercises || []) {
@@ -320,6 +321,7 @@ export const workoutRoutes = [
       const row = stamp({
         ...r,
         name: body.name ?? r.name,
+        split_uuid: body.split_id !== undefined ? body.split_id : (r.split_uuid ?? null),
         notes: body.notes !== undefined && body.notes !== null ? body.notes : r.notes,
       })
       await db.routine.put(row)

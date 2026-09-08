@@ -148,6 +148,23 @@ class Exercise(SyncMixin, Base):
     )
 
 
+class Split(SyncMixin, Base):
+    """A training split (Push/Pull/Legs, Bro Split, …) — a named group of
+    routines. Routines with split_id NULL are simply ungrouped; deleting a
+    split never deletes its routines (see routers/splits.py)."""
+    __tablename__ = "split"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+
 class Routine(SyncMixin, Base):
     __tablename__ = "routine"
 
@@ -156,6 +173,10 @@ class Routine(SyncMixin, Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Which split this routine belongs to; NULL = ungrouped.
+    split_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("split.id", ondelete="SET NULL"), index=True, nullable=True
+    )
     notes: Mapped[Optional[str]] = mapped_column(Text)
     # 'manual' | 'generated' — the workout generator replaces only 'generated'
     # routines on apply, leaving hand-made ones untouched.

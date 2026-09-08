@@ -77,7 +77,10 @@ def create_routine(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    routine = Routine(user_id=current_user.id, name=body.name, notes=body.notes)
+    routine = Routine(
+        user_id=current_user.id, name=body.name,
+        split_id=body.split_id, notes=body.notes,
+    )
     db.add(routine)
     db.flush()  # assigns routine.id before we attach exercises
     if body.exercises:
@@ -111,6 +114,8 @@ def update_routine(
         raise HTTPException(status_code=404, detail="Routine not found")
     if body.name is not None:
         r.name = body.name
+    if body.split_id is not None:
+        r.split_id = body.split_id
     if body.notes is not None:
         r.notes = body.notes
     if body.exercises is not None:

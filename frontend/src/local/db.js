@@ -67,6 +67,29 @@ db.version(3).stores({
   activity: 'uuid, date, _dirty',
 })
 
+// v4 groups routines under splits: a new split table, and routine gains a
+// split_uuid index so a split's days can be looked up directly.
+db.version(4).stores({
+  weight_log: 'date, _dirty',
+  steps_log: 'date, _dirty',
+  sleep_log: 'date, _dirty',
+  nutrition_day: 'date, _dirty',
+  exercise: 'uuid, name, _dirty',
+  split: 'uuid, _dirty',
+  routine: 'uuid, split_uuid, _dirty',
+  routine_exercise: 'uuid, routine_uuid, _dirty',
+  session: 'uuid, started_at, _dirty',
+  session_exercise: 'uuid, session_uuid, exercise_uuid, _dirty',
+  set: 'uuid, session_exercise_uuid, _dirty',
+  plan_item: 'uuid, date, _dirty',
+  tracker: 'uuid, _dirty',
+  tracker_log: 'uuid, tracker_uuid, date, [tracker_uuid+date], _dirty',
+  settings: 'id, _dirty',
+  sync_meta: 'key',
+  routine_note: 'uuid, routine_uuid, surfaced_in_session_uuid, _dirty',
+  activity: 'uuid, date, _dirty',
+})
+
 export function newUuid() {
   return crypto.randomUUID()
 }

@@ -44,7 +44,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.models import (
     Activity, AppSettings, Exercise, NutritionDay, PlanItem, Routine,
-    RoutineExercise, RoutineNote, Session, SessionExercise, Set as SetModel,
+    RoutineExercise, RoutineNote, Session, SessionExercise, Set as SetModel, Split,
     SleepLog, StepsLog, Tracker, TrackerLog, WeightLog,
 )
 
@@ -69,7 +69,10 @@ class TableSpec:
 # Parents before children: FK resolution on import walks this order.
 SYNC_TABLES: dict[str, TableSpec] = {
     "exercise": TableSpec(Exercise, "uuid", natural_key=("name",)),
-    "routine": TableSpec(Routine, "uuid"),
+    "split": TableSpec(Split, "uuid"),
+    "routine": TableSpec(
+        Routine, "uuid", fks={"split_id": ("split_uuid", Split)},
+    ),
     "routine_exercise": TableSpec(
         RoutineExercise, "uuid",
         fks={"routine_id": ("routine_uuid", Routine),
