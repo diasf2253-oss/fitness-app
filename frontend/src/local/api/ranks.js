@@ -249,6 +249,35 @@ async function getRanks() {
   }
 }
 
+/** {exercise_uuid: {ranked, tier, division, lp, color}} — mirrors
+ * routers/ranks.get_exercise_ranks. Keyed by the same value presentExercise
+ * hands the UI as `id`, so a page can look a rank up directly. */
+async function getExerciseRanks() {
+  const settings = (await db.settings.get(1)) || {}
+  const cfg = resolveConfig(settings.rank_config)
+  const sex = settings.sex || 'male'
+  const real = realWeightPoints(await db.weight_log.toArray())
+  const bw = real.length ? real[real.length - 1].weight_kg : null
+
+  const exercises = await db.exercise.toArray()
+  const bestAll = await bestAlltimeByExercise()
+
+  const out = {}
+  for (const ex of exercises) {
+    let entry = { ranked: false, tier: null, division: null, lp: null, color: UNRANKED_COLOR }
+    const rec = bestAll[ex.uuid]
+    if (bw && rec && ex.primary_muscle_group) {
+      const bench = exerciseBenchmark(ex.name, ex.primary_muscle_group, sex, cfg, ex.equipment)
+      const er = computeRank((rec.e1rm / bw) / bench, COMMON_ANCHORS)
+      entry = { ranked: true, tier: er.tier, division: er.division, lp: er.lp, color: er.color }
+    }
+    out[ex.uuid] = entry
+  }
+  return out
+}
+
 export const rankRoutes = [
+  // Exact-anchored, so /api/ranks/exercises never matches the body-map route.
+  { method: 'GET', pattern: /^\/api\/ranks\/exercises$/, handler: () => getExerciseRanks() },
   { method: 'GET', pattern: /^\/api\/ranks$/, handler: () => getRanks() },
 ]

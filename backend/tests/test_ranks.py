@@ -198,3 +198,54 @@ def test_bodyweight_ignores_derived_sources(auth_client):
     db.close()
     r = auth_client.get("/api/ranks").json()
     assert r["bodyweight"] is None
+
+
+# ---------------------------------------------------------------------------
+# Per-exercise rank map (GET /api/ranks/exercises) — colours the exercise cards
+# ---------------------------------------------------------------------------
+
+def test_exercise_ranks_map_ranked_and_unranked(auth_client):
+    """Keyed by exercise id: a logged lift ranks; an untouched one stays
+    unranked with the muted colour, so the UI can always look one up."""
+    import app.ranks as R
+
+    uid = auth_client.test_user_id
+    db = TestingSession()
+    squat = Exercise(user_id=uid, name="Barbell Squat", primary_muscle_group="Quads", is_custom=True)
+    never = Exercise(user_id=uid, name="Untouched Machine", primary_muscle_group="Quads", is_custom=True)
+    db.add_all([squat, never]); db.flush()
+    db.add(WeightLog(user_id=uid, date=date.today(), weight_kg=80.0, source="manual"))
+    squat_id, never_id = squat.id, never.id
+    _log(db, uid, squat, weight=140.0, reps=5)
+    db.close()
+
+    body = auth_client.get("/api/ranks/exercises").json()
+
+    ranked = body[str(squat_id)]
+    assert ranked["ranked"] is True
+    assert ranked["tier"] in R.TIERS
+    assert ranked["division"] in R.DIVISIONS
+    assert ranked["color"] == R.TIER_COLORS[ranked["tier"]]
+    assert 0 <= ranked["lp"] <= 100
+
+    unranked = body[str(never_id)]
+    assert unranked["ranked"] is False
+    assert unranked["color"] == R.UNRANKED_COLOR
+    assert unranked["tier"] is None
+
+
+def test_exercise_ranks_unranked_without_bodyweight(auth_client):
+    """Ranks divide by bodyweight — with no real reading nothing can rank."""
+    import app.ranks as R
+
+    uid = auth_client.test_user_id
+    db = TestingSession()
+    squat = Exercise(user_id=uid, name="Barbell Squat", primary_muscle_group="Quads", is_custom=True)
+    db.add(squat); db.flush()
+    squat_id = squat.id
+    _log(db, uid, squat, weight=140.0, reps=5)     # lifted, but no bodyweight logged
+    db.close()
+
+    entry = auth_client.get("/api/ranks/exercises").json()[str(squat_id)]
+    assert entry["ranked"] is False
+    assert entry["color"] == R.UNRANKED_COLOR

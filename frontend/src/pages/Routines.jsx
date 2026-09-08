@@ -11,6 +11,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { apiFetch } from '../api'
 import ExercisePicker from '../components/ExercisePicker'
 import { Loading, ErrorBox, EmptyState, EmptyNote } from '../components/States'
+import { RankBadge, rankAccent, useExerciseRanks } from '../components/RankBadge'
 
 export default function Routines() {
   const [routines, setRoutines] = useState([])
@@ -111,6 +112,7 @@ export default function Routines() {
 
 function RoutineEditor({ routine, onSaved, onCancel }) {
   const [name, setName] = useState(routine?.name || '')
+  const exerciseRanks = useExerciseRanks()   // exercise_id -> rank (colour + tier)
   // Local working copy of the exercise list.
   // Each item: { exercise (obj), target_sets, target_rep_low, target_rep_high, rest_seconds }
   const [items, setItems] = useState(
@@ -208,9 +210,10 @@ function RoutineEditor({ routine, onSaved, onCancel }) {
 
       <div className="col" style={{ gap: '0.75rem' }}>
         {items.map((it, idx) => (
-          <div key={idx} className="card" style={{ margin: 0 }}>
+          <div key={idx} className="card" style={{ margin: 0, ...rankAccent(exerciseRanks[it.exercise.id]) }}>
             <div className="row">
               <strong style={{ flex: 1 }}>{idx + 1}. {it.exercise.name}</strong>
+              <RankBadge rank={exerciseRanks[it.exercise.id]} style={{ marginRight: 4 }} />
               <button className="secondary" style={{ minWidth: 40, padding: '0.3rem 0.5rem' }} onClick={() => move(idx, -1)} disabled={idx === 0}>↑</button>
               <button className="secondary" style={{ minWidth: 40, padding: '0.3rem 0.5rem' }} onClick={() => move(idx, 1)} disabled={idx === items.length - 1}>↓</button>
               <button className="danger" style={{ minWidth: 40, padding: '0.3rem 0.5rem' }} onClick={() => removeItem(idx)}>✕</button>

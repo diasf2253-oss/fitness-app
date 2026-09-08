@@ -14,6 +14,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { apiFetch } from '../api'
 import ExercisePicker from '../components/ExercisePicker'
 import RestTimer from '../components/RestTimer'
+import { RankBadge, rankAccent, useExerciseRanks } from '../components/RankBadge'
 import { Loading, ErrorBox } from '../components/States'
 import { playWorkoutComplete } from '../audio'
 import { parseDecimal } from '../num'
@@ -175,6 +176,7 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
   const [restKey, setRestKey] = useState(0)              // bumped only when a set completes, to (re)start the timer
   const [restByExercise, setRestByExercise] = useState({})  // exercise_id -> rest seconds (from routine)
   const [targetsByExercise, setTargetsByExercise] = useState({})  // exercise_id -> {sets, rep_low, rep_high, rir}
+  const exerciseRanks = useExerciseRanks()   // exercise_id -> rank (colour + tier)
   const [defaultRest, setDefaultRest] = useState(120)       // settings.default_rest_seconds
   // Learned rest habits: exercise_id -> seconds, from the user's timer
   // adjustments. Device-local by design (a habit, not synced data).
@@ -374,6 +376,7 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
             onRemove={() => removeExercise(se.id)}
             onSetCompleted={() => startRest(se.exercise_id)}
             target={targetsByExercise[se.exercise_id]}
+            rank={exerciseRanks[se.exercise_id]}
             setError={setError}
           />
         ))}
@@ -411,7 +414,7 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
 // Exercise card with set rows
 // ---------------------------------------------------------------------------
 
-function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, target, setError }) {
+function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, target, rank, setError }) {
   const [prevSets, setPrevSets] = useState([])
 
   // Fetch what was lifted last time, to pre-fill placeholders
@@ -449,9 +452,10 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, targ
   }
 
   return (
-    <div className="card" style={{ margin: 0 }}>
-      <div className="row">
+    <div className="card" style={{ margin: 0, ...rankAccent(rank) }}>
+      <div className="row" style={{ gap: '0.5rem' }}>
         <h3 style={{ flex: 1, margin: 0 }}>{se.exercise.name}</h3>
+        <RankBadge rank={rank} />
         <button className="secondary" style={{ minWidth: 40, padding: '0.3rem 0.5rem' }} onClick={onRemove}>✕</button>
       </div>
       <div className="muted" style={{ fontSize: '0.75rem', marginBottom: '0.5rem' }}>

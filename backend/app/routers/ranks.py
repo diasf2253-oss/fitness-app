@@ -54,6 +54,46 @@ def _best_alltime_by_exercise(db: DBSession, user_id: int) -> dict[int, tuple]:
     return best
 
 
+@router.get("/exercises")
+def get_exercise_ranks(
+    db: DBSession = Depends(get_db), current_user: User = Depends(require_auth)
+):
+    """{exercise_id: {ranked, tier, division, lp, color}} — the per-exercise rank
+    that colours exercise cards in the workout/exercise UI.
+
+    Same maths as get_ranks' per-exercise contributions below, but flattened and
+    keyed by exercise so a page can look one up directly instead of walking the
+    body-map payload. Unranked (no real bodyweight, nothing logged, or no muscle
+    group) returns the muted UNRANKED_COLOR.
+    """
+    user_id = current_user.id
+    settings = get_or_create_settings(db, user_id)
+    cfg = R.resolve_config(settings.rank_config)
+    bw = _latest_bodyweight(db, user_id)
+    sex = settings.sex
+
+    exercises = db.query(Exercise).filter(
+        or_(Exercise.user_id.is_(None), Exercise.user_id == user_id)
+    ).all()
+    best_all = _best_alltime_by_exercise(db, user_id)
+
+    out: dict[str, dict] = {}
+    for ex in exercises:
+        entry = {"ranked": False, "tier": None, "division": None,
+                 "lp": None, "color": R.UNRANKED_COLOR}
+        rec = best_all.get(ex.id)
+        if bw and rec and ex.primary_muscle_group:
+            e1rm = rec[0]
+            bench = R.exercise_benchmark(
+                ex.name, ex.primary_muscle_group, sex, cfg, ex.equipment
+            )
+            er = R.compute_rank((e1rm / bw) / bench, R.COMMON_ANCHORS)
+            entry = {"ranked": True, "tier": er["tier"], "division": er["division"],
+                     "lp": er["lp"], "color": er["color"]}
+        out[str(ex.id)] = entry
+    return out
+
+
 @router.get("")
 def get_ranks(db: DBSession = Depends(get_db), current_user: User = Depends(require_auth)):
     user_id = current_user.id

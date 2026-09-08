@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom'
 import { apiFetch } from '../api'
 import Modal from '../components/Modal'
 import { Loading, ErrorBox } from '../components/States'
+import { RankBadge, rankAccent, useExerciseRanks } from '../components/RankBadge'
 
 const MUSCLE_OPTIONS = [
   'chest', 'back', 'shoulders', 'biceps', 'triceps',
@@ -19,6 +20,7 @@ const EQUIPMENT_OPTIONS = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweigh
 
 export default function Exercises() {
   const [exercises, setExercises] = useState([])
+  const exerciseRanks = useExerciseRanks()   // exercise_id -> rank (colour + tier)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
@@ -82,11 +84,12 @@ export default function Exercises() {
       {!loading && (
         <div className="col" style={{ gap: '0.5rem' }}>
           {filtered.map(ex => (
-            <div key={ex.id} className="card" style={{ margin: 0, padding: '0.75rem 1rem' }}>
+            <div key={ex.id} className="card" style={{ margin: 0, padding: '0.75rem 1rem', ...rankAccent(exerciseRanks[ex.id]) }}>
               <div className="row">
                 <div style={{ flex: 1 }}>
                   <strong>{ex.name}</strong>
                   {ex.is_custom && <span className="badge primary" style={{ marginLeft: 6 }}>custom</span>}
+                  <RankBadge rank={exerciseRanks[ex.id]} style={{ marginLeft: 6 }} />
                   <div className="muted" style={{ fontSize: '0.8rem' }}>
                     {ex.primary_muscle}
                     {ex.equipment ? ` · ${ex.equipment}` : ''}
