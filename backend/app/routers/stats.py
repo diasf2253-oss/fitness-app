@@ -17,7 +17,7 @@ Routes:
   GET /api/stats/volume/weekly         — weekly training volume (kg × reps)
 """
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -25,8 +25,11 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.auth import require_auth
 from app.db import get_db
-from app.models import Exercise, Session, SessionExercise, Set
+from app.models import Exercise, Session, SessionExercise, Set, User
+from app.muscles import MUSCLE_GROUPS, resolved_volume_targets
+from app.routers.settings import get_or_create_settings
 from app.schemas import PRHit, PRRecord, SessionSummaryStats
+from app.weight_trend import iso_week_start
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 
@@ -43,7 +46,7 @@ def epley_1rm(weight_kg: float, reps: int) -> float:
     return weight_kg * (1 + capped_reps / 30)
 
 
-def compute_prs_for_exercise(exercise_id: int, db: DBSession) -> Optional[PRRecord]:
+def compute_prs_for_exercise(exercise_id: int, db: DBSession, user_id: int) -> Optional[PRRecord]:
     """
     Scan all completed working sets for an exercise and return the current PRs.
     Returns None if no completed working sets exist.
@@ -52,6 +55,7 @@ def compute_prs_for_exercise(exercise_id: int, db: DBSession) -> Optional[PRReco
         db.query(Set)
         .join(SessionExercise)
         .filter(
+            Set.user_id == user_id,
             SessionExercise.exercise_id == exercise_id,
             Set.is_completed == True,
             Set.is_warmup == False,
@@ -82,7 +86,7 @@ def compute_prs_for_exercise(exercise_id: int, db: DBSession) -> Optional[PRReco
 def session_summary(
     session_id: int,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """
     Compute the finish-workout summary for a session:
@@ -94,8 +98,9 @@ def session_summary(
     best set across ALL OTHER sessions. If the session beats the prior best
     (or there's no prior record), it counts as a PR.
     """
+    user_id = current_user.id
     session = db.get(Session, session_id)
-    if not session:
+    if not session or session.user_id != user_id:
         raise HTTPException(status_code=404, detail="Session not found")
 
     # Duration
@@ -130,6 +135,7 @@ def session_summary(
             db.query(Set)
             .join(SessionExercise)
             .filter(
+                Set.user_id == user_id,
                 SessionExercise.exercise_id == exercise_id,
                 SessionExercise.session_id != session_id,
                 Set.is_completed == True,
@@ -178,19 +184,19 @@ def session_summary(
 @router.get("/prs", response_model=list[PRRecord])
 def all_prs(
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """Return current PRs for every exercise that has logged working sets."""
     exercise_ids = (
         db.query(SessionExercise.exercise_id)
         .join(Set)
-        .filter(Set.is_completed == True, Set.is_warmup == False)
+        .filter(Set.user_id == current_user.id, Set.is_completed == True, Set.is_warmup == False)
         .distinct()
         .all()
     )
     results = []
     for (eid,) in exercise_ids:
-        pr = compute_prs_for_exercise(eid, db)
+        pr = compute_prs_for_exercise(eid, db, current_user.id)
         if pr:
             results.append(pr)
     return sorted(results, key=lambda x: x.exercise_name)
@@ -200,16 +206,16 @@ def all_prs(
 def exercise_pr(
     exercise_id: int,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    return compute_prs_for_exercise(exercise_id, db)
+    return compute_prs_for_exercise(exercise_id, db, current_user.id)
 
 
 @router.get("/exercise/{exercise_id}/history")
 def exercise_history(
     exercise_id: int,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """
     Per-session history for charting: estimated 1RM and total volume per session.
@@ -220,6 +226,7 @@ def exercise_history(
         .join(SessionExercise, Session.id == SessionExercise.session_id)
         .join(Set, SessionExercise.id == Set.session_exercise_id)
         .filter(
+            Session.user_id == current_user.id,
             SessionExercise.exercise_id == exercise_id,
             Set.is_completed == True,
             Set.is_warmup == False,
@@ -260,7 +267,7 @@ def exercise_history(
 def weekly_volume(
     weeks: int = Query(8, ge=1, le=52),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """
     Total training volume (sum of weight×reps for working completed sets)
@@ -272,6 +279,7 @@ def weekly_volume(
         .join(SessionExercise, Session.id == SessionExercise.session_id)
         .join(Set, SessionExercise.id == Set.session_exercise_id)
         .filter(
+            Session.user_id == current_user.id,
             Session.started_at >= since,
             Set.is_completed == True,
             Set.is_warmup == False,
@@ -292,3 +300,71 @@ def weekly_volume(
         {"week": k, "volume_kg": round(v, 1)}
         for k, v in sorted(by_week.items())
     ]
+
+
+# ---------------------------------------------------------------------------
+# Sets-per-week per primary muscle group
+# ---------------------------------------------------------------------------
+
+def _resolved_targets(db: DBSession, user_id: int) -> dict[str, tuple[int, int]]:
+    return resolved_volume_targets(get_or_create_settings(db, user_id).volume_targets)
+
+
+@router.get("/volume-targets")
+def get_volume_targets(
+    db: DBSession = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Effective weekly working-set target ranges per muscle (defaults with the
+    user's overrides merged) — the single table this view and the generator read."""
+    return {m: {"low": lo, "high": hi} for m, (lo, hi) in _resolved_targets(db, current_user.id).items()}
+
+
+@router.get("/sets-per-week")
+def sets_per_week(
+    weeks: int = Query(8, ge=1, le=52),
+    db: DBSession = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Completed WORKING sets (not warm-ups) per primary muscle group per ISO
+    week (Monday start), for the last N weeks, against each muscle's target
+    range. Only the exercise's primary muscle group counts."""
+    today = date.today()
+    current_week = iso_week_start(today)
+    first_week = current_week - timedelta(weeks=weeks - 1)
+    since = datetime.combine(first_week, time.min)
+
+    rows = (
+        db.query(Session.started_at, Exercise.primary_muscle_group)
+        .join(SessionExercise, Session.id == SessionExercise.session_id)
+        .join(Set, SessionExercise.id == Set.session_exercise_id)
+        .join(Exercise, SessionExercise.exercise_id == Exercise.id)
+        .filter(
+            Session.user_id == current_user.id,
+            Session.started_at >= since,
+            Set.is_completed == True,   # noqa: E712
+            Set.is_warmup == False,     # noqa: E712
+        )
+        .all()
+    )
+
+    counts: dict[tuple[date, str], int] = defaultdict(int)
+    for started_at, group in rows:
+        if not group:
+            continue
+        counts[(iso_week_start(started_at.date()), group)] += 1
+
+    week_starts = [first_week + timedelta(weeks=i) for i in range(weeks)]
+    targets = _resolved_targets(db, current_user.id)
+    return {
+        "muscle_groups": MUSCLE_GROUPS,
+        "targets": {m: {"low": lo, "high": hi} for m, (lo, hi) in targets.items()},
+        "weeks": [
+            {
+                "week_start": wk.isoformat(),
+                "is_current": wk == current_week,
+                "counts": {m: counts.get((wk, m), 0) for m in MUSCLE_GROUPS},
+            }
+            for wk in week_starts
+        ],
+    }

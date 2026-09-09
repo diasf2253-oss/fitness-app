@@ -20,9 +20,11 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.auth import require_auth
 from app.db import get_db
-from app.models import NutritionDay, Session as WorkoutSession, SleepLog, StepsLog, WeightLog
+from app.models import NutritionDay, Session as WorkoutSession, SleepLog, StepsLog, User, WeightLog
+from app.routers.health import DERIVED_SOURCES, real_weight_points, resolved_weight_for
 from app.routers.settings import get_or_create_settings
 from app.routers.stats import session_summary
+from app.routers.streak import streak_snapshot
 from app.schemas import (
     DashboardOut, DashboardTargets, DashboardTraining, DashboardWeight,
     MovingAvgPoint, NutritionToday, RecentPR, SleepPoint, StepsPoint, WeightPoint,
@@ -54,30 +56,48 @@ def moving_average_7d(series: list[tuple[date, float]]) -> list[tuple[date, floa
 @router.get("/api/dashboard", response_model=DashboardOut)
 def get_dashboard(
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     today = date.today()
+    user_id = current_user.id
 
-    # ---- Weight: 90-day series + moving average ----
+    # ---- Weight: 90-day series. Real weigh-ins show as-is; untracked days
+    #      and days carrying only demo/estimate data are shown as interpolated
+    #      estimates of the surrounding real readings (flagged). Moving average
+    #      runs over the real readings only. ----
     weight_rows = (
         db.query(WeightLog)
-        .filter(WeightLog.date >= today - timedelta(days=90))
+        .filter(WeightLog.user_id == user_id, WeightLog.date >= today - timedelta(days=90))
         .order_by(WeightLog.date)
         .all()
     )
-    weight_series = [(r.date, r.weight_kg) for r in weight_rows]
+    by_date = {r.date: r for r in weight_rows}
+    real_series = [(r.date, r.weight_kg) for r in weight_rows if r.source not in DERIVED_SOURCES]
+
+    series_points: list[WeightPoint] = []
+    if weight_rows:
+        # Interpolate from the full history so a reading just outside the
+        # window still anchors estimates near the window's leading edge.
+        basis = real_weight_points(db, user_id)
+        start = weight_rows[0].date
+        for i in range((today - start).days + 1):
+            d = start + timedelta(days=i)
+            wkg, estimated, _ = resolved_weight_for(d, by_date.get(d), basis)
+            if wkg is not None:
+                series_points.append(WeightPoint(date=d, weight_kg=wkg, estimated=estimated))
+
     weight = DashboardWeight(
-        series=[WeightPoint(date=d, weight_kg=v) for d, v in weight_series],
+        series=series_points,
         moving_avg_7d=[
             MovingAvgPoint(date=d, avg_kg=v)
-            for d, v in moving_average_7d(weight_series)
+            for d, v in moving_average_7d(real_series)
         ],
     )
 
     # ---- Steps: last 14 days ----
     steps_rows = (
         db.query(StepsLog)
-        .filter(StepsLog.date >= today - timedelta(days=14))
+        .filter(StepsLog.user_id == user_id, StepsLog.date >= today - timedelta(days=14))
         .order_by(StepsLog.date)
         .all()
     )
@@ -86,7 +106,7 @@ def get_dashboard(
     # ---- Sleep: hours per night, last 14 days ----
     sleep_rows = (
         db.query(SleepLog)
-        .filter(SleepLog.date >= today - timedelta(days=14))
+        .filter(SleepLog.user_id == user_id, SleepLog.date >= today - timedelta(days=14))
         .order_by(SleepLog.date)
         .all()
     )
@@ -96,7 +116,7 @@ def get_dashboard(
     ]
 
     # ---- Nutrition: today's intake vs targets ----
-    nut_row = db.query(NutritionDay).filter(NutritionDay.date == today).first()
+    nut_row = db.query(NutritionDay).filter(NutritionDay.user_id == user_id, NutritionDay.date == today).first()
     nutrition_today = NutritionToday(
         date=today,
         logged=nut_row is not None,
@@ -107,7 +127,7 @@ def get_dashboard(
         micros=(nut_row.micros or {}) if nut_row else {},
     )
 
-    s = get_or_create_settings(db)
+    s = get_or_create_settings(db, user_id)
     targets = DashboardTargets(
         calorie_target=s.calorie_target,
         protein_target_g=s.protein_target_g,
@@ -119,7 +139,7 @@ def get_dashboard(
     week_start = datetime.combine(today - timedelta(days=6), time.min)
     week_sessions = (
         db.query(WorkoutSession)
-        .filter(WorkoutSession.started_at >= week_start)
+        .filter(WorkoutSession.user_id == user_id, WorkoutSession.started_at >= week_start)
         .order_by(WorkoutSession.started_at.desc())
         .all()
     )
@@ -127,7 +147,7 @@ def get_dashboard(
     week_volume = 0.0
     recent_prs: list[RecentPR] = []
     for ws in week_sessions:
-        summary = session_summary(ws.id, db=db, _=None)
+        summary = session_summary(ws.id, db=db, current_user=current_user)
         week_volume += summary.total_volume_kg
         for pr in summary.prs_hit:
             recent_prs.append(RecentPR(**pr.model_dump(), date=ws.started_at.date()))
@@ -145,4 +165,5 @@ def get_dashboard(
         nutrition_today=nutrition_today,
         targets=targets,
         training=training,
+        streak=streak_snapshot(db, user_id),
     )

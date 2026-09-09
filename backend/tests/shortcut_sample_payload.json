@@ -1,0 +1,20 @@
+{
+  "weight": [
+    { "date": "2026-07-17T07:32:00-03:00", "kg": 82.6 },
+    { "date": "2026-07-18T07:20:00-03:00", "kg": 82.4 }
+  ],
+  "steps": [
+    { "date": "2026-07-17", "count": 9210 },
+    { "date": "2026-07-18", "count": 11205 }
+  ],
+  "sleep": [
+    {
+      "date": "2026-07-18",
+      "asleep_minutes": 427,
+      "in_bed_minutes": 465,
+      "deep_minutes": 68,
+      "rem_minutes": 95,
+      "core_minutes": 264
+    }
+  ]
+}

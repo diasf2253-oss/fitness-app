@@ -6,64 +6,32 @@ Phase 3 tests — full Apple Health ingest:
   - export.xml / export.zip history backfill (multi-source dedup,
     lb → kg, night attribution, dietary unit normalization)
   - health_last_ingest timestamp
+
+Ingest routes authenticate via the per-user bearer `ingest_token`; the manual
+corrections go through the normal cookie-authenticated endpoints.
 """
 import io
-import os
 import zipfile
 from datetime import date
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-TEST_DB_URL = "sqlite:///:memory:"
-os.environ["DATABASE_URL"] = TEST_DB_URL
-os.environ["APP_TOKEN"] = "testtoken"
-
-from app.db import Base, get_db
-from app.main import app
 from app.models import NutritionDay, SleepLog, StepsLog, WeightLog
 
-engine = create_engine(
-    TEST_DB_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base.metadata.create_all(bind=engine)
+from tests.conftest import TestingSession
 
 
-def override_get_db():
-    db = TestingSession()
-    try:
-        yield db
-    finally:
-        db.close()
+def ingest_headers(client):
+    """Bearer header carrying the logged-in user's ingest_token."""
+    me = client.get("/api/auth/me").json()
+    return {"Authorization": f"Bearer {me['ingest_token']}"}
 
 
-client = TestClient(app)
-AUTH = {"Authorization": "Bearer testtoken"}
-
-
-@pytest.fixture(autouse=True)
-def clean_db():
-    """Fresh tables per test; claim the get_db override, then hand it back."""
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    previous = app.dependency_overrides.get(get_db)
-    app.dependency_overrides[get_db] = override_get_db
-    yield
-    if previous is not None:
-        app.dependency_overrides[get_db] = previous
-
-
-def ingest(metrics):
+def ingest(client, metrics):
     return client.post(
         "/api/ingest/health",
         json={"data": {"metrics": metrics, "workouts": []}},
-        headers=AUTH,
+        headers=ingest_headers(client),
     )
 
 
@@ -72,8 +40,8 @@ def ingest(metrics):
 # ---------------------------------------------------------------------------
 
 class TestNutritionIngest:
-    def test_macros_and_micros_land_canonically(self):
-        r = ingest([
+    def test_macros_and_micros_land_canonically(self, auth_client):
+        r = ingest(auth_client, [
             {"name": "dietary_energy", "units": "kcal",
              "data": [{"date": "2026-06-01", "qty": 2400}]},
             {"name": "protein", "units": "g",
@@ -95,22 +63,22 @@ class TestNutritionIngest:
         assert row.micros["sodium_mg"] == 2300
         assert row.micros["vitamin_d_ug"] == 12
 
-    def test_kilojoule_conversion(self):
-        ingest([{"name": "dietary_energy", "units": "kJ",
-                 "data": [{"date": "2026-06-01", "qty": 8368}]}])
+    def test_kilojoule_conversion(self, auth_client):
+        ingest(auth_client, [{"name": "dietary_energy", "units": "kJ",
+                              "data": [{"date": "2026-06-01", "qty": 8368}]}])
         db = TestingSession()
         row = db.query(NutritionDay).first()
         db.close()
         # 8368 kJ × 0.239 ≈ 2000 kcal
         assert row.calories == pytest.approx(2000, abs=2)
 
-    def test_partial_payload_merges_not_zeroes(self):
-        ingest([
+    def test_partial_payload_merges_not_zeroes(self, auth_client):
+        ingest(auth_client, [
             {"name": "protein", "units": "g", "data": [{"date": "2026-06-01", "qty": 170}]},
             {"name": "fiber", "units": "g", "data": [{"date": "2026-06-01", "qty": 30}]},
         ])
         # Later push for the same day carries only sodium
-        ingest([
+        ingest(auth_client, [
             {"name": "sodium", "units": "mg", "data": [{"date": "2026-06-01", "qty": 2500}]},
         ])
         db = TestingSession()
@@ -120,10 +88,10 @@ class TestNutritionIngest:
         assert row.micros["fiber_g"] == 30     # merged, not replaced
         assert row.micros["sodium_mg"] == 2500
 
-    def test_multiple_points_same_day_sum(self):
-        ingest([{"name": "dietary_energy", "units": "kcal",
-                 "data": [{"date": "2026-06-01 09:00:00 +0000", "qty": 600},
-                          {"date": "2026-06-01 19:00:00 +0000", "qty": 1500}]}])
+    def test_multiple_points_same_day_sum(self, auth_client):
+        ingest(auth_client, [{"name": "dietary_energy", "units": "kcal",
+                              "data": [{"date": "2026-06-01 09:00:00 +0000", "qty": 600},
+                                       {"date": "2026-06-01 19:00:00 +0000", "qty": 1500}]}])
         db = TestingSession()
         row = db.query(NutritionDay).first()
         db.close()
@@ -135,47 +103,46 @@ class TestNutritionIngest:
 # ---------------------------------------------------------------------------
 
 class TestManualWins:
-    def test_apple_health_does_not_overwrite_manual_weight(self):
-        client.post("/api/health/weight",
-                    json={"date": "2026-06-01", "weight_kg": 83.0}, headers=AUTH)
-        ingest([{"name": "weight_body_mass", "units": "kg",
-                 "data": [{"date": "2026-06-01", "qty": 85.5}]}])
+    def test_apple_health_does_not_overwrite_manual_weight(self, auth_client):
+        auth_client.post("/api/health/weight",
+                         json={"date": "2026-06-01", "weight_kg": 83.0})
+        ingest(auth_client, [{"name": "weight_body_mass", "units": "kg",
+                              "data": [{"date": "2026-06-01", "qty": 85.5}]}])
         db = TestingSession()
         row = db.query(WeightLog).first()
         db.close()
         assert row.weight_kg == 83.0
         assert row.source == "manual"
 
-    def test_apple_health_does_not_overwrite_manual_nutrition(self):
-        client.post("/api/nutrition",
-                    json={"date": "2026-06-01", "calories": 2000,
-                          "protein_g": 150, "carbs_g": 200, "fat_g": 70},
-                    headers=AUTH)
-        ingest([{"name": "dietary_energy", "units": "kcal",
-                 "data": [{"date": "2026-06-01", "qty": 9999}]}])
+    def test_apple_health_does_not_overwrite_manual_nutrition(self, auth_client):
+        auth_client.post("/api/nutrition",
+                         json={"date": "2026-06-01", "calories": 2000,
+                               "protein_g": 150, "carbs_g": 200, "fat_g": 70})
+        ingest(auth_client, [{"name": "dietary_energy", "units": "kcal",
+                              "data": [{"date": "2026-06-01", "qty": 9999}]}])
         db = TestingSession()
         row = db.query(NutritionDay).first()
         db.close()
         assert row.calories == 2000
         assert row.source == "manual"
 
-    def test_manual_overwrites_apple_health(self):
-        ingest([{"name": "weight_body_mass", "units": "kg",
-                 "data": [{"date": "2026-06-01", "qty": 85.5}]}])
-        client.post("/api/health/weight",
-                    json={"date": "2026-06-01", "weight_kg": 83.0}, headers=AUTH)
+    def test_manual_overwrites_apple_health(self, auth_client):
+        ingest(auth_client, [{"name": "weight_body_mass", "units": "kg",
+                              "data": [{"date": "2026-06-01", "qty": 85.5}]}])
+        auth_client.post("/api/health/weight",
+                         json={"date": "2026-06-01", "weight_kg": 83.0})
         db = TestingSession()
         row = db.query(WeightLog).first()
         db.close()
         assert row.weight_kg == 83.0
         assert row.source == "manual"
 
-    def test_last_ingest_timestamp_set(self):
-        before = client.get("/api/settings", headers=AUTH).json()
+    def test_last_ingest_timestamp_set(self, auth_client):
+        before = auth_client.get("/api/settings").json()
         assert before["health_last_ingest"] is None
-        ingest([{"name": "step_count", "units": "count",
-                 "data": [{"date": "2026-06-01", "qty": 5000}]}])
-        after = client.get("/api/settings", headers=AUTH).json()
+        ingest(auth_client, [{"name": "step_count", "units": "count",
+                              "data": [{"date": "2026-06-01", "qty": 5000}]}])
+        after = auth_client.get("/api/settings").json()
         assert after["health_last_ingest"] is not None
 
 
@@ -203,17 +170,17 @@ EXPORT_XML = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
-def upload_export(content: bytes, filename: str):
+def upload_export(client, content: bytes, filename: str):
     return client.post(
         "/api/ingest/health-export",
         files={"file": (filename, io.BytesIO(content), "application/octet-stream")},
-        headers=AUTH,
+        headers=ingest_headers(client),
     )
 
 
 class TestExportBackfill:
-    def test_bare_xml_import(self):
-        r = upload_export(EXPORT_XML.encode(), "export.xml")
+    def test_bare_xml_import(self, auth_client):
+        r = upload_export(auth_client, EXPORT_XML.encode(), "export.xml")
         assert r.status_code == 200
         data = r.json()
         assert data["status"] == "ok"
@@ -244,15 +211,15 @@ class TestExportBackfill:
         assert nut.protein_g == 170
         assert nut.micros["sodium_mg"] == 2400
 
-    def test_zip_import_and_idempotency(self):
+    def test_zip_import_and_idempotency(self, auth_client):
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
             zf.writestr("apple_health_export/export.xml", EXPORT_XML)
-        r1 = upload_export(buf.getvalue(), "export.zip")
+        r1 = upload_export(auth_client, buf.getvalue(), "export.zip")
         assert r1.status_code == 200
         assert r1.json()["rows_created"] == 4
 
-        r2 = upload_export(buf.getvalue(), "export.zip")
+        r2 = upload_export(auth_client, buf.getvalue(), "export.zip")
         assert r2.json()["rows_created"] == 0  # idempotent
 
         db = TestingSession()
@@ -260,10 +227,10 @@ class TestExportBackfill:
         assert db.query(NutritionDay).count() == 1
         db.close()
 
-    def test_backfill_respects_manual_rows(self):
-        client.post("/api/health/weight",
-                    json={"date": "2026-06-01", "weight_kg": 80.0}, headers=AUTH)
-        upload_export(EXPORT_XML.encode(), "export.xml")
+    def test_backfill_respects_manual_rows(self, auth_client):
+        auth_client.post("/api/health/weight",
+                         json={"date": "2026-06-01", "weight_kg": 80.0})
+        upload_export(auth_client, EXPORT_XML.encode(), "export.xml")
         db = TestingSession()
         row = db.query(WeightLog).filter(WeightLog.date == date(2026, 6, 1)).first()
         db.close()

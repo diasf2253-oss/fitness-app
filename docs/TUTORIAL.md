@@ -107,8 +107,10 @@ Bring in years of past data at once:
 2. In the app: **Settings → Apple Health sync → History backfill →** choose the
    zip → **Import**. Manually-corrected days are never overwritten.
 
-> Until real data flows, use **Settings → Developer → Load sample data** to see
-> every chart populated, then **Clear sample data** when your real history lands.
+> Until real data flows, the health charts show an empty state pointing you
+> back to **Settings → Apple Health sync** — see `docs/HEALTH_INGEST_SHORTCUT.md`
+> for the fastest way to get real weight/steps/sleep flowing (a shared iOS
+> Shortcut, installed in about two taps).
 
 ---
 

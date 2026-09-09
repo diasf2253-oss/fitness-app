@@ -15,6 +15,11 @@ build/
 # Database
 *.sqlite3
 
+# Database backups — real personal training data + the prod connection string.
+# NEVER commit these.
+backups/
+scripts/.env.backup
+
 # Node
 node_modules/
 dist/
@@ -26,3 +31,8 @@ backend/alembic/versions/*.pyc
 # Generated code map (graphify) — regenerable, local navigation aid
 graphify-out/
 .Rhistory
+
+# Claude Code — local settings, agent worktrees, and memory (not source,
+# and may contain secrets/DBs inside worktrees)
+.claude/
+memory/

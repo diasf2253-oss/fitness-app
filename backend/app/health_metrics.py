@@ -127,7 +127,7 @@ def convert_amount(value: float, from_unit: str, key: str) -> Optional[float]:
 
 
 def upsert_nutrition_partial(
-    db: DBSession, day: date, values: dict[str, float], source: str
+    db: DBSession, day: date, values: dict[str, float], source: str, user_id: int
 ) -> bool:
     """
     Upsert one day's nutrition from canonical-keyed values. Partial by
@@ -140,14 +140,16 @@ def upsert_nutrition_partial(
 
     Returns True if a row was created.
     """
-    row = db.query(NutritionDay).filter(NutritionDay.date == day).first()
+    row = db.query(NutritionDay).filter(
+        NutritionDay.user_id == user_id, NutritionDay.date == day
+    ).first()
     if row and row.source == "manual" and source != "manual":
         return False
 
     created = row is None
     if created:
         row = NutritionDay(
-            date=day, calories=0.0, protein_g=0.0, carbs_g=0.0, fat_g=0.0,
+            user_id=user_id, date=day, calories=0.0, protein_g=0.0, carbs_g=0.0, fat_g=0.0,
             source=source,
         )
         db.add(row)

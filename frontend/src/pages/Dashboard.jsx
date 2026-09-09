@@ -13,7 +13,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { apiFetch } from '../api'
-import { Loading, ErrorBox } from '../components/States'
+import { Loading, ErrorBox, EmptyNote, NoHealthDataNote } from '../components/States'
 import MonthCalendar from '../components/MonthCalendar'
 import WidgetLabel from '../components/WidgetLabel'
 import CheckIn from '../components/CheckIn'
@@ -35,12 +35,14 @@ function fmtDay(iso) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function EmptyNote({ children }) {
-  return (
-    <p className="muted" style={{ textAlign: 'center', padding: '1.1rem 0' }}>
-      {children || <>No data yet. <Link to="/log">Log manually ›</Link></>}
-    </p>
-  )
+// Weight dots: solid for a real weigh-in, hollow ring for an interpolated
+// estimate on a day that wasn't tracked.
+function weightDot(props) {
+  const { cx, cy, payload, index } = props
+  if (cx == null || cy == null) return null
+  return payload.estimated
+    ? <circle key={index} cx={cx} cy={cy} r={2.2} fill="none" stroke={SAGE} strokeWidth={1} strokeOpacity={0.55} />
+    : <circle key={index} cx={cx} cy={cy} r={2} fill={SAGE} />
 }
 
 function MacroBar({ label, value, target, over }) {
@@ -84,22 +86,6 @@ function DayDetail({ date }) {
     load()
   }, [date])
 
-  async function togglePlan(item) {
-    // Optimistic flip so the checkbox feels instant, then persist
-    setDetail(d => ({
-      ...d,
-      plan: d.plan.map(p => p.id === item.id ? { ...p, is_done: !p.is_done } : p),
-    }))
-    try {
-      await apiFetch(`/api/plan/items/${item.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ is_done: !item.is_done }),
-      })
-    } catch (_) {
-      load()  // reconcile on failure
-    }
-  }
-
   const title = new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric',
   })
@@ -107,7 +93,7 @@ function DayDetail({ date }) {
   const hasAnything = detail && (
     detail.sessions.length > 0 || detail.weight_kg != null ||
     detail.steps != null || detail.sleep || detail.nutrition ||
-    (detail.trackers || []).length > 0 || (detail.plan || []).length > 0
+    (detail.trackers || []).length > 0
   )
 
   const Row = ({ label, children }) => (
@@ -126,34 +112,7 @@ function DayDetail({ date }) {
 
       {!detail && <p className="muted" style={{ fontSize: '0.8rem' }}>Loading…</p>}
 
-      {/* Plan — checkable, the one interactive section in the rail */}
-      {detail && (detail.plan || []).length > 0 && (
-        <div style={{ marginBottom: '0.5rem' }}>
-          {detail.plan.map(p => (
-            <button
-              key={p.id}
-              onClick={() => togglePlan(p)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%',
-                background: 'transparent', border: 'none', boxShadow: 'none',
-                padding: '0.3rem 0', minHeight: 0, textAlign: 'left', color: 'var(--color-text)',
-              }}
-            >
-              <span style={{
-                width: 16, height: 16, flexShrink: 0, borderRadius: 5,
-                border: `1px solid ${p.is_done ? 'var(--color-success)' : 'var(--color-border-str)'}`,
-                background: p.is_done ? 'var(--color-success)' : 'transparent',
-                color: 'var(--color-on-primary)', fontSize: '0.7rem',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>{p.is_done ? '✓' : ''}</span>
-              {p.start_time && <span className="tnum muted" style={{ fontSize: '0.75rem', width: 38 }}>{p.start_time}</span>}
-              <span style={{ flex: 1, fontSize: '0.85rem', opacity: p.is_done ? 0.55 : 1, textDecoration: p.is_done ? 'line-through' : 'none' }}>
-                {p.title}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Plan section killed per workbook H8 (grade D) */}
 
       {detail && detail.sessions.map(s => (
         <div key={s.id} style={{ padding: '0.35rem 0', borderBottom: '1px solid var(--color-border)' }}>
@@ -167,7 +126,14 @@ function DayDetail({ date }) {
 
       {detail && (
         <div style={{ marginTop: '0.35rem' }}>
-          {detail.weight_kg != null && <Row label="Weight">{detail.weight_kg} kg</Row>}
+          {detail.weight_kg != null && (
+            <Row label="Weight">
+              {detail.weight_kg} kg
+              {detail.weight_estimated && (
+                <span className="muted" style={{ marginLeft: 5, fontSize: '0.7rem' }}>est.</span>
+              )}
+            </Row>
+          )}
           {detail.steps != null && <Row label="Steps">{detail.steps.toLocaleString()}</Row>}
           {detail.sleep && <Row label="Sleep">{Math.round(detail.sleep.asleep_minutes / 6) / 10} h</Row>}
           {detail.nutrition && (
@@ -282,6 +248,8 @@ export default function Dashboard() {
   const [selectedDay, setSelectedDay] = useState(localTodayIso())
 
   useEffect(() => {
+    // In local-first mode apiFetch serves this from the on-device DB,
+    // so the dashboard works with no server reachable.
     apiFetch('/api/dashboard')
       .then(setData)
       .catch(err => setError(err.message))
@@ -297,9 +265,10 @@ export default function Dashboard() {
   const weightData = data
     ? data.weight.series.map(p => {
         const avg = data.weight.moving_avg_7d.find(a => a.date === p.date)
-        return { date: p.date, weight_kg: p.weight_kg, avg_kg: avg ? avg.avg_kg : null }
+        return { date: p.date, weight_kg: p.weight_kg, avg_kg: avg ? avg.avg_kg : null, estimated: p.estimated }
       })
     : []
+  const hasWeightEstimates = weightData.some(p => p.estimated)
 
   const nut = data?.nutrition_today
   const targets = data?.targets
@@ -361,6 +330,14 @@ export default function Dashboard() {
                 <div className="stat-num" style={{ fontSize: '1.8rem' }}>{data.training.sessions_this_week}</div>
                 <WidgetLabel>sessions</WidgetLabel>
               </div>
+              {data.streak && (
+                <div>
+                  <div className="stat-num" style={{ fontSize: '1.8rem', color: data.streak.at_risk ? 'var(--color-warning)' : undefined }}>
+                    {data.streak.current}{data.streak.current > 0 ? '🔥' : ''}
+                  </div>
+                  <WidgetLabel>streak{data.streak.at_risk ? ' · at risk' : ''}</WidgetLabel>
+                </div>
+              )}
             </div>
             {data.training.recent_prs.length > 0 ? (
               <>
@@ -389,18 +366,31 @@ export default function Dashboard() {
               <WidgetLabel>90 days · 7-day avg</WidgetLabel>
             </div>
             {weightData.length > 0 ? (
+              <>
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={weightData} margin={{ top: 8, right: 8, left: -14, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
                   <XAxis dataKey="date" stroke={AXIS} fontSize={10} tickLine={false} axisLine={false} tickFormatter={fmtDay} minTickGap={28} />
                   <YAxis stroke={AXIS} fontSize={10} domain={['auto', 'auto']} tickLine={false} axisLine={false} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={fmtDay} />
-                  <Line type="monotone" dataKey="weight_kg" name="kg" stroke={SAGE} strokeWidth={1.5} dot={{ r: 2, fill: SAGE, strokeWidth: 0 }} />
+                  <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    labelFormatter={fmtDay}
+                    formatter={(value, name, item) =>
+                      name === 'kg' && item?.payload?.estimated ? [`${value} (est.)`, name] : [value, name]
+                    }
+                  />
+                  <Line type="monotone" dataKey="weight_kg" name="kg" stroke={SAGE} strokeWidth={1.5} dot={weightDot} />
                   <Line type="monotone" dataKey="avg_kg" name="7d avg" stroke={BONE} strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls />
                 </LineChart>
               </ResponsiveContainer>
+              {hasWeightEstimates && (
+                <p className="muted" style={{ fontSize: '0.72rem', marginTop: 2, textAlign: 'center' }}>
+                  Hollow points are interpolated estimates for days you didn't weigh in.
+                </p>
+              )}
+              </>
             ) : (
-              <EmptyNote />
+              <NoHealthDataNote metric="weight readings" />
             )}
           </div>
 
@@ -421,7 +411,7 @@ export default function Dashboard() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <EmptyNote />
+              <NoHealthDataNote metric="step data" />
             )}
           </div>
 
@@ -442,7 +432,7 @@ export default function Dashboard() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <EmptyNote />
+              <NoHealthDataNote metric="sleep data" />
             )}
           </div>
 

@@ -1,15 +1,16 @@
 /**
  * RestTimer — a sticky countdown bar shown after completing a set.
  *
- * Behaviour:
- *  - Counts down from `seconds`
- *  - Shows remaining time large and tappable (+15s / -15s / skip)
- *  - Plays a beep + browser notification when it reaches zero
+ * Deliberately minimal: the countdown plus exactly two controls, Pause/Resume
+ * and Skip. There is no −15/+15 or "add seconds" — the owner asked for a bar
+ * that doesn't need reading mid-set. Rest duration comes from the routine's
+ * rest_seconds when set, otherwise the Settings default (see restForExercise
+ * in pages/Workout.jsx); it is not adjusted from here.
  *
  * Props:
  *   seconds  — starting duration in seconds
  *   onDone   — called once when the timer hits zero
- *   onClose  — called when user dismisses/skips the timer
+ *   onClose  — called when the user dismisses/skips the timer
  */
 import React, { useEffect, useRef, useState } from 'react'
 
@@ -39,28 +40,48 @@ function notify(text) {
   }
 }
 
+// Two short pulses; no-ops where the Vibration API is unsupported (iOS Safari)
+function vibrate() {
+  try { navigator.vibrate?.([200, 100, 200]) } catch (_) { /* ignore */ }
+}
+
 function fmt(total) {
   const m = Math.floor(total / 60)
   const s = total % 60
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
+// Ghost button on the coloured bar. Generous height for gym thumbs; the two
+// buttons sit at a fixed width so the row never overflows a ~360px phone.
+const ctrlBtn = {
+  flex: '0 0 auto',
+  minWidth: 92,
+  minHeight: 44,
+  background: 'rgba(27,33,29,0.14)',
+  color: 'var(--color-on-primary)',
+  boxShadow: 'none',
+  padding: '0.4rem 0.6rem',
+}
+
 export default function RestTimer({ seconds, onDone, onClose }) {
   const [remaining, setRemaining] = useState(seconds)
+  const [paused, setPaused] = useState(false)
   const firedRef = useRef(false)
 
   useEffect(() => {
-    // Tick every second
+    // Tick every second; a paused timer keeps its remaining time.
+    if (paused) return undefined
     const id = setInterval(() => {
       setRemaining(r => r - 1)
     }, 1000)
     return () => clearInterval(id)
-  }, [])
+  }, [paused])
 
   useEffect(() => {
     if (remaining <= 0 && !firedRef.current) {
       firedRef.current = true
       beep()
+      vibrate()
       notify('Time to start your next set.')
       onDone?.()
     }
@@ -79,41 +100,35 @@ export default function RestTimer({ seconds, onDone, onClose }) {
         margin: '0 auto',
         background: isDone ? 'var(--color-success)' : 'var(--color-primary)',
         color: 'var(--color-on-primary)',
-        padding: '0.55rem 0.6rem 0.55rem 1.2rem',
+        opacity: paused && !isDone ? 0.9 : 1,
+        padding: '0.5rem 0.6rem 0.5rem 1.1rem',
         borderRadius: 'var(--radius-pill)',
         display: 'flex',
         alignItems: 'center',
-        gap: '0.45rem',
+        gap: '0.5rem',
         zIndex: 150,
         boxShadow: 'var(--shadow-lg)',
         animation: 'rise-in 0.22s var(--ease)',
       }}
     >
-      <span style={{ fontSize: '1.35rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', minWidth: 64 }}>
+      <span style={{ fontSize: '1.5rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', minWidth: 66 }}>
         {isDone ? 'Done' : fmt(remaining)}
       </span>
       <span style={{ fontSize: '0.72rem', letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.65 }}>
-        rest
+        {paused && !isDone ? 'paused' : 'rest'}
       </span>
       <span className="spacer" />
       {!isDone && (
-        <>
-          <button
-            style={{ background: 'rgba(27,33,29,0.10)', color: 'var(--color-on-primary)', minWidth: 56, boxShadow: 'none' }}
-            onClick={() => setRemaining(r => Math.max(0, r - 15))}
-          >
-            −15
-          </button>
-          <button
-            style={{ background: 'rgba(27,33,29,0.10)', color: 'var(--color-on-primary)', minWidth: 56, boxShadow: 'none' }}
-            onClick={() => setRemaining(r => r + 15)}
-          >
-            +15
-          </button>
-        </>
+        <button
+          aria-label={paused ? 'Resume timer' : 'Pause timer'}
+          style={ctrlBtn}
+          onClick={() => setPaused(p => !p)}
+        >
+          {paused ? '▶ Resume' : '⏸ Pause'}
+        </button>
       )}
       <button
-        style={{ background: 'rgba(27,33,29,0.18)', color: 'var(--color-on-primary)', boxShadow: 'none' }}
+        style={{ ...ctrlBtn, minWidth: 76, background: 'rgba(27,33,29,0.22)' }}
         onClick={onClose}
       >
         {isDone ? 'Dismiss' : 'Skip'}

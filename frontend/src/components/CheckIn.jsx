@@ -10,6 +10,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../api'
+import { parseDecimal } from '../num'
 import { ErrorBox } from './States'
 
 function localTodayIso() {
@@ -82,13 +83,12 @@ function NumberRow({ tracker, onSave }) {
       <div className="row" style={{ gap: '0.4rem' }}>
         <input
           key={`${tracker.id}-${value}`}
-          type="number"
+          type="text"
           inputMode="decimal"
           defaultValue={value}
           placeholder="–"
           onBlur={e => {
-            const v = e.target.value
-            const next = v === '' ? null : Number(v)
+            const next = parseDecimal(e.target.value)
             if (next !== (tracker.today?.value_num ?? null)) onSave(next)
           }}
           style={{ width: 90, minHeight: 38, textAlign: 'center', padding: '0.3rem' }}

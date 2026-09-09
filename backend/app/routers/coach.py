@@ -23,13 +23,14 @@ import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session as DBSession
 
 from app.auth import require_auth
 from app.coach_context import build_context
 from app.config import settings
 from app.db import get_db
-from app.models import Exercise, Routine, RoutineExercise
+from app.models import Exercise, Routine, RoutineExercise, User
 from app.routers.plan import add_plan_item
 from app.schemas import PLAN_CATEGORIES, PlanItemCreate, PlanItemOut
 
@@ -174,10 +175,10 @@ def _client() -> anthropic.Anthropic:
     return anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
 
-def _propose(db: DBSession, tool: dict, user_prompt: str) -> dict:
+def _propose(db: DBSession, tool: dict, user_prompt: str, user_id: int) -> dict:
     """Run a forced-tool-use request and return the tool input dict."""
     client = _client()
-    system = COACH_SYSTEM.format(context=build_context(db))
+    system = COACH_SYSTEM.format(context=build_context(db, user_id))
     try:
         resp = client.messages.create(
             model=settings.coach_model,
@@ -202,7 +203,7 @@ def _propose(db: DBSession, tool: dict, user_prompt: str) -> dict:
 # ---------------------------------------------------------------------------
 
 @router.get("/status")
-def coach_status(_: None = Depends(require_auth)):
+def coach_status(_: User = Depends(require_auth)):
     return {"enabled": settings.coach_enabled, "model": settings.coach_model}
 
 
@@ -210,7 +211,7 @@ def coach_status(_: None = Depends(require_auth)):
 def coach_chat(
     body: ChatRequest,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """Stream a chat reply as text/plain. Context is built before streaming so
     the DB session isn't held open across the network stream."""
@@ -218,7 +219,7 @@ def coach_chat(
     if not body.messages:
         raise HTTPException(status_code=422, detail="messages must not be empty")
 
-    system = COACH_SYSTEM.format(context=build_context(db))
+    system = COACH_SYSTEM.format(context=build_context(db, current_user.id))
     msgs = [{"role": t.role, "content": t.content} for t in body.messages]
 
     def generate():
@@ -246,7 +247,7 @@ def coach_chat(
 def plan_workout(
     body: PlanRequest,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     prompt = (
         "Plan my next strength workout. Prefer exercises I already train and "
@@ -254,7 +255,7 @@ def plan_workout(
     )
     if body.note:
         prompt += f"\n\nExtra context from me: {body.note}"
-    proposal = _propose(db, WORKOUT_TOOL, prompt)
+    proposal = _propose(db, WORKOUT_TOOL, prompt, current_user.id)
     return {"kind": "workout", **proposal}
 
 
@@ -262,7 +263,7 @@ def plan_workout(
 def plan_day(
     body: PlanRequest,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     target = body.date or date_cls.today()
     prompt = (
@@ -272,7 +273,7 @@ def plan_day(
     )
     if body.note:
         prompt += f"\n\nExtra context from me: {body.note}"
-    proposal = _propose(db, DAY_TOOL, prompt)
+    proposal = _propose(db, DAY_TOOL, prompt, current_user.id)
     return {"kind": "day", "date": target.isoformat(), **proposal}
 
 
@@ -280,7 +281,7 @@ def plan_day(
 def plan_study(
     body: PlanRequest,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     target = body.date or date_cls.today()
     prompt = (
@@ -290,7 +291,7 @@ def plan_study(
     )
     if body.note:
         prompt += f"\n\nWhat I need to study: {body.note}"
-    proposal = _propose(db, DAY_TOOL, prompt)
+    proposal = _propose(db, DAY_TOOL, prompt, current_user.id)
     return {"kind": "study", "date": target.isoformat(), **proposal}
 
 
@@ -302,26 +303,33 @@ def plan_study(
 def accept_workout(
     body: WorkoutAccept,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """Build a real routine from an approved workout proposal, creating any
     exercises that don't exist yet (case-insensitive match)."""
     if not body.exercises:
         raise HTTPException(status_code=422, detail="No exercises to add")
 
-    existing = {e.name.lower(): e for e in db.query(Exercise).all()}
-    routine = Routine(name=body.title.strip() or "Coached workout")
+    user_id = current_user.id
+    existing = {
+        e.name.lower(): e
+        for e in db.query(Exercise).filter(
+            or_(Exercise.user_id.is_(None), Exercise.user_id == user_id)
+        ).all()
+    }
+    routine = Routine(user_id=user_id, name=body.title.strip() or "Coached workout")
     db.add(routine)
     db.flush()
 
     for pos, ex in enumerate(body.exercises):
         match = existing.get(ex.name.strip().lower())
         if match is None:
-            match = Exercise(name=ex.name.strip(), is_custom=True)
+            match = Exercise(user_id=user_id, name=ex.name.strip(), is_custom=True)
             db.add(match)
             db.flush()
             existing[match.name.lower()] = match
         db.add(RoutineExercise(
+            user_id=user_id,
             routine_id=routine.id,
             exercise_id=match.id,
             position=pos,
@@ -340,7 +348,7 @@ def accept_workout(
 def accept_day(
     body: DayAccept,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """Write an approved day/study plan into plan items (source='coach')."""
     if not body.items:
@@ -355,7 +363,7 @@ def accept_day(
             category=it.category,
             notes=it.notes,
             source="coach",
-        ))
+        ), current_user.id)
         created.append(item)
     db.commit()
     for item in created:

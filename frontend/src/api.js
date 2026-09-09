@@ -1,37 +1,43 @@
 /**
- * Fetch wrapper that automatically attaches the bearer token from
- * localStorage (key: "app_token") to every request.
+ * Fetch wrapper for the multi-user friends beta — auth is a same-origin
+ * httpOnly session cookie (see src/auth.js), never a bearer token, so every
+ * request just needs `credentials: 'include'` and the browser does the rest.
  *
  * Usage:
  *   import { apiFetch } from './api'
  *   const data = await apiFetch('/api/exercises')
  *   const created = await apiFetch('/api/exercises', { method: 'POST', body: JSON.stringify({...}) })
  */
-
-// The token is stored in localStorage so it survives page reloads.
-// The user sets it once on the Settings page (or we default to 'changeme' for dev).
-function getToken() {
-  return localStorage.getItem('app_token') || 'changeme'
-}
-
-export function setToken(token) {
-  localStorage.setItem('app_token', token)
-}
+import { dispatchLocal } from './local/api'
+import { isLocalFirst } from './local/mode'
+import { apiUrl } from './env'
 
 /**
  * Core fetch wrapper.
- * - Adds Authorization header automatically
+ * - Sends the session cookie automatically (credentials: 'include')
  * - Sets Content-Type: application/json when a body is provided
  * - Throws an Error with the response detail on non-2xx responses
+ *
+ * Local-first mode: requests are offered to the on-device API first
+ * (IndexedDB-backed twin of the backend). Matched routes never touch the
+ * network; unmatched ones (Coach, ingest, sync, dev, auth, admin) fall
+ * through to it.
  */
 export async function apiFetch(path, options = {}) {
+  if (isLocalFirst()) {
+    const { handled, result } = await dispatchLocal(path, options)
+    if (handled) return result
+  }
+  return networkFetch(path, options)
+}
+
+async function networkFetch(path, options = {}) {
   const headers = {
-    'Authorization': `Bearer ${getToken()}`,
     ...(options.body ? { 'Content-Type': 'application/json' } : {}),
     ...(options.headers || {}),
   }
 
-  const response = await fetch(path, { ...options, headers })
+  const response = await fetch(apiUrl(path), { ...options, headers, credentials: 'include' })
 
   if (!response.ok) {
     // Try to parse a FastAPI {"detail": "..."} error body
@@ -42,7 +48,9 @@ export async function apiFetch(path, options = {}) {
     } catch (_) {
       // ignore JSON parse errors on error responses
     }
-    throw new Error(detail)
+    const error = new Error(detail)
+    error.status = response.status
+    throw error
   }
 
   // 204 No Content — return null instead of trying to parse empty body
@@ -52,13 +60,22 @@ export async function apiFetch(path, options = {}) {
 }
 
 /**
- * Multipart upload variant (file uploads). Same auth handling, but no
+ * Multipart upload variant (file uploads). Same cookie auth, but no
  * Content-Type header — the browser must set the multipart boundary.
+ *
+ * Its one caller (the export.zip history backfill) hits an ingest endpoint,
+ * and every ingest endpoint authenticates via the per-user `ingest_token`
+ * bearer header (require_ingest_auth) rather than the session cookie — a
+ * Shortcut/HAE automation can't hold a cookie jar, so ingest never accepts
+ * one. This upload was never passing that header, so backfill 401'd with
+ * "missing bearer token" every time — `extraHeaders` fixes that; pass
+ * { Authorization: `Bearer ${ingestToken}` }.
  */
-export async function apiUpload(path, formData) {
-  const response = await fetch(path, {
+export async function apiUpload(path, formData, extraHeaders = {}) {
+  const response = await fetch(apiUrl(path), {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${getToken()}` },
+    credentials: 'include',
+    headers: extraHeaders,
     body: formData,
   })
 
@@ -82,12 +99,10 @@ export async function apiUpload(path, formData) {
  * Returns the full concatenated text when the stream ends.
  */
 export async function apiStream(path, body, onChunk) {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${getToken()}`,
-      'Content-Type': 'application/json',
-    },
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
 

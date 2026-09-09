@@ -5,10 +5,11 @@
  * re-saving it (last write wins). From Phase 3 the same tables fill
  * automatically from Apple Health.
  */
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../api'
 import { ErrorBox } from '../components/States'
+import { parseDecimal } from '../num'
 
 // Local calendar date (toISOString alone would shift near midnight)
 function localToday() {
@@ -69,6 +70,7 @@ export default function Log() {
   const [date, setDate] = useState(searchParams.get('date') || localToday())
 
   const [weight, setWeight] = useState('')
+  const [weightEstimated, setWeightEstimated] = useState(false)
   const [steps, setSteps] = useState('')
   const [asleepH, setAsleepH] = useState('')
   const [inBedH, setInBedH] = useState('')
@@ -78,9 +80,26 @@ export default function Log() {
   const [fat, setFat] = useState('')
 
   const required = (value, name) => {
-    if (value === '' || value === null) throw new Error(`Enter ${name} first`)
-    return Number(value)
+    const n = parseDecimal(value)
+    if (n === null) throw new Error(`Enter ${name} first`)
+    return n
   }
+
+  // Prefill the weight field with the day's real reading, or — for a day
+  // never tracked — an interpolated estimate flagged as such. Refetches when
+  // the date changes; typing a value clears the "estimate" flag.
+  // (apiFetch serves this from the on-device DB in local-first mode.)
+  useEffect(() => {
+    let cancelled = false
+    apiFetch(`/api/health/weight/estimate?date=${date}`)
+      .then(r => {
+        if (cancelled) return
+        setWeight(r.weight_kg != null ? String(r.weight_kg) : '')
+        setWeightEstimated(r.weight_kg != null && !!r.estimated)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [date])
 
   return (
     <div className="page">
@@ -104,12 +123,22 @@ export default function Log() {
         title="Weight"
         onSave={() => apiFetch('/api/health/weight', {
           method: 'POST',
-          body: JSON.stringify({ date, weight_kg: required(weight, 'a weight') }),
+          body: JSON.stringify({
+            date,
+            weight_kg: required(weight, 'a weight'),
+            source: weightEstimated ? 'estimated' : 'manual',
+          }),
         })}
       >
         <Field label="Weight (kg)">
-          <input type="number" inputMode="decimal" step="0.1" placeholder="84.0"
-            value={weight} onChange={e => setWeight(e.target.value)} />
+          <input type="text" inputMode="decimal" placeholder="84.0"
+            value={weight}
+            onChange={e => { setWeight(e.target.value); setWeightEstimated(false) }} />
+          {weightEstimated && (
+            <span className="muted" style={{ fontSize: '0.75rem', marginTop: 4 }}>
+              ≈ interpolated estimate — saved as an estimate unless you edit it
+            </span>
+          )}
         </Field>
       </LogCard>
 
@@ -131,7 +160,7 @@ export default function Log() {
         onSave={() => {
           const asleep = required(asleepH, 'hours asleep')
           // In-bed defaults to asleep time when left blank
-          const inBed = inBedH === '' ? asleep : Number(inBedH)
+          const inBed = parseDecimal(inBedH) ?? asleep
           return apiFetch('/api/health/sleep', {
             method: 'POST',
             body: JSON.stringify({
@@ -144,11 +173,11 @@ export default function Log() {
       >
         <div className="form-row">
           <Field label="Asleep (h)">
-            <input type="number" inputMode="decimal" step="0.25" placeholder="7.5"
+            <input type="text" inputMode="decimal" placeholder="7.5"
               value={asleepH} onChange={e => setAsleepH(e.target.value)} />
           </Field>
           <Field label="In bed (h, optional)">
-            <input type="number" inputMode="decimal" step="0.25" placeholder="8"
+            <input type="text" inputMode="decimal" placeholder="8"
               value={inBedH} onChange={e => setInBedH(e.target.value)} />
           </Field>
         </div>

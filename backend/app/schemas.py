@@ -5,7 +5,7 @@ We never return raw SQLAlchemy objects from API endpoints — always use these.
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ---------------------------------------------------------------------------
@@ -23,6 +23,8 @@ class OrmBase(BaseModel):
 class ExerciseBase(BaseModel):
     name: str
     primary_muscle: Optional[str] = None
+    # Canonical taxonomy for Ranks/analytics; auto-tagged when omitted
+    primary_muscle_group: Optional[str] = None
     secondary_muscles: list[str] = []
     equipment: Optional[str] = None
     notes: Optional[str] = None
@@ -39,6 +41,10 @@ class ExerciseUpdate(ExerciseBase):
 
 class ExerciseOut(OrmBase, ExerciseBase):
     id: int
+    # Stable cross-device identity. The local-first twin hands `id` a uuid, so
+    # anything persisted against an exercise (e.g. settings.exercise_brands)
+    # must key on this, not on the device-local integer id.
+    uuid: str
     is_custom: bool
 
 
@@ -53,6 +59,8 @@ class RoutineExerciseBase(BaseModel):
     target_rep_low: int = 8
     target_rep_high: int = 12
     rest_seconds: int = 120
+    target_rir: Optional[int] = None
+    planned_sets: Optional[list[dict]] = None
 
 
 class RoutineExerciseCreate(RoutineExerciseBase):
@@ -64,8 +72,30 @@ class RoutineExerciseOut(OrmBase, RoutineExerciseBase):
     exercise: ExerciseOut
 
 
+class SplitCreate(BaseModel):
+    # Optional when `template` is given — the template supplies its own name.
+    name: Optional[str] = None
+    # Optional key from split_templates.SPLIT_TEMPLATES — builds the days and
+    # their exercises in one go. Omit for an empty split.
+    template: Optional[str] = None
+
+
+class SplitUpdate(BaseModel):
+    name: Optional[str] = None
+    position: Optional[int] = None
+
+
+class SplitOut(OrmBase):
+    id: int
+    name: str
+    position: int
+    created_at: datetime
+    routine_count: int = 0
+
+
 class RoutineBase(BaseModel):
     name: str
+    split_id: Optional[int] = None
     notes: Optional[str] = None
 
 
@@ -75,14 +105,40 @@ class RoutineCreate(RoutineBase):
 
 class RoutineUpdate(BaseModel):
     name: Optional[str] = None
+    split_id: Optional[int] = None
     notes: Optional[str] = None
     exercises: Optional[list[RoutineExerciseCreate]] = None
 
 
 class RoutineOut(OrmBase, RoutineBase):
     id: int
+    source: str = "manual"        # 'manual' | 'generated'
     created_at: datetime
     exercises: list[RoutineExerciseOut] = []
+
+
+# ---------------------------------------------------------------------------
+# Next-session (routine) notes
+# ---------------------------------------------------------------------------
+
+class RoutineNoteCreate(BaseModel):
+    text: str
+    created_in_session_id: Optional[int] = None
+
+
+class RoutineNoteUpdate(BaseModel):
+    text: Optional[str] = None
+    archived: Optional[bool] = None
+
+
+class RoutineNoteOut(OrmBase):
+    id: int
+    routine_id: int
+    text: str
+    created_at: datetime
+    created_in_session_id: Optional[int] = None
+    surfaced_in_session_id: Optional[int] = None
+    archived_at: Optional[datetime] = None
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +150,7 @@ class SetBase(BaseModel):
     weight_kg: float = 0.0
     reps: int = 0
     rpe: Optional[float] = None
+    rir: Optional[int] = None
     is_warmup: bool = False
     is_completed: bool = False
 
@@ -106,6 +163,7 @@ class SetUpdate(BaseModel):
     weight_kg: Optional[float] = None
     reps: Optional[int] = None
     rpe: Optional[float] = None
+    rir: Optional[int] = None
     is_warmup: Optional[bool] = None
     is_completed: Optional[bool] = None
     completed_at: Optional[datetime] = None
@@ -153,6 +211,8 @@ class SessionOut(OrmBase):
     ended_at: Optional[datetime] = None
     notes: Optional[str] = None
     exercises: list[SessionExerciseOut] = []
+    # Next-session notes surfaced at the start of this session (from the routine).
+    next_session_notes: list[RoutineNoteOut] = []
 
 
 class SessionSummary(OrmBase):
@@ -179,6 +239,17 @@ class WeightLogOut(OrmBase):
     date: date
     weight_kg: float
     source: str
+
+
+class WeightEstimateOut(BaseModel):
+    """Weight to prefill for a date: a real reading, or an interpolated
+    estimate from surrounding weigh-ins (estimated=True). weight_kg is null
+    when there is no weight data to estimate from at all."""
+    date: date
+    weight_kg: Optional[float] = None
+    estimated: bool = False
+    method: Optional[str] = None   # interpolated | carried_forward | carried_back
+    source: Optional[str] = None
 
 
 class StepsLogCreate(BaseModel):
@@ -215,6 +286,28 @@ class SleepLogOut(OrmBase):
     source: str
 
 
+class HealthMetricFreshness(BaseModel):
+    """How current one health metric is. `last_date` counts real readings
+    only — an interpolated or demo row must never make data look fresh."""
+    last_date: Optional[date] = None
+    days_stale: Optional[int] = None
+
+
+class HealthSyncStatusOut(BaseModel):
+    """
+    Per-metric freshness, so the UI can say something specific ("steps are 3
+    days old") instead of a single opaque "synced/not synced". Drives the
+    stale-data banner and the Settings sync card.
+    """
+    last_ingest: Optional[datetime] = None
+    stalest_days: Optional[int] = None
+    has_any_data: bool = False
+    weight: HealthMetricFreshness = HealthMetricFreshness()
+    steps: HealthMetricFreshness = HealthMetricFreshness()
+    sleep: HealthMetricFreshness = HealthMetricFreshness()
+    nutrition: HealthMetricFreshness = HealthMetricFreshness()
+
+
 class NutritionDayCreate(BaseModel):
     date: date
     calories: float
@@ -247,6 +340,23 @@ class AppSettingsUpdate(BaseModel):
     protein_target_g: Optional[int] = None
     fat_max_g: Optional[int] = None
     unit_system: Optional[str] = None
+    sex: Optional[str] = None
+    rank_config: Optional[dict] = None
+    # Profile / onboarding
+    age: Optional[int] = None
+    onboarded: Optional[bool] = None
+    # Adaptive calorie engine — goal is the signed slider: − cut · 0 maintain · + bulk
+    goal_kg_per_week: Optional[float] = Field(None, ge=-0.5, le=0.5)
+    adapt_step_kcal: Optional[int] = None
+    adapt_tolerance_kg: Optional[float] = None
+    calorie_floor: Optional[int] = None
+    calorie_ceiling: Optional[int] = None
+    # Training
+    volume_targets: Optional[dict] = None
+    exercise_brands: Optional[dict] = None
+    streak_rest_gap: Optional[int] = None
+    default_rest_seconds: Optional[int] = None
+    goal_rate_kg_per_week: Optional[float] = None
 
 
 class AppSettingsOut(OrmBase):
@@ -255,7 +365,111 @@ class AppSettingsOut(OrmBase):
     protein_target_g: int
     fat_max_g: int
     unit_system: str
+    sex: str = "male"
+    rank_config: Optional[dict] = None
     health_last_ingest: Optional[datetime] = None
+    # Profile / onboarding
+    age: int = 19
+    onboarded: bool = False
+    # Adaptive calorie engine (goal is signed: − cut · 0 maintain · + bulk)
+    goal_kg_per_week: float = -0.5
+    adapt_step_kcal: int = 100
+    adapt_tolerance_kg: float = 0.15
+    calorie_floor: int = 1800
+    calorie_ceiling: Optional[int] = None
+    last_adapted_week: Optional[date] = None
+    # Training
+    volume_targets: Optional[dict] = None
+    exercise_brands: Optional[dict] = None
+    streak_rest_gap: int = 1
+    default_rest_seconds: int = 120
+    # Legacy (retired, unused)
+    goal_rate_kg_per_week: float = -0.25
+    expenditure_kcal: Optional[float] = None
+    calorie_target_set_at: Optional[date] = None
+
+
+# ---------------------------------------------------------------------------
+# Training streak
+# ---------------------------------------------------------------------------
+
+class StreakOut(BaseModel):
+    current: int = 0
+    longest: int = 0
+    last_workout_date: Optional[date] = None
+    rest_gap: int = 1
+    alive: bool = False
+    at_risk: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Workout generator
+# ---------------------------------------------------------------------------
+
+class GeneratorRequest(BaseModel):
+    priority_muscles: list[str] = []      # ranked: order is the priority order
+    days_per_week: int = Field(ge=1, le=7)
+    split_type: str                       # 'full_body' | 'upper_lower' | 'ppl' | 'bro'
+
+
+# ---------------------------------------------------------------------------
+# Diet — activities, adaptive energy, micronutrients
+# ---------------------------------------------------------------------------
+
+class ActivityCreate(BaseModel):
+    date: date
+    type: str
+    duration_min: int = Field(gt=0, le=600)
+    notes: Optional[str] = None
+
+
+class ActivityOut(BaseModel):
+    id: int
+    date: date
+    type: str
+    duration_min: int
+    notes: Optional[str] = None
+    calories_est: Optional[int] = None   # computed (METs × duration × weight)
+
+
+class NutrientStatus(BaseModel):
+    name: str
+    label: str
+    category: str        # 'vitamin' | 'mineral'
+    amount: float
+    unit: str
+    rda: float
+    pct: int
+    status: str          # 'low' | 'slightly_low' | 'meets' | 'above'
+
+
+class EnergySummary(BaseModel):
+    # ---- the adaptive target + macros ----
+    calorie_target: int
+    goal_kg_per_week: float
+    protein_target_g: int
+    fat_target_g: int
+    carb_target_g: Optional[int] = None
+    # ---- adaptive context (all from the weekly trend) ----
+    adaptive_ready: bool                          # has it adapted at least once?
+    weekly_change_kg: Optional[float] = None      # last completed wk − prior wk
+    last_adapted: Optional[date] = None
+    next_adapt: Optional[date] = None             # next Monday it can move
+    entries_last_week: Optional[int] = None
+    floor: int
+    ceiling: Optional[int] = None
+    weight_trend_kg: Optional[float] = None       # latest weekly average
+    # ---- intake context ----
+    avg_intake_7d: Optional[int] = None
+    avg_intake_14d: Optional[int] = None
+    note: Optional[str] = None                    # hold reason / gathering data
+
+
+class DietOut(BaseModel):
+    energy: EnergySummary
+    nutrients: list[NutrientStatus]
+    nutrient_days: int          # how many days the micro average covers
+    activities: list[ActivityOut]
 
 
 # ---------------------------------------------------------------------------
@@ -295,6 +509,7 @@ class SessionSummaryStats(BaseModel):
 class WeightPoint(BaseModel):
     date: date
     weight_kg: float
+    estimated: bool = False   # interpolated fill for an untracked day
 
 
 class MovingAvgPoint(BaseModel):
@@ -353,6 +568,7 @@ class DashboardOut(BaseModel):
     nutrition_today: NutritionToday
     targets: DashboardTargets
     training: DashboardTraining
+    streak: StreakOut = StreakOut()
 
 
 # ---------------------------------------------------------------------------
@@ -550,8 +766,113 @@ class DayDetailOut(BaseModel):
     date: date
     sessions: list[DaySession] = []
     weight_kg: Optional[float] = None
+    weight_estimated: bool = False   # weight_kg is an interpolated estimate
     steps: Optional[int] = None
     sleep: Optional[SleepLogOut] = None
     nutrition: Optional[NutritionDayOut] = None
     trackers: list[DayTracker] = []
     plan: list[PlanItemOut] = []
+
+
+# ---------------------------------------------------------------------------
+# Sync (Phase 9) — device-to-device pull/push
+# ---------------------------------------------------------------------------
+
+class SyncTableInfo(BaseModel):
+    rows: int
+    last_updated: Optional[datetime] = None
+
+
+class SyncManifestOut(BaseModel):
+    """Cheap 'anything new since my last sync?' check."""
+    server_time: datetime
+    tables: dict[str, SyncTableInfo]
+
+
+class SyncPullOut(BaseModel):
+    server_time: datetime
+    since: Optional[datetime] = None
+    # table name -> payload rows (uuid-keyed entities / date-keyed health)
+    tables: dict[str, list[dict]]
+
+
+class SyncPushIn(BaseModel):
+    tables: dict[str, list[dict]]
+
+
+class SyncPushOut(BaseModel):
+    status: str = "ok"
+    server_time: datetime
+    # table -> {received, inserted, updated, skipped_older, ...}
+    counts: dict[str, dict[str, int]]
+    warnings: list[str] = []
+
+
+# ---------------------------------------------------------------------------
+# Auth (Phase 1-2 friends beta)
+# ---------------------------------------------------------------------------
+
+class JoinRequest(BaseModel):
+    code: str
+    name: str
+    email: str
+    password: str = Field(min_length=8)
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+    remember: bool = False
+
+
+class ChangePasswordRequest(BaseModel):
+    new_password: str = Field(min_length=8)
+
+
+class UserMeOut(OrmBase):
+    id: int
+    email: str
+    name: str
+    role: str
+    status: str
+    must_change_password: bool
+    ingest_token: str
+
+
+# ---------------------------------------------------------------------------
+# Admin (Phase 1-2 friends beta) — user management only, no per-user data
+# drill-down.
+# ---------------------------------------------------------------------------
+
+class AdminUserOut(OrmBase):
+    id: int
+    email: str
+    name: str
+    role: str
+    status: str
+    created_at: datetime
+    last_login_at: Optional[datetime] = None
+
+
+class UserStatusUpdate(BaseModel):
+    status: Optional[str] = None   # 'active' | 'disabled'
+    role: Optional[str] = None     # 'admin' | 'user'
+
+
+class TempPasswordOut(BaseModel):
+    temp_password: str
+
+
+class InviteCodeCreate(BaseModel):
+    label: Optional[str] = None
+    max_uses: Optional[int] = None
+
+
+class InviteCodeOut(OrmBase):
+    id: int
+    code: str
+    label: Optional[str] = None
+    active: bool
+    max_uses: Optional[int] = None
+    uses: int
+    created_at: datetime

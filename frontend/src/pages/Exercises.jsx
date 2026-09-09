@@ -9,16 +9,46 @@ import { Link } from 'react-router-dom'
 import { apiFetch } from '../api'
 import Modal from '../components/Modal'
 import { Loading, ErrorBox } from '../components/States'
+import { RankBadge, rankAccent, useExerciseRanks } from '../components/RankBadge'
 
 const MUSCLE_OPTIONS = [
   'chest', 'back', 'shoulders', 'biceps', 'triceps',
-  'quads', 'hamstrings', 'glutes', 'calves', 'core',
+  'quads', 'hamstrings', 'glutes', 'calves', 'core', 'adductors',
 ]
 
-const EQUIPMENT_OPTIONS = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight']
+const EQUIPMENT_OPTIONS = ['barbell', 'dumbbell', 'cable', 'machine', 'smith', 'bodyweight']
+
+// Equipment where the specific unit matters: the same nominal load feels
+// different on a Hammer Strength press vs a Technogym one, so these get an
+// optional brand. Stored per-user in settings.exercise_brands (keyed by the
+// exercise uuid), never on the shared Exercise row.
+const BRANDED_EQUIPMENT = ['machine', 'cable', 'smith']
 
 export default function Exercises() {
   const [exercises, setExercises] = useState([])
+  const exerciseRanks = useExerciseRanks()   // exercise_id -> rank (colour + tier)
+  const [brands, setBrands] = useState({})   // exercise_uuid -> brand
+
+  // Brands live in this user's settings, so they never touch the shared library.
+  useEffect(() => {
+    apiFetch('/api/settings')
+      .then(st => setBrands(st.exercise_brands || {}))
+      .catch(() => {})
+  }, [])
+
+  async function saveBrand(uuid, value) {
+    const next = { ...brands }
+    if (value.trim()) next[uuid] = value.trim()
+    else delete next[uuid]
+    setBrands(next)
+    try {
+      await apiFetch('/api/settings', {
+        method: 'PUT', body: JSON.stringify({ exercise_brands: next }),
+      })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
@@ -82,16 +112,27 @@ export default function Exercises() {
       {!loading && (
         <div className="col" style={{ gap: '0.5rem' }}>
           {filtered.map(ex => (
-            <div key={ex.id} className="card" style={{ margin: 0, padding: '0.75rem 1rem' }}>
+            <div key={ex.id} className="card" style={{ margin: 0, padding: '0.75rem 1rem', ...rankAccent(exerciseRanks[ex.id]) }}>
               <div className="row">
                 <div style={{ flex: 1 }}>
                   <strong>{ex.name}</strong>
                   {ex.is_custom && <span className="badge primary" style={{ marginLeft: 6 }}>custom</span>}
+                  <RankBadge rank={exerciseRanks[ex.id]} style={{ marginLeft: 6 }} />
                   <div className="muted" style={{ fontSize: '0.8rem' }}>
                     {ex.primary_muscle}
                     {ex.equipment ? ` · ${ex.equipment}` : ''}
+                    {brands[ex.uuid] ? ` · ${brands[ex.uuid]}` : ''}
                     {ex.secondary_muscles?.length ? ` · also: ${ex.secondary_muscles.join(', ')}` : ''}
                   </div>
+                  {BRANDED_EQUIPMENT.includes((ex.equipment || '').toLowerCase()) && (
+                    <input
+                      aria-label={`Brand for ${ex.name}`}
+                      placeholder="brand (e.g. Hammer Strength)"
+                      defaultValue={brands[ex.uuid] || ''}
+                      onBlur={e => saveBrand(ex.uuid, e.target.value)}
+                      style={{ marginTop: '0.4rem', fontSize: '0.8rem', padding: '0.3rem 0.5rem' }}
+                    />
+                  )}
                 </div>
                 {ex.is_custom && (
                   <button className="danger" style={{ minWidth: 44, padding: '0.4rem 0.6rem' }} onClick={() => handleDelete(ex.id)} title="Delete exercise">

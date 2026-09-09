@@ -14,10 +14,18 @@ from sqlalchemy.orm import Session
 
 from app.auth import require_auth
 from app.db import get_db
-from app.models import Exercise
+from app.models import Exercise, User
+from app.muscles import suggest_muscle_group
 from app.schemas import ExerciseCreate, ExerciseOut, ExerciseUpdate
 
 router = APIRouter(prefix="/api/exercises", tags=["exercises"])
+
+
+def _visible_to(db: Session, user_id: int):
+    """The shared global library plus this user's own custom exercises."""
+    return db.query(Exercise).filter(
+        or_(Exercise.user_id.is_(None), Exercise.user_id == user_id)
+    )
 
 
 @router.get("", response_model=list[ExerciseOut])
@@ -25,10 +33,11 @@ def list_exercises(
     search: Optional[str] = Query(None, description="Substring search on name"),
     muscle: Optional[str] = Query(None, description="Filter by primary_muscle"),
     db: Session = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    """Return all exercises, optionally filtered by name search and/or muscle group."""
-    q = db.query(Exercise)
+    """Return all exercises visible to this user (global + their own custom
+    ones), optionally filtered by name search and/or muscle group."""
+    q = _visible_to(db, current_user.id)
     if search:
         q = q.filter(Exercise.name.ilike(f"%{search}%"))
     if muscle:
@@ -40,13 +49,19 @@ def list_exercises(
 def create_exercise(
     body: ExerciseCreate,
     db: Session = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    """Create a new custom exercise."""
+    """Create a new custom exercise, owned by the caller. The canonical
+    muscle group is auto-tagged from the name when not provided, so custom
+    exercises feed the Ranks map. `name` is globally unique across every
+    user's library and the seeded set (a known v1 limitation)."""
     existing = db.query(Exercise).filter(Exercise.name == body.name).first()
     if existing:
         raise HTTPException(status_code=409, detail="Exercise name already exists")
-    ex = Exercise(**body.model_dump())
+    data = body.model_dump()
+    if not data.get("primary_muscle_group"):
+        data["primary_muscle_group"] = suggest_muscle_group(body.name, body.primary_muscle)
+    ex = Exercise(user_id=current_user.id, **data)
     db.add(ex)
     db.commit()
     db.refresh(ex)
@@ -57,9 +72,9 @@ def create_exercise(
 def get_exercise(
     exercise_id: int,
     db: Session = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    ex = db.get(Exercise, exercise_id)
+    ex = _visible_to(db, current_user.id).filter(Exercise.id == exercise_id).first()
     if not ex:
         raise HTTPException(status_code=404, detail="Exercise not found")
     return ex
@@ -70,10 +85,12 @@ def update_exercise(
     exercise_id: int,
     body: ExerciseUpdate,
     db: Session = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     ex = db.get(Exercise, exercise_id)
-    if not ex:
+    if not ex or ex.user_id != current_user.id:
+        # user_id is None for the seeded global library — never editable
+        # here, regardless of who asks.
         raise HTTPException(status_code=404, detail="Exercise not found")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(ex, field, value)
@@ -86,10 +103,10 @@ def update_exercise(
 def delete_exercise(
     exercise_id: int,
     db: Session = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     ex = db.get(Exercise, exercise_id)
-    if not ex:
+    if not ex or ex.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Exercise not found")
     if not ex.is_custom:
         raise HTTPException(status_code=403, detail="Cannot delete built-in exercises")

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom'
 import { apiFetch } from './api'
+import { AuthProvider, useAuth } from './auth'
 import Dashboard from './pages/Dashboard'
 import Workout from './pages/Workout'
 import Routines from './pages/Routines'
@@ -10,7 +11,19 @@ import ExerciseDetail from './pages/ExerciseDetail'
 import Settings from './pages/Settings'
 import Log from './pages/Log'
 import Insights from './pages/Insights'
-import Coach from './pages/Coach'
+import Ranks from './pages/Ranks'
+import Generator from './pages/Generator'
+import Report from './pages/Report'
+import Diet from './pages/Diet'
+// Coach page killed per workbook H9 (grade D) — code kept at pages/Coach.jsx
+import Login from './pages/Login'
+import Join from './pages/Join'
+import ChangePassword from './pages/ChangePassword'
+import Admin from './pages/Admin'
+import Onboarding from './components/Onboarding'
+import StagingBadge from './components/StagingBadge'
+import HealthSyncBanner from './components/HealthSyncBanner'
+import { freshnessLabel, useSyncStatus } from './components/HealthSync'
 
 // Crisp stroke icons (inherit currentColor → active state recolors for free)
 const Icon = {
@@ -41,6 +54,15 @@ const Icon = {
   coach: (
     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z" />
   ),
+  ranks: (
+    <path d="M8 21h8 M12 17v4 M7 4h10v6a5 5 0 0 1-10 0z M7 6H4a1 1 0 0 0-1 1 4 4 0 0 0 4 4 M17 6h3a1 1 0 0 1 1 1 4 4 0 0 1-4 4" />
+  ),
+  diet: (
+    <path d="M12 8c-1.5-3-6-3-7 0-1 3 2 8 5 11 1 1 3 1 4 0 3-3 6-8 5-11-1-3-5.5-3-7 0 M12 8V4 M12 4c0-1 1-2 2-2" />
+  ),
+  admin: (
+    <path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6z M9 12l2 2 4-4" />
+  ),
 }
 
 function NavIcon({ name }) {
@@ -56,7 +78,7 @@ function NavIcon({ name }) {
 const NAV_ITEMS = [
   { to: '/',        label: 'Home',     icon: 'home' },
   { to: '/workout', label: 'Workout',  icon: 'workout' },
-  { to: '/coach',   label: 'Coach',    icon: 'coach' },
+  { to: '/diet',    label: 'Diet',     icon: 'diet' },
   { to: '/history', label: 'History',  icon: 'history' },
   { to: '/settings',label: 'Settings', icon: 'settings' },
 ]
@@ -67,47 +89,60 @@ const SIDEBAR_SECTIONS = [
     label: 'General',
     items: [
       { to: '/',         label: 'Dashboard', icon: 'home' },
-      { to: '/coach',    label: 'Coach',     icon: 'coach' },
       { to: '/workout',  label: 'Workout',   icon: 'workout' },
       { to: '/routines', label: 'Routines',  icon: 'routines' },
       { to: '/history',  label: 'History',   icon: 'history' },
+      { to: '/diet',     label: 'Diet',      icon: 'diet' },
       { to: '/insights', label: 'Insights',  icon: 'insights' },
+      { to: '/report',   label: 'Report',    icon: 'insights' },
+      { to: '/ranks',    label: 'Ranks',     icon: 'ranks' },
     ],
   },
   {
     label: 'Tools',
     items: [
-      { to: '/exercises', label: 'Exercise library', icon: 'exercises' },
-      { to: '/log',       label: 'Manual log',       icon: 'log' },
-      { to: '/settings',  label: 'Settings',         icon: 'settings' },
+      { to: '/generator', label: 'Workout generator', icon: 'workout' },
+      { to: '/exercises', label: 'Exercise library',  icon: 'exercises' },
+      { to: '/log',       label: 'Manual log',        icon: 'log' },
+      { to: '/settings',  label: 'Settings',          icon: 'settings' },
     ],
   },
 ]
 
 /**
- * Quiet "is data flowing" line at the sidebar foot — last Apple Health
- * ingest time, or a nudge when nothing has ever synced. Fails silent.
+ * Quiet "is data flowing" line at the sidebar foot.
+ *
+ * Reads /api/health/sync-status rather than settings.health_last_ingest: the
+ * latter is served from IndexedDB in local-first mode, where it defaults to
+ * null, so this used to read "Not synced yet" even on a perfectly synced
+ * phone. Freshness of the actual rows is both truer and computable offline.
  */
 function SyncStatus() {
-  const [last, setLast] = useState(undefined)
+  const { status, unreachable } = useSyncStatus()
 
-  useEffect(() => {
-    apiFetch('/api/settings')
-      .then(s => setLast(s.health_last_ingest))
-      .catch(() => setLast(null))
-  }, [])
-
-  if (last === undefined) return null
-  const label = last
-    ? `Synced ${new Date(last + 'Z').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
-    : 'Not synced yet'
+  // Every check has failed — say so rather than disappearing, which would
+  // otherwise look identical to "still loading" forever.
+  if (unreachable) {
+    return (
+      <div className="sidebar-sync">
+        <span className="sync-dot" style={{ background: 'var(--color-warning)' }} />
+        Sync check failed
+      </div>
+    )
+  }
+  if (!status) return null
+  const days = status.stalest_days
+  const fresh = days !== null && days <= 1
   return (
     <div className="sidebar-sync">
       <span
         className="sync-dot"
-        style={{ background: last ? 'var(--color-success)' : 'var(--color-muted)' }}
+        style={{
+          background: fresh ? 'var(--color-success)'
+            : days === null ? 'var(--color-muted)' : 'var(--color-warning)',
+        }}
       />
-      {label}
+      {status.has_any_data ? `Health ${freshnessLabel(days)}` : 'Not synced yet'}
     </div>
   )
 }
@@ -121,7 +156,7 @@ function ScrollToTop() {
   return null
 }
 
-function Sidebar() {
+function Sidebar({ isAdmin }) {
   return (
     <aside className="sidebar">
       {/* Wordmark — placeholder name, easy to rebrand later */}
@@ -142,18 +177,64 @@ function Sidebar() {
           ))}
         </nav>
       ))}
+      {isAdmin && (
+        <nav>
+          <div className="sidebar-label">Admin</div>
+          <NavLink to="/admin" className={({ isActive }) => isActive ? 'active' : undefined}>
+            <NavIcon name="admin" />
+            Admin
+          </NavLink>
+        </nav>
+      )}
       <SyncStatus />
     </aside>
   )
 }
 
-export default function App() {
+/** Everything shown once a session is confirmed active. */
+function AuthedApp({ user }) {
+  // First-run gate: show the onboarding wizard only when settings say the
+  // user hasn't onboarded. `null` = still loading (render nothing wizard-wise).
+  // Declared before any conditional return — hooks must run unconditionally.
+  const [onboarded, setOnboarded] = useState(null)
+
+  useEffect(() => {
+    if (user.must_change_password) return   // settings 403s until the password is set
+    apiFetch('/api/settings')
+      .then(s => setOnboarded(s.onboarded !== false))
+      .catch(() => setOnboarded(true))   // never block the app on a settings error
+  }, [user.must_change_password])
+
+  // Forced password change (admin-issued temp password) — the only screen
+  // reachable until it's done; require_auth blocks every other route too.
+  if (user.must_change_password) {
+    return (
+      <>
+        <StagingBadge />
+        <ChangePassword />
+      </>
+    )
+  }
+
+  if (onboarded === false) {
+    return (
+      <>
+        <StagingBadge />
+        <Onboarding onDone={() => setOnboarded(true)} />
+      </>
+    )
+  }
+
+  const isAdmin = user.role === 'admin'
+
   return (
     <>
+      <StagingBadge />
       <ScrollToTop />
-      <Sidebar />
+      <Sidebar isAdmin={isAdmin} />
 
       <div className="main-content">
+        <HealthSyncBanner />
         <Routes>
           <Route path="/"             element={<Dashboard />} />
           <Route path="/workout"      element={<Workout />} />
@@ -163,8 +244,15 @@ export default function App() {
           <Route path="/exercise/:id" element={<ExerciseDetail />} />
           <Route path="/log"          element={<Log />} />
           <Route path="/insights"     element={<Insights />} />
-          <Route path="/coach"        element={<Coach />} />
+          <Route path="/ranks"        element={<Ranks />} />
+          <Route path="/generator"    element={<Generator />} />
+          <Route path="/report"       element={<Report />} />
+          <Route path="/diet"         element={<Diet />} />
           <Route path="/settings"     element={<Settings />} />
+          <Route path="/admin"        element={isAdmin ? <Admin /> : <Navigate to="/" replace />} />
+          <Route path="/login"        element={<Navigate to="/" replace />} />
+          <Route path="/join"         element={<Navigate to="/" replace />} />
+          <Route path="*"             element={<Navigate to="/" replace />} />
         </Routes>
       </div>
 
@@ -183,5 +271,34 @@ export default function App() {
         ))}
       </nav>
     </>
+  )
+}
+
+/** Everything shown while logged out — no data, no sidebar, no nav. */
+function AnonApp() {
+  return (
+    <>
+      <StagingBadge />
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/join"  element={<Join />} />
+        <Route path="*"      element={<Navigate to="/login" replace />} />
+      </Routes>
+    </>
+  )
+}
+
+function AppShell() {
+  const { status, user } = useAuth()
+  if (status === 'loading') return null
+  if (status === 'anon') return <AnonApp />
+  return <AuthedApp user={user} />
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
   )
 }

@@ -4,10 +4,17 @@ Apple Health ingest endpoints + health data read endpoints.
 All health data — weight, steps, sleep, and nutrition including
 micronutrients — arrives through Apple Health (YAZIO feeds it on-phone).
 
-POST /api/ingest/health         — Health Auto Export JSON push (daily)
-POST /api/ingest/health-export  — export.zip/.xml upload (history backfill)
+POST /api/ingest/health          — Health Auto Export JSON push (daily)
+POST /api/ingest/health/shortcut — iOS Shortcut push (weight/steps/sleep)
+POST /api/ingest/health-export   — export.zip/.xml upload (history backfill)
 GET  /api/health/weight|steps|sleep|nutrition — date-range series
+GET  /api/health/sync-status     — per-metric freshness (drives the UI's
+                                   "your data is N days old" nudge)
 POST /api/health/weight|steps|sleep           — manual upserts
+
+The Shortcut push and the export backfill share the validated ingest core in
+app.health_ingest (HealthAggregator); the HAE push keeps its own inline
+parsing for the wider nutrition/micronutrient payload.
 """
 import logging
 from collections import defaultdict
@@ -17,13 +24,14 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy.orm import Session as DBSession
 
-from app.auth import require_auth
+from app.auth import require_auth, require_ingest_auth
 from app.db import get_db
 from app.health_metrics import HAE_NUTRITION, convert_amount, upsert_nutrition_partial
-from app.models import NutritionDay, SleepLog, StepsLog, WeightLog
+from app.models import AppSettings, NutritionDay, SleepLog, StepsLog, User, WeightLog
 from app.schemas import (
+    HealthMetricFreshness, HealthSyncStatusOut,
     NutritionDayOut, SleepLogCreate, SleepLogOut,
-    StepsLogCreate, StepsLogOut, WeightLogCreate, WeightLogOut,
+    StepsLogCreate, StepsLogOut, WeightEstimateOut, WeightLogCreate, WeightLogOut,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,43 +39,61 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["health"])
 
 
+# Non-authoritative weight sources: our own interpolated fills ('estimated')
+# and dev/demo seed data ('sample'). Neither is a real tracked reading, so
+# weight interpolation ignores them (a day carrying only one of these is
+# treated as untracked and shown as an estimate), and neither may overwrite
+# a real reading. Real sources today are 'manual' and 'apple_health'.
+DERIVED_SOURCES = ("estimated", "sample")
+
+
 # ---------------------------------------------------------------------------
 # Upsert helpers — idempotent: re-sending the same data changes nothing.
 #
-# Source precedence (Phase 3): a day the user corrected by hand
-# (source='manual') is only ever overwritten by another manual write —
-# the correction exists precisely because the synced value was wrong.
-# apple_health and sample writes overwrite each other freely.
+# Source precedence: a day the user corrected by hand (source='manual') is
+# only ever overwritten by another manual write — the correction exists
+# precisely because the synced value was wrong. apple_health overwrites
+# apple_health freely. A DERIVED_SOURCES write (interpolated estimate or
+# demo seed) never buries a real reading, and any real reading overwrites
+# derived data.
 # Every writer funnels through these helpers, so the rule lives here only.
 # ---------------------------------------------------------------------------
 
-def _manual_wins(row, source: str) -> bool:
-    """True when an existing manual row should block this write."""
-    return row is not None and row.source == "manual" and source != "manual"
+def _write_blocked(row, source: str) -> bool:
+    """True when the existing row outranks this write and must be kept."""
+    if row is None:
+        return False
+    # A hand correction is only overridden by another hand correction.
+    if row.source == "manual" and source != "manual":
+        return True
+    # Derived data (estimate/demo) must never bury a real, tracked reading.
+    if source in DERIVED_SOURCES and row.source not in DERIVED_SOURCES:
+        return True
+    return False
 
 
-def upsert_weight(db: DBSession, day: date, weight_kg: float, source: str) -> bool:
+def upsert_weight(db: DBSession, day: date, weight_kg: float, source: str, user_id: int) -> bool:
     """Insert or update weight_log for a given date. Returns True if new row."""
-    row = db.query(WeightLog).filter(WeightLog.date == day).first()
-    if _manual_wins(row, source):
+    row = db.query(WeightLog).filter(WeightLog.user_id == user_id, WeightLog.date == day).first()
+    if _write_blocked(row, source):
         return False
     if row:
         row.weight_kg = weight_kg
         row.source = source
         return False
-    db.add(WeightLog(date=day, weight_kg=weight_kg, source=source))
+    db.add(WeightLog(user_id=user_id, date=day, weight_kg=weight_kg, source=source))
     return True
 
 
-def upsert_steps(db: DBSession, day: date, steps: int, source: str) -> bool:
-    row = db.query(StepsLog).filter(StepsLog.date == day).first()
-    if _manual_wins(row, source):
+def upsert_steps(db: DBSession, day: date, steps: int, source: str, user_id: int) -> bool:
+    row = db.query(StepsLog).filter(StepsLog.user_id == user_id, StepsLog.date == day).first()
+    if _write_blocked(row, source):
         return False
     if row:
         row.steps = steps
         row.source = source
         return False
-    db.add(StepsLog(date=day, steps=steps, source=source))
+    db.add(StepsLog(user_id=user_id, date=day, steps=steps, source=source))
     return True
 
 
@@ -80,9 +106,10 @@ def upsert_sleep(
     rem_minutes: Optional[int],
     core_minutes: Optional[int],
     source: str,
+    user_id: int,
 ) -> bool:
-    row = db.query(SleepLog).filter(SleepLog.date == day).first()
-    if _manual_wins(row, source):
+    row = db.query(SleepLog).filter(SleepLog.user_id == user_id, SleepLog.date == day).first()
+    if _write_blocked(row, source):
         return False
     if row:
         row.asleep_minutes = asleep_minutes
@@ -93,6 +120,7 @@ def upsert_sleep(
         row.source = source
         return False
     db.add(SleepLog(
+        user_id=user_id,
         date=day,
         asleep_minutes=asleep_minutes,
         in_bed_minutes=in_bed_minutes,
@@ -104,10 +132,83 @@ def upsert_sleep(
     return True
 
 
-def touch_last_ingest(db: DBSession) -> None:
+def touch_last_ingest(db: DBSession, user_id: int) -> None:
     """Record the time of the last successful Apple Health ingest."""
     from app.routers.settings import get_or_create_settings
-    get_or_create_settings(db).health_last_ingest = datetime.utcnow()
+    get_or_create_settings(db, user_id).health_last_ingest = datetime.utcnow()
+
+
+# ---------------------------------------------------------------------------
+# Weight interpolation — estimate a bodyweight for days with no reading.
+#
+# Used to fill gaps for display (dashboard chart, day detail) and to prefill
+# the manual-log field. Estimates are drawn only from *real* readings (never
+# from estimates or demo seed data), so a guess never compounds on a guess
+# and stale sample data is replaced by an interpolation of your real weigh-ins.
+# ---------------------------------------------------------------------------
+
+def real_weight_points(db: DBSession, user_id: int) -> list[tuple[date, float]]:
+    """Real weigh-ins only (excludes estimate/demo), date-ascending — the
+    interpolation basis."""
+    rows = (
+        db.query(WeightLog)
+        .filter(WeightLog.user_id == user_id, WeightLog.source.notin_(DERIVED_SOURCES))
+        .order_by(WeightLog.date)
+        .all()
+    )
+    return [(r.date, r.weight_kg) for r in rows]
+
+
+def resolved_weight_for(
+    day: date, row, basis: list[tuple[date, float]]
+) -> tuple[Optional[float], bool, Optional[str]]:
+    """
+    The weight to show for a day, as (weight_kg, estimated, method).
+
+    - A real reading (row present, source not derived) → its value, not
+      estimated.
+    - Otherwise (no row, or a derived sample/estimate row) → an interpolation
+      of the surrounding real weigh-ins, flagged estimated.
+    - If there is no real reading to interpolate from at all, fall back to the
+      stored derived value if one exists (e.g. a pure demo/seed database), else
+      nothing.
+    """
+    if row is not None and row.source not in DERIVED_SOURCES:
+        return row.weight_kg, False, None
+    est = estimate_weight_for(day, basis)
+    if est is not None:
+        return est[0], True, est[1]
+    if row is not None:
+        return row.weight_kg, False, None
+    return None, False, None
+
+
+def estimate_weight_for(
+    day: date, points: list[tuple[date, float]]
+) -> Optional[tuple[float, str]]:
+    """
+    Estimate bodyweight for a day with no tracked reading, from the nearest
+    real weigh-ins on either side. Linear interpolation between the reading
+    before and the reading after; if only one side exists, carry that value
+    forward/back. `points` must be date-ascending. Returns (kg, method) or
+    None when there is nothing to estimate from.
+    """
+    prev = nxt = None
+    for d, kg in points:
+        if d < day:
+            prev = (d, kg)
+        elif d > day:
+            nxt = (d, kg)
+            break
+    if prev and nxt:
+        span = (nxt[0] - prev[0]).days
+        frac = (day - prev[0]).days / span
+        return round(prev[1] + (nxt[1] - prev[1]) * frac, 1), "interpolated"
+    if prev:
+        return round(prev[1], 1), "carried_forward"
+    if nxt:
+        return round(nxt[1], 1), "carried_back"
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +219,7 @@ def touch_last_ingest(db: DBSession) -> None:
 def ingest_health(
     payload: dict,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_ingest_auth),
 ):
     """
     Receives Health Auto Export JSON payload with shape:
@@ -159,7 +260,7 @@ def ingest_health(
                 except Exception as e:
                     logger.warning("step_count point parse error: %s — %s", pt, e)
             for d, steps in by_date.items():
-                new = upsert_steps(db, d, steps, "apple_health")
+                new = upsert_steps(db, d, steps, "apple_health", current_user.id)
                 if new:
                     upserted += 1
 
@@ -171,7 +272,7 @@ def ingest_health(
                     raw = float(pt.get("qty", pt.get("value", 0)))
                     # Convert lb → kg if needed
                     kg = raw * 0.453592 if units.lower() in ("lb", "lbs") else raw
-                    new = upsert_weight(db, d, round(kg, 2), "apple_health")
+                    new = upsert_weight(db, d, round(kg, 2), "apple_health", current_user.id)
                     if new:
                         upserted += 1
                 except Exception as e:
@@ -212,6 +313,7 @@ def ingest_health(
                     rem_minutes=v["rem"] or None,
                     core_minutes=v["core"] or None,
                     source="apple_health",
+                    user_id=current_user.id,
                 )
                 if new:
                     upserted += 1
@@ -236,10 +338,10 @@ def ingest_health(
             unknown_names.add(name)
 
     for d, values in nutrition_acc.items():
-        if upsert_nutrition_partial(db, d, values, "apple_health"):
+        if upsert_nutrition_partial(db, d, values, "apple_health", current_user.id):
             upserted += 1
 
-    touch_last_ingest(db)
+    touch_last_ingest(db, current_user.id)
     db.commit()
     elapsed = (datetime.utcnow() - start_ts).total_seconds()
 
@@ -257,6 +359,140 @@ def ingest_health(
         "metrics_ignored": sorted(unknown_names),
         "rows_upserted": upserted,
     }
+
+
+# ---------------------------------------------------------------------------
+# iOS Shortcut ingest — a stable, always-on alternative to Health Auto Export.
+#
+# The HAE app's background pushes are unreliable (H4 diagnosis): they only
+# fire when the app is opened, and the export window is fragile. An iOS
+# Shortcut ("Get Health Sample" → "Get Contents of URL") can post the same
+# core numbers on the phone's own automation, straight at the production API.
+#
+# It deliberately reuses the export.xml importer's validated pipeline via the
+# shared HealthAggregator — units, timezone/night attribution, multi-source
+# dedup, and manual-precedence — instead of the older inline HAE parsing, so
+# a Shortcut push obeys the exact same rules a history backfill does.
+#
+# Payload (all sections optional; a section may be one object or a list):
+#     {
+#       "weight": [{"date": "2026-07-18", "kg": 82.5}],
+#       "steps":  [{"date": "2026-07-18", "count": 11205}],
+#       "sleep":  [{"date": "2026-07-18", "asleep_minutes": 427,
+#                   "in_bed_minutes": 465, "deep_minutes": 68,
+#                   "rem_minutes": 95, "core_minutes": 264}]
+#     }
+# See docs/HEALTH_INGEST_SHORTCUT.md for the full spec + Shortcut recipe.
+# ---------------------------------------------------------------------------
+
+# Accepted field aliases, so the Shortcut author isn't boxed into one spelling.
+_WEIGHT_VALUE_KEYS = ("kg", "weight_kg", "value", "qty")
+_STEPS_VALUE_KEYS = ("count", "steps", "value", "qty")
+_SLEEP_FIELD_ALIASES = {
+    "asleep": ("asleep_minutes", "asleep", "asleepMinutes"),
+    "in_bed": ("in_bed_minutes", "in_bed", "inBed", "inBedMinutes"),
+    "deep": ("deep_minutes", "deep", "deepMinutes"),
+    "rem": ("rem_minutes", "rem", "remMinutes"),
+    "core": ("core_minutes", "core", "coreMinutes"),
+}
+
+
+def _as_items(section) -> list[dict]:
+    """A Shortcut may send one object or a list; a dict of items also works."""
+    if section is None:
+        return []
+    if isinstance(section, dict):
+        return [section]
+    if isinstance(section, list):
+        return [it for it in section if isinstance(it, dict)]
+    return []
+
+
+def _first(item: dict, keys: tuple[str, ...]):
+    for k in keys:
+        if k in item and item[k] not in (None, ""):
+            return item[k]
+    return None
+
+
+@router.post("/api/ingest/health/shortcut")
+def ingest_health_shortcut(
+    payload: dict,
+    db: DBSession = Depends(get_db),
+    current_user: User = Depends(require_ingest_auth),
+):
+    """
+    Ingest weight / steps / sleep posted by an iOS Shortcut, through the same
+    validated pipeline as the export.xml backfill. Idempotent, and days the
+    user corrected by hand are never overwritten. Bad items are skipped with
+    a warning rather than failing the whole push.
+    """
+    from app.health_ingest import HealthAggregator, parse_day, parse_when, to_float
+
+    agg = HealthAggregator()
+    handled: set[str] = set()
+    ignored: set[str] = set()
+
+    # Case-insensitive lookup of the three known sections.
+    sections = {str(k).lower(): v for k, v in payload.items()}
+
+    for weight in _as_items(sections.get("weight")):
+        agg.records_seen += 1
+        try:
+            when = parse_when(weight["date"])
+            raw = _first(weight, _WEIGHT_VALUE_KEYS)
+            if raw is None:
+                agg.warn(f"weight item missing a value: {weight}")
+                continue
+            agg.add_weight(when, to_float(raw), weight.get("unit"), "apple_health")
+            handled.add("weight")
+        except Exception as e:
+            agg.warn(f"weight item skipped: {e}")
+
+    for steps in _as_items(sections.get("steps")):
+        agg.records_seen += 1
+        try:
+            raw = _first(steps, _STEPS_VALUE_KEYS)
+            if raw is None:
+                agg.warn(f"steps item missing a value: {steps}")
+                continue
+            agg.add_steps(parse_day(steps["date"]), to_float(raw), "apple_health")
+            handled.add("steps")
+        except Exception as e:
+            agg.warn(f"steps item skipped: {e}")
+
+    for sleep in _as_items(sections.get("sleep")):
+        agg.records_seen += 1
+        try:
+            night = parse_day(sleep["date"])
+            minutes = {
+                field: to_float(_first(sleep, aliases) or 0)
+                for field, aliases in _SLEEP_FIELD_ALIASES.items()
+            }
+            if not (minutes["asleep"] or minutes["in_bed"]):
+                agg.warn(f"sleep item has no asleep/in-bed minutes: {sleep}")
+                continue
+            agg.add_sleep_night(night, "apple_health", **minutes)
+            handled.add("sleep")
+        except Exception as e:
+            agg.warn(f"sleep item skipped: {e}")
+
+    for key in sections:
+        if key not in ("weight", "steps", "sleep"):
+            ignored.add(str(key))
+
+    report = agg.finalize(db, current_user.id)
+    touch_last_ingest(db, current_user.id)
+    db.commit()
+
+    logger.info(
+        "Shortcut ingest — sections handled: %s, rows created: %d, warnings: %d",
+        sorted(handled), report["rows_created"], len(report["warnings"]),
+    )
+
+    report["sections_handled"] = sorted(handled)
+    report["ignored"] = sorted(ignored)
+    return report
 
 
 def _parse_date(date_str: str) -> date:
@@ -289,7 +525,7 @@ def _parse_date(date_str: str) -> date:
 def ingest_health_export(
     file: UploadFile = File(...),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_ingest_auth),
 ):
     """
     One-time history import. Accepts the export.zip produced by the
@@ -299,9 +535,9 @@ def ingest_health_export(
     """
     from app.health_xml import import_export_file
 
-    result = import_export_file(file.file, file.filename or "", db)
+    result = import_export_file(file.file, file.filename or "", db, current_user.id)
     if result.get("status") == "ok":
-        touch_last_ingest(db)
+        touch_last_ingest(db, current_user.id)
         db.commit()
     logger.info("Health export backfill: %s", result)
     return result
@@ -311,19 +547,97 @@ def ingest_health_export(
 # Read endpoints
 # ---------------------------------------------------------------------------
 
+@router.get("/api/health/sync-status", response_model=HealthSyncStatusOut)
+def health_sync_status(
+    db: DBSession = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """
+    How current each health metric is.
+
+    A PWA can't read HealthKit, so health data only exists here once the
+    phone pushes it (iOS Shortcut / Health Auto Export). This is how the app
+    tells the user whether that is actually happening — it drives the
+    stale-data banner and the Settings sync card.
+
+    Freshness counts REAL readings only: DERIVED_SOURCES rows (our own
+    interpolated weights, demo seed data) are excluded, so a chart full of
+    estimates can never report itself as up to date.
+    """
+    today = date.today()
+    metrics: dict[str, HealthMetricFreshness] = {}
+
+    for name, model in (
+        ("weight", WeightLog), ("steps", StepsLog),
+        ("sleep", SleepLog), ("nutrition", NutritionDay),
+    ):
+        last = (
+            db.query(model.date)
+            .filter(
+                model.user_id == current_user.id,
+                model.source.notin_(DERIVED_SOURCES),
+            )
+            .order_by(model.date.desc())
+            .first()
+        )
+        last_date = last[0] if last else None
+        metrics[name] = HealthMetricFreshness(
+            last_date=last_date,
+            days_stale=(today - last_date).days if last_date else None,
+        )
+
+    seen = [m.days_stale for m in metrics.values() if m.days_stale is not None]
+    # Read the settings row rather than get_or_create — a GET shouldn't write.
+    row = db.query(AppSettings).filter(AppSettings.user_id == current_user.id).first()
+
+    return HealthSyncStatusOut(
+        last_ingest=row.health_last_ingest if row else None,
+        # The worst of the four — what the banner should complain about. None
+        # when nothing has ever arrived, which the UI words differently.
+        stalest_days=max(seen) if seen else None,
+        has_any_data=bool(seen),
+        **metrics,
+    )
+
+
 @router.get("/api/health/weight", response_model=list[WeightLogOut])
 def get_weight_log(
     days: int = Query(90, ge=1, le=365),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     from datetime import timedelta
     since = date.today() - timedelta(days=days)
     return (
         db.query(WeightLog)
-        .filter(WeightLog.date >= since)
+        .filter(WeightLog.user_id == current_user.id, WeightLog.date >= since)
         .order_by(WeightLog.date)
         .all()
+    )
+
+
+@router.get("/api/health/weight/estimate", response_model=WeightEstimateOut)
+def estimate_weight(
+    day: date = Query(..., alias="date"),
+    db: DBSession = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """
+    Weight to show/prefill for a date. A real reading is returned as-is
+    (estimated=False). A day with only demo/estimate data — or no data — is
+    interpolated from the surrounding real weigh-ins (estimated=True), or
+    returns a null weight when there's nothing to estimate from.
+    """
+    row = db.query(WeightLog).filter(WeightLog.user_id == current_user.id, WeightLog.date == day).first()
+    wkg, est, method = resolved_weight_for(day, row, real_weight_points(db, current_user.id))
+    if wkg is None:
+        return WeightEstimateOut(date=day, weight_kg=None, estimated=False)
+    if est:
+        return WeightEstimateOut(
+            date=day, weight_kg=wkg, estimated=True, method=method, source="estimated"
+        )
+    return WeightEstimateOut(
+        date=day, weight_kg=wkg, estimated=False, source=(row.source if row else None)
     )
 
 
@@ -331,24 +645,24 @@ def get_weight_log(
 def log_weight_manual(
     body: WeightLogCreate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    upsert_weight(db, body.date, body.weight_kg, body.source)
+    upsert_weight(db, body.date, body.weight_kg, body.source, current_user.id)
     db.commit()
-    return db.query(WeightLog).filter(WeightLog.date == body.date).first()
+    return db.query(WeightLog).filter(WeightLog.user_id == current_user.id, WeightLog.date == body.date).first()
 
 
 @router.get("/api/health/steps", response_model=list[StepsLogOut])
 def get_steps_log(
     days: int = Query(14, ge=1, le=365),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     from datetime import timedelta
     since = date.today() - timedelta(days=days)
     return (
         db.query(StepsLog)
-        .filter(StepsLog.date >= since)
+        .filter(StepsLog.user_id == current_user.id, StepsLog.date >= since)
         .order_by(StepsLog.date)
         .all()
     )
@@ -358,24 +672,24 @@ def get_steps_log(
 def log_steps_manual(
     body: StepsLogCreate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    upsert_steps(db, body.date, body.steps, body.source)
+    upsert_steps(db, body.date, body.steps, body.source, current_user.id)
     db.commit()
-    return db.query(StepsLog).filter(StepsLog.date == body.date).first()
+    return db.query(StepsLog).filter(StepsLog.user_id == current_user.id, StepsLog.date == body.date).first()
 
 
 @router.get("/api/health/sleep", response_model=list[SleepLogOut])
 def get_sleep_log(
     days: int = Query(14, ge=1, le=365),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     from datetime import timedelta
     since = date.today() - timedelta(days=days)
     return (
         db.query(SleepLog)
-        .filter(SleepLog.date >= since)
+        .filter(SleepLog.user_id == current_user.id, SleepLog.date >= since)
         .order_by(SleepLog.date)
         .all()
     )
@@ -385,28 +699,29 @@ def get_sleep_log(
 def log_sleep_manual(
     body: SleepLogCreate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     upsert_sleep(
         db, body.date, body.asleep_minutes, body.in_bed_minutes,
-        body.deep_minutes, body.rem_minutes, body.core_minutes, body.source
+        body.deep_minutes, body.rem_minutes, body.core_minutes, body.source,
+        current_user.id,
     )
     db.commit()
-    return db.query(SleepLog).filter(SleepLog.date == body.date).first()
+    return db.query(SleepLog).filter(SleepLog.user_id == current_user.id, SleepLog.date == body.date).first()
 
 
 @router.get("/api/health/nutrition", response_model=list[NutritionDayOut])
 def get_nutrition_log(
     days: int = Query(30, ge=1, le=365),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     """Same data as GET /api/nutrition, exposed under the /api/health/* scheme."""
     from datetime import timedelta
     since = date.today() - timedelta(days=days)
     return (
         db.query(NutritionDay)
-        .filter(NutritionDay.date >= since)
+        .filter(NutritionDay.user_id == current_user.id, NutritionDay.date >= since)
         .order_by(NutritionDay.date)
         .all()
     )

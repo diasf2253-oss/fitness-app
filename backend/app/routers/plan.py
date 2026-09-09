@@ -16,13 +16,13 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.auth import require_auth
 from app.db import get_db
-from app.models import PlanItem
+from app.models import PlanItem, User
 from app.schemas import PLAN_CATEGORIES, PlanItemCreate, PlanItemOut, PlanItemUpdate
 
 router = APIRouter(prefix="/api/plan", tags=["plan"])
 
 
-def add_plan_item(db: DBSession, day: date, body: PlanItemCreate) -> PlanItem:
+def add_plan_item(db: DBSession, day: date, body: PlanItemCreate, user_id: int) -> PlanItem:
     """Append a plan item to a day. Shared by the manual route and the Coach."""
     if not body.title.strip():
         raise HTTPException(status_code=422, detail="title is required")
@@ -30,11 +30,12 @@ def add_plan_item(db: DBSession, day: date, body: PlanItemCreate) -> PlanItem:
 
     max_pos = (
         db.query(PlanItem.position)
-        .filter(PlanItem.date == day)
+        .filter(PlanItem.user_id == user_id, PlanItem.date == day)
         .order_by(PlanItem.position.desc())
         .first()
     )
     item = PlanItem(
+        user_id=user_id,
         date=day,
         title=body.title.strip(),
         start_time=body.start_time or None,
@@ -52,11 +53,11 @@ def add_plan_item(db: DBSession, day: date, body: PlanItemCreate) -> PlanItem:
 def list_plan(
     day: date,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     return (
         db.query(PlanItem)
-        .filter(PlanItem.date == day)
+        .filter(PlanItem.user_id == current_user.id, PlanItem.date == day)
         .order_by(PlanItem.position, PlanItem.start_time, PlanItem.id)
         .all()
     )
@@ -67,9 +68,9 @@ def create_plan_item(
     day: date,
     body: PlanItemCreate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    item = add_plan_item(db, day, body)
+    item = add_plan_item(db, day, body, current_user.id)
     db.commit()
     db.refresh(item)
     return item
@@ -80,10 +81,10 @@ def update_plan_item(
     item_id: int,
     body: PlanItemUpdate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     item = db.get(PlanItem, item_id)
-    if not item:
+    if not item or item.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Plan item not found")
     data = body.model_dump(exclude_unset=True)
     if "category" in data and data["category"] not in PLAN_CATEGORIES:
@@ -99,10 +100,10 @@ def update_plan_item(
 def delete_plan_item(
     item_id: int,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     item = db.get(PlanItem, item_id)
-    if not item:
+    if not item or item.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Plan item not found")
     db.delete(item)
     db.commit()

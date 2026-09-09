@@ -18,12 +18,12 @@ from app.routers.insights import period_metrics
 from app.routers.settings import get_or_create_settings
 
 
-def _recent_training(db: DBSession, today: date, days: int = 14) -> list[str]:
+def _recent_training(db: DBSession, today: date, user_id: int, days: int = 14) -> list[str]:
     """One line per finished session in the window, most recent first."""
     start = datetime.combine(today - timedelta(days=days), time.min)
     sessions = (
         db.query(WorkoutSession)
-        .filter(WorkoutSession.started_at >= start)
+        .filter(WorkoutSession.user_id == user_id, WorkoutSession.started_at >= start)
         .order_by(WorkoutSession.started_at.desc())
         .all()
     )
@@ -36,13 +36,14 @@ def _recent_training(db: DBSession, today: date, days: int = 14) -> list[str]:
     return lines
 
 
-def _pr_lines(db: DBSession) -> list[str]:
+def _pr_lines(db: DBSession, user_id: int) -> list[str]:
     """Heaviest working set per exercise (compact, capped)."""
     rows = (
         db.query(Exercise.name, func.max(SetModel.weight_kg))
         .join(SessionExercise, SessionExercise.exercise_id == Exercise.id)
         .join(SetModel, SetModel.session_exercise_id == SessionExercise.id)
-        .filter(SetModel.is_completed.is_(True), SetModel.is_warmup.is_(False),
+        .filter(SetModel.user_id == user_id,
+                SetModel.is_completed.is_(True), SetModel.is_warmup.is_(False),
                 SetModel.weight_kg > 0)
         .group_by(Exercise.id)
         .order_by(func.max(SetModel.weight_kg).desc())
@@ -52,18 +53,18 @@ def _pr_lines(db: DBSession) -> list[str]:
     return [f"  - {name}: {kg:g} kg" for name, kg in rows]
 
 
-def build_context(db: DBSession) -> str:
+def build_context(db: DBSession, user_id: int) -> str:
     """Assemble the full brief. Pure read; safe to call on every request."""
     today = date.today()
-    s = get_or_create_settings(db)
+    s = get_or_create_settings(db, user_id)
     parts: list[str] = [f"Today is {today.strftime('%A, %d %B %Y')}."]
 
     # ---- Body & health snapshot ----
-    w = db.query(WeightLog).order_by(WeightLog.date.desc()).first()
-    sleep = db.query(SleepLog).order_by(SleepLog.date.desc()).first()
+    w = db.query(WeightLog).filter(WeightLog.user_id == user_id).order_by(WeightLog.date.desc()).first()
+    sleep = db.query(SleepLog).filter(SleepLog.user_id == user_id).order_by(SleepLog.date.desc()).first()
     steps_avg = (
         db.query(func.avg(StepsLog.steps))
-        .filter(StepsLog.date >= today - timedelta(days=7))
+        .filter(StepsLog.user_id == user_id, StepsLog.date >= today - timedelta(days=7))
         .scalar()
     )
     health = []
@@ -77,7 +78,9 @@ def build_context(db: DBSession) -> str:
         parts.append("Body & health: " + "; ".join(health) + ".")
 
     # ---- Nutrition today vs targets ----
-    nut = db.query(NutritionDay).filter(NutritionDay.date == today).first()
+    nut = db.query(NutritionDay).filter(
+        NutritionDay.user_id == user_id, NutritionDay.date == today
+    ).first()
     if nut:
         parts.append(
             f"Today's intake: {round(nut.calories)} kcal "
@@ -91,27 +94,29 @@ def build_context(db: DBSession) -> str:
         )
 
     # ---- Training: weekly review + recent sessions + PRs ----
-    cur = period_metrics(db, today - timedelta(days=6), today)
+    cur = period_metrics(db, today - timedelta(days=6), today, user_id)
     parts.append(
         f"This week's training: {cur.sessions} sessions, "
         f"{round(cur.volume_kg):,} kg volume."
     )
-    recent = _recent_training(db, today)
+    recent = _recent_training(db, today, user_id)
     if recent:
         parts.append("Recent workouts:\n" + "\n".join(recent))
-    prs = _pr_lines(db)
+    prs = _pr_lines(db, user_id)
     if prs:
         parts.append("Heaviest sets on record:\n" + "\n".join(prs))
 
     # ---- Routines available to start ----
-    routines = db.query(Routine).order_by(Routine.name).all()
+    routines = db.query(Routine).filter(Routine.user_id == user_id).order_by(Routine.name).all()
     if routines:
         rl = [f"  - {r.name} ({len(r.exercises)} exercises)" for r in routines]
         parts.append("Saved routines:\n" + "\n".join(rl))
 
     # ---- Trackers (habits/mood) this week ----
     tracker_lines = []
-    for t in db.query(Tracker).filter(Tracker.is_archived.is_(False)).order_by(Tracker.position).all():
+    for t in db.query(Tracker).filter(
+        Tracker.user_id == user_id, Tracker.is_archived.is_(False)
+    ).order_by(Tracker.position).all():
         if t.kind == "scale":
             vals = [
                 r.value_num for r in db.query(TrackerLog).filter(
@@ -135,7 +140,7 @@ def build_context(db: DBSession) -> str:
     # ---- Today's existing plan ----
     plan = (
         db.query(PlanItem)
-        .filter(PlanItem.date == today)
+        .filter(PlanItem.user_id == user_id, PlanItem.date == today)
         .order_by(PlanItem.position, PlanItem.start_time)
         .all()
     )

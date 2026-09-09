@@ -13,19 +13,21 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.auth import require_auth
 from app.db import get_db
-from app.models import NutritionDay
+from app.models import NutritionDay, User
 from app.schemas import NutritionDayCreate, NutritionDayOut
 
 router = APIRouter(prefix="/api/nutrition", tags=["nutrition"])
 
 
-def upsert_nutrition(db: DBSession, body: NutritionDayCreate) -> NutritionDay:
+def upsert_nutrition(db: DBSession, body: NutritionDayCreate, user_id: int) -> NutritionDay:
     """
     Insert or overwrite a day's nutrition data (idempotent).
     `micros` only replaces when provided — a manual macro correction must
     not wipe the micronutrients Apple Health synced for that day.
     """
-    row = db.query(NutritionDay).filter(NutritionDay.date == body.date).first()
+    row = db.query(NutritionDay).filter(
+        NutritionDay.user_id == user_id, NutritionDay.date == body.date
+    ).first()
     # Manual corrections are only replaced by other manual writes (same
     # precedence rule as the upsert helpers in routers/health.py)
     if row and row.source == "manual" and body.source != "manual":
@@ -39,7 +41,7 @@ def upsert_nutrition(db: DBSession, body: NutritionDayCreate) -> NutritionDay:
             row.micros = body.micros
         row.source = body.source
     else:
-        row = NutritionDay(**body.model_dump())
+        row = NutritionDay(user_id=user_id, **body.model_dump())
         db.add(row)
     db.commit()
     db.refresh(row)
@@ -50,12 +52,12 @@ def upsert_nutrition(db: DBSession, body: NutritionDayCreate) -> NutritionDay:
 def get_nutrition(
     days: int = Query(30, ge=1, le=365),
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
     since = date.today() - timedelta(days=days)
     return (
         db.query(NutritionDay)
-        .filter(NutritionDay.date >= since)
+        .filter(NutritionDay.user_id == current_user.id, NutritionDay.date >= since)
         .order_by(NutritionDay.date)
         .all()
     )
@@ -65,6 +67,6 @@ def get_nutrition(
 def log_nutrition(
     body: NutritionDayCreate,
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_auth),
 ):
-    return upsert_nutrition(db, body)
+    return upsert_nutrition(db, body, current_user.id)

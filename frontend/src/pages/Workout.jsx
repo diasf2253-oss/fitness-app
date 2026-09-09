@@ -14,7 +14,55 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { apiFetch } from '../api'
 import ExercisePicker from '../components/ExercisePicker'
 import RestTimer from '../components/RestTimer'
+import { RankBadge, rankAccent, useExerciseRanks } from '../components/RankBadge'
 import { Loading, ErrorBox } from '../components/States'
+import { playWorkoutComplete } from '../audio'
+import { parseDecimal } from '../num'
+import WidgetLabel from '../components/WidgetLabel'
+
+// Next-session notes (surfaced from last time) + composer for the next session.
+function SessionNotes({ session }) {
+  const [text, setText] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [added, setAdded] = useState(false)
+  const notes = session.next_session_notes || []
+  const canAdd = !!session.routine_id
+
+  async function addNote() {
+    if (!text.trim()) return
+    setSaving(true)
+    try {
+      await apiFetch(`/api/routines/${session.routine_id}/notes`, {
+        method: 'POST',
+        body: JSON.stringify({ text: text.trim(), created_in_session_id: session.id }),
+      })
+      setText(''); setAdded(true); setTimeout(() => setAdded(false), 2000)
+    } catch (_) { /* non-critical */ } finally { setSaving(false) }
+  }
+
+  if (notes.length === 0 && !canAdd) return null
+  return (
+    <div className="card" style={{ margin: '1rem 0 0', borderLeft: '3px solid var(--color-accent)' }}>
+      {notes.length > 0 && (
+        <>
+          <WidgetLabel>from last time</WidgetLabel>
+          {notes.map(n => (
+            <p key={n.id} style={{ fontSize: '0.9rem', margin: '0.35rem 0' }}>• {n.text}</p>
+          ))}
+        </>
+      )}
+      {canAdd && (
+        <div className="row" style={{ gap: '0.5rem', marginTop: notes.length ? '0.7rem' : 0 }}>
+          <input value={text} onChange={e => setText(e.target.value)}
+            placeholder="Note for next time…" style={{ flex: 1 }} />
+          <button className="secondary" onClick={addNote} disabled={saving || !text.trim()} style={{ minWidth: 70 }}>
+            {added ? '✓' : 'Add'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function Workout() {
   const location = useLocation()
@@ -127,8 +175,35 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
   const [restSeconds, setRestSeconds] = useState(null)   // active rest timer duration, or null
   const [restKey, setRestKey] = useState(0)              // bumped only when a set completes, to (re)start the timer
   const [restByExercise, setRestByExercise] = useState({})  // exercise_id -> rest seconds (from routine)
+  const [targetsByExercise, setTargetsByExercise] = useState({})  // exercise_id -> {sets, rep_low, rep_high, rir}
+  const exerciseRanks = useExerciseRanks()   // exercise_id -> rank (colour + tier)
+  const [brands, setBrands] = useState({})   // exercise_uuid -> machine brand
+  const [defaultRest, setDefaultRest] = useState(120)       // settings.default_rest_seconds
   const [elapsed, setElapsed] = useState('')
+  const [renaming, setRenaming] = useState(false)
   const navigate = useNavigate()
+
+  // The configurable default rest duration (used when a routine has none).
+  useEffect(() => {
+    apiFetch('/api/settings')
+      .then(s => { setDefaultRest(s.default_rest_seconds ?? 120); setBrands(s.exercise_brands || {}) })
+      .catch(() => {})  // non-critical; 120s fallback applies
+  }, [])
+
+  // Give the workout a custom name (tap the title). Optimistic + PATCH.
+  async function renameSession(newName) {
+    const name = (newName || '').trim()
+    setRenaming(false)
+    if (!name || name === session.name) return
+    setSession(s => ({ ...s, name }))
+    try {
+      await apiFetch(`/api/sessions/${session.id}`, {
+        method: 'PATCH', body: JSON.stringify({ name }),
+      })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
 
   // Ask for notification permission once (for rest-timer alerts)
   useEffect(() => {
@@ -142,9 +217,18 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
     if (!session.routine_id) return
     apiFetch(`/api/routines/${session.routine_id}`)
       .then(routine => {
-        const map = {}
-        routine.exercises.forEach(re => { map[re.exercise_id] = re.rest_seconds })
-        setRestByExercise(map)
+        const rest = {}
+        const targets = {}
+        routine.exercises.forEach(re => {
+          rest[re.exercise_id] = re.rest_seconds
+          targets[re.exercise_id] = {
+            sets: re.target_sets, rep_low: re.target_rep_low,
+            rep_high: re.target_rep_high, rir: re.target_rir,
+            planned: re.planned_sets || null,
+          }
+        })
+        setRestByExercise(rest)
+        setTargetsByExercise(targets)
       })
       .catch(() => {})  // non-critical; default rest applies
   }, [session.routine_id])
@@ -164,7 +248,9 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
   }, [session.started_at])
 
   function restForExercise(exerciseId) {
-    return restByExercise[exerciseId] ?? 120  // default 120s
+    // The routine's rest time beats the global default. (The timer no longer
+    // learns a per-exercise habit — the ±15 controls that taught it are gone.)
+    return restByExercise[exerciseId] ?? defaultRest
   }
 
   // Start (or restart) the rest timer for a given exercise. Bumping restKey
@@ -232,7 +318,26 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
       {/* Sticky: name, clock and Finish stay reachable mid-session */}
       <div className="workout-header">
         <div>
-          <h1>{session.name}</h1>
+          {renaming ? (
+            <input
+              autoFocus defaultValue={session.name}
+              onBlur={e => renameSession(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') e.target.blur()
+                if (e.key === 'Escape') setRenaming(false)
+              }}
+              aria-label="Workout name"
+              style={{ fontSize: '1.5rem', fontWeight: 600, padding: '0.15rem 0.35rem', margin: 0, maxWidth: '100%' }}
+            />
+          ) : (
+            <h1
+              onClick={() => setRenaming(true)}
+              title="Tap to rename this workout"
+              style={{ cursor: 'pointer', margin: 0 }}
+            >
+              {session.name}
+            </h1>
+          )}
           <span className="muted tnum" style={{ fontSize: '0.78rem' }}>{elapsed} elapsed</span>
         </div>
         <span className="spacer" />
@@ -240,6 +345,8 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
       </div>
 
       <ErrorBox error={error} />
+
+      <SessionNotes session={session} />
 
       <div className="col" style={{ gap: '1rem', marginTop: '1rem' }}>
         {session.exercises.map(se => (
@@ -250,6 +357,9 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
             onChanged={refresh}
             onRemove={() => removeExercise(se.id)}
             onSetCompleted={() => startRest(se.exercise_id)}
+            target={targetsByExercise[se.exercise_id]}
+            rank={exerciseRanks[se.exercise_id]}
+            brand={brands[se.exercise.uuid]}
             setError={setError}
           />
         ))}
@@ -286,7 +396,19 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
 // Exercise card with set rows
 // ---------------------------------------------------------------------------
 
-function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, setError }) {
+/** Rep range for the target badge: taken from the planned sets when the
+ *  routine has a per-set plan, otherwise the stored rep_low–rep_high. */
+function plannedRepRange(target) {
+  const reps = (target.planned || []).map(p => p?.reps).filter(r => r != null)
+  if (reps.length) {
+    const lo = Math.min(...reps)
+    const hi = Math.max(...reps)
+    return lo === hi ? String(lo) : `${lo}–${hi}`
+  }
+  return `${target.rep_low}–${target.rep_high}`
+}
+
+function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, target, rank, brand, setError }) {
   const [prevSets, setPrevSets] = useState([])
 
   // Fetch what was lifted last time, to pre-fill placeholders
@@ -324,21 +446,29 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, setE
   }
 
   return (
-    <div className="card" style={{ margin: 0 }}>
-      <div className="row">
+    <div className="card" style={{ margin: 0, ...rankAccent(rank) }}>
+      <div className="row" style={{ gap: '0.5rem' }}>
         <h3 style={{ flex: 1, margin: 0 }}>{se.exercise.name}</h3>
+        <RankBadge rank={rank} />
         <button className="secondary" style={{ minWidth: 40, padding: '0.3rem 0.5rem' }} onClick={onRemove}>✕</button>
       </div>
       <div className="muted" style={{ fontSize: '0.75rem', marginBottom: '0.5rem' }}>
         {se.exercise.primary_muscle}{se.exercise.equipment ? ` · ${se.exercise.equipment}` : ''}
+        {brand ? ` · ${brand}` : ''}
       </div>
+      {target && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.5rem' }}>
+          <span className="badge">{target.sets}×{plannedRepRange(target)}</span>
+          {target.rir != null && <span className="badge">RIR {target.rir}</span>}
+        </div>
+      )}
 
       {/* Column headers */}
       <div className="row" style={{ fontSize: '0.7rem', color: 'var(--color-muted)', padding: '0 0.25rem', gap: '0.4rem' }}>
         <span style={{ width: 28, textAlign: 'center' }}>Set</span>
         <span style={{ flex: 1 }}>kg</span>
         <span style={{ flex: 1 }}>reps</span>
-        <span style={{ width: 48, textAlign: 'center' }}>RPE</span>
+        <span style={{ width: 48, textAlign: 'center' }}>RIR</span>
         <span style={{ width: 44, textAlign: 'center' }}>✓</span>
         <span style={{ width: 30 }} />
       </div>
@@ -351,6 +481,7 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, setE
             seId={se.id}
             set={set}
             prev={prevFor(set.set_number)}
+            planned={target?.planned?.[set.set_number - 1]}
             onChanged={onChanged}
             onCompleted={onSetCompleted}
             onDelete={() => deleteSet(set.id)}
@@ -367,15 +498,15 @@ function ExerciseCard({ sessionId, se, onChanged, onRemove, onSetCompleted, setE
 }
 
 // ---------------------------------------------------------------------------
-// Single set row — weight, reps, RPE, warmup, complete checkbox
+// Single set row — weight, reps, RIR, warmup, complete checkbox
 // ---------------------------------------------------------------------------
 
-function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, setError }) {
+export function SetRow({ sessionId, seId, set, prev, planned, onChanged, onCompleted, onDelete, setError }) {
   // Local input state. Initialise from the set; if untouched (0) leave blank
   // so the previous-session value shows as a placeholder.
   const [weight, setWeight] = useState(set.weight_kg || '')
   const [reps, setReps] = useState(set.reps || '')
-  const [rpe, setRpe] = useState(set.rpe ?? '')
+  const [rir, setRir] = useState(set.rir ?? '')
   const [completed, setCompleted] = useState(set.is_completed)
   const [isWarmup, setIsWarmup] = useState(set.is_warmup)
 
@@ -390,27 +521,31 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
     }
   }
 
-  // Save weight/reps/rpe on blur (avoids a request per keystroke)
+  // Save weight/reps/rir on blur (avoids a request per keystroke)
   function saveField() {
     patch({
-      weight_kg: weight === '' ? 0 : Number(weight),
+      weight_kg: parseDecimal(weight) ?? 0,
       reps: reps === '' ? 0 : Number(reps),
-      rpe: rpe === '' ? null : Number(rpe),
+      rir: rir === '' ? null : Number(rir),
     })
   }
 
   async function toggleComplete() {
     const next = !completed
     setCompleted(next)
-    // When completing: use the prefilled previous value if the field is blank
-    const w = weight === '' ? (prev?.weight_kg || 0) : Number(weight)
-    const r = reps === '' ? (prev?.reps || 0) : Number(reps)
-    if (weight === '' && prev) setWeight(prev.weight_kg)
-    if (reps === '' && prev) setReps(prev.reps)
+    // A blank field commits whatever the placeholder showed: the routine's
+    // plan if there is one, else last session's value. Nothing is logged until
+    // the lifter types or ticks — see the placeholders above.
+    const fallbackW = planned?.weight_kg ?? prev?.weight_kg ?? 0
+    const fallbackR = planned?.reps ?? prev?.reps ?? 0
+    const w = parseDecimal(weight) ?? fallbackW
+    const r = reps === '' ? fallbackR : Number(reps)
+    if (weight === '' && fallbackW) setWeight(fallbackW)
+    if (reps === '' && fallbackR) setReps(fallbackR)
     await patch({
       weight_kg: w,
       reps: r,
-      rpe: rpe === '' ? null : Number(rpe),
+      rir: rir === '' ? (planned?.rir ?? null) : Number(rir),
       is_completed: next,
       is_warmup: isWarmup,
     })
@@ -450,8 +585,9 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
 
       <input
         style={{ flex: 1, minHeight: 44, textAlign: 'center' }}
-        type="number" inputMode="decimal"
-        placeholder={prev ? String(prev.weight_kg) : '0'}
+        type="text" inputMode="decimal" aria-label="Weight (kg)"
+        placeholder={planned?.weight_kg != null ? String(planned.weight_kg)
+                     : prev ? String(prev.weight_kg) : '0'}
         value={weight}
         onChange={e => setWeight(e.target.value)}
         onBlur={saveField}
@@ -459,17 +595,18 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
       <input
         style={{ flex: 1, minHeight: 44, textAlign: 'center' }}
         type="number" inputMode="numeric"
-        placeholder={prev ? String(prev.reps) : '0'}
+        placeholder={planned?.reps != null ? String(planned.reps)
+                     : prev ? String(prev.reps) : '0'}
         value={reps}
         onChange={e => setReps(e.target.value)}
         onBlur={saveField}
       />
       <input
         style={{ width: 48, minHeight: 44, textAlign: 'center', padding: '0.3rem' }}
-        type="number" inputMode="decimal"
-        placeholder="–"
-        value={rpe}
-        onChange={e => setRpe(e.target.value)}
+        type="number" inputMode="numeric" aria-label="RIR"
+        placeholder={planned?.rir != null ? String(planned.rir) : '–'}
+        value={rir}
+        onChange={e => setRir(e.target.value)}
         onBlur={saveField}
       />
       <button
@@ -509,6 +646,9 @@ function SetRow({ sessionId, seId, set, prev, onChanged, onCompleted, onDelete, 
 function WorkoutSummary({ summary, onDone }) {
   const navigate = useNavigate()
   const prLabel = { heaviest: 'Heaviest weight', best_1rm: 'Best est. 1RM', best_volume: 'Best set volume' }
+
+  // Celebrate the finish once, when the summary first appears.
+  useEffect(() => { playWorkoutComplete() }, [])
 
   return (
     <div className="page">

@@ -10,16 +10,24 @@ confuse with real entries ('apple_health' | 'manual') and can be cleared
 surgically without touching anything the user logged themselves.
 The generator is seeded, so re-running produces identical values and the
 date-keyed upserts keep it idempotent.
+
+Access is deliberately narrow. Sample rows render like real measurements on
+the Dashboard, Diet, Insights and Report (only ranks/streak/calendar exclude
+them), so a beta user who taps "load sample data" ends up staring at 30 days
+of numbers they never recorded. Both endpoints therefore require an admin,
+and seeding additionally requires settings.enable_dev_seed. Clearing stays
+available to admins everywhere so leftover rows can always be removed.
 """
 import random
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session as DBSession
 
-from app.auth import require_auth
+from app.auth import require_admin
+from app.config import settings
 from app.db import get_db
-from app.models import NutritionDay, SleepLog, StepsLog, WeightLog
+from app.models import NutritionDay, SleepLog, StepsLog, User, WeightLog
 from app.routers.health import upsert_sleep, upsert_steps, upsert_weight
 from app.schemas import NutritionDayCreate
 
@@ -32,11 +40,16 @@ SAMPLE_DAYS = 30
 @router.post("/seed-sample-health")
 def seed_sample_health(
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_admin),
 ):
     """Upsert ~30 days of plausible health data ending today. Idempotent."""
+    if not settings.enable_dev_seed:
+        # 404, not 403: on a real deployment this endpoint should look absent.
+        raise HTTPException(status_code=404, detail="Not Found")
+
     from app.routers.nutrition import upsert_nutrition
 
+    user_id = current_user.id
     rng = random.Random(42)  # fixed seed → same data every run
     today = date.today()
     days = 0
@@ -47,11 +60,11 @@ def seed_sample_health(
         days += 1
 
         weight += rng.uniform(-0.35, 0.25)
-        upsert_weight(db, d, round(weight, 1), SAMPLE_SOURCE)
+        upsert_weight(db, d, round(weight, 1), SAMPLE_SOURCE, user_id)
 
         # Weekdays trend higher than lazy Sundays
         base_steps = 11000 if d.weekday() < 5 else 7000
-        upsert_steps(db, d, base_steps + rng.randint(-3000, 3500), SAMPLE_SOURCE)
+        upsert_steps(db, d, base_steps + rng.randint(-3000, 3500), SAMPLE_SOURCE, user_id)
 
         asleep = rng.randint(360, 510)  # 6h–8.5h
         deep = int(asleep * rng.uniform(0.13, 0.2))
@@ -64,6 +77,7 @@ def seed_sample_health(
             rem_minutes=rem,
             core_minutes=asleep - deep - rem,
             source=SAMPLE_SOURCE,
+            user_id=user_id,
         )
 
         protein = rng.randint(150, 200)
@@ -88,7 +102,7 @@ def seed_sample_health(
                 "vitamin_d_ug": round(rng.uniform(4, 16), 1),
             },
             source=SAMPLE_SOURCE,
-        ))
+        ), user_id)
 
     db.commit()
     return {"status": "ok", "days_seeded": days, "from": str(today - timedelta(days=SAMPLE_DAYS - 1)), "to": str(today)}
@@ -97,14 +111,14 @@ def seed_sample_health(
 @router.delete("/seed-sample-health")
 def clear_sample_health(
     db: DBSession = Depends(get_db),
-    _: None = Depends(require_auth),
+    current_user: User = Depends(require_admin),
 ):
-    """Delete only rows created by the seeder (source='sample')."""
+    """Delete only this user's rows created by the seeder (source='sample')."""
     deleted = 0
     for model in (WeightLog, StepsLog, SleepLog, NutritionDay):
         deleted += (
             db.query(model)
-            .filter(model.source == SAMPLE_SOURCE)
+            .filter(model.user_id == current_user.id, model.source == SAMPLE_SOURCE)
             .delete(synchronize_session=False)
         )
     db.commit()
