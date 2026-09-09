@@ -693,7 +693,8 @@ export default function Settings() {
     try {
       const form = new FormData()
       form.append('file', importFile)
-      const r = await apiUpload('/api/ingest/health-export', form)
+      const r = await apiUpload('/api/ingest/health-export', form,
+        { Authorization: `Bearer ${ingestToken}` })
       if (r.status === 'ok') {
         const d = r.days
         setImportMsg(

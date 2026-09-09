@@ -62,11 +62,20 @@ async function networkFetch(path, options = {}) {
 /**
  * Multipart upload variant (file uploads). Same cookie auth, but no
  * Content-Type header — the browser must set the multipart boundary.
+ *
+ * Its one caller (the export.zip history backfill) hits an ingest endpoint,
+ * and every ingest endpoint authenticates via the per-user `ingest_token`
+ * bearer header (require_ingest_auth) rather than the session cookie — a
+ * Shortcut/HAE automation can't hold a cookie jar, so ingest never accepts
+ * one. This upload was never passing that header, so backfill 401'd with
+ * "missing bearer token" every time — `extraHeaders` fixes that; pass
+ * { Authorization: `Bearer ${ingestToken}` }.
  */
-export async function apiUpload(path, formData) {
+export async function apiUpload(path, formData, extraHeaders = {}) {
   const response = await fetch(apiUrl(path), {
     method: 'POST',
     credentials: 'include',
+    headers: extraHeaders,
     body: formData,
   })
 
