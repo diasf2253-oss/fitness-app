@@ -13,12 +13,12 @@ The owner is learning software as they build this — explain the *why* in plain
 - Backend: FastAPI, Uvicorn, SQLAlchemy 2.x (synchronous), SQLite (dev) / Postgres via Railway (production), Pydantic v2, Alembic (Python), argon2 password hashing.
 - AI Coach: `anthropic` SDK (model `claude-opus-4-8`). Streaming chat + structured planners via forced tool use. Gated on `ANTHROPIC_API_KEY` — empty key ⇒ coach endpoints 503, everything else works.
 - Frontend: React + Vite, Recharts for charts, PWA (service worker + web app manifest).
-- Tests: Pytest.
+- Tests: Pytest (backend), Vitest (frontend).
 
 ## Layout
 - `backend/app/main.py` — app entry point; mounts routers and serves the built frontend (single-origin SPA).
 - `backend/app/routers/` — endpoints: activities, admin, auth, calendar, coach, dashboard, dev, diet, exercises, generator, health, insights, nutrition, plan, ranks, report, routine_notes, routines, sessions, settings, stats, streak, sync, trackers.
-- `backend/app/ranks.py` + `muscles.py` — rank ladder (9 tiers × 3 divisions + LP from best 1RM ÷ bodyweight vs per-exercise benchmarks; bodyweight uses real readings only, never sample/estimated) and the muscle-group taxonomy/auto-tagging. Body-map shapes are traced from the user's hand-drawn PSD (see memory) — never re-derive them algorithmically.
+- `backend/app/ranks.py` + `muscles.py` — rank ladder (9 tiers × 3 divisions + LP from best 1RM ÷ bodyweight vs per-exercise benchmarks; bodyweight uses real readings only, never sample/estimated) and the muscle-group taxonomy/auto-tagging. Body-map shapes are traced by hand from the owner's own drawing — never re-derive them algorithmically.
 - `backend/app/sync.py` — device-to-device sync engine (Phase 9), scoped per authenticated user (Phase 1-2): entity tables sync by `uuid`, health tables by `date`, merge is last-write-wins by `updated_at` with health source precedence. `Exercise` is the one owner-optional table (NULL = shared global library). No tombstones yet (deletes don't propagate).
 - `backend/app/coach_context.py` — builds the data brief (training/health/nutrition/trackers/plan) the Coach plans from. `plan_item` is the trackable day/study/workout domain (many rows per date, checkable); the Coach proposes, the user approves, accept endpoints commit (workout→routine, day→plan items).
 - `backend/app/models.py` — SQLAlchemy models; every data table carries a `user_id` FK (see "Auth & multi-user" below). `schemas.py` — Pydantic v2 request/response models. `db.py` — engine + session. `config.py` — settings loaded from `.env`. `auth.py` — session-cookie auth + password hashing. `auth_bootstrap.py` — shared "get or create the admin user" logic. `stats.py` — 1RM / PR math. `seed.py` — sample data (scoped to the admin account). `seed_admin.py` — creates the admin account + first invite code.
@@ -37,7 +37,8 @@ Run backend commands from `backend/`, frontend commands from `frontend/`.
 - Run backend (dev): `uvicorn app.main:app --reload`
 - Frontend dev server: `npm install`, then `npm run dev`
 - Build frontend: `npm run build` (the backend then serves the built output on one origin)
-- One-command local dev (build frontend, set up backend venv, migrate, seed, serve on `0.0.0.0` for phone testing via QR): `./start.sh` (use `--no-build` to skip the frontend build)
+- One-command local dev (build frontend, set up backend venv, migrate, seed admin + defaults, serve on `0.0.0.0` so a phone on the same Wi-Fi can reach it): `./start.sh` (use `--no-build` to skip the frontend build)
+- Change the admin's email/password (hidden prompt): `python -m app.set_admin_password`
 
 ## Tests
 - Backend: `pytest` from `backend/` (uses `backend/.venv`; tests run on an in-memory SQLite — they never touch `fitness.sqlite3`).
@@ -60,23 +61,23 @@ Production runs on a Railway **Postgres** service (local dev still uses SQLite �
 - `backups/` and `scripts/.env.backup` are git-ignored (real personal data + the prod connection string). Never commit them.
 - Needs the Postgres client (`pg_dump`/`pg_restore`/`psql`) on PATH, client major version >= the Railway server's.
 
-## Product direction — from the July 2026 workbook (FLIGHT_WORKBOOK_DONE.md)
+## Product direction — rulings from the July 2026 product workbook (private notes; IDs like V3/H9 refer to it)
 - **Design tiebreaker (V3): the app is a *body recomposition instrument* first** — the weight/diet/energy loop is the core. Quantified-self lab second, gym logger third. Gamification is last — nice, never load-bearing.
 - Guardrails (V4): never complicated to use; built for people serious about fitness but usable by anyone; not a clone of existing apps.
 - Killed per the workbook: the Coach page (H9) and Plan/day-planner (H8) are hidden from the UI — code and endpoints remain, don't resurrect them without being asked. Trackers stay but stay simple (H5).
 - The diet goal is a signed slider `goal_kg_per_week` ∈ [−0.5, +0.5] (− cut · 0 maintain · + bulk); the maintenance ceiling only applies when not bulking.
 - A streak "active day" = workout, sport activity, or ≥10k steps (T6a).
-- V5 (multi-user): superseded — see "Auth & multi-user" below, now in progress as an invite-only friends beta (`friends-beta-prompt-pack.md`).
+- V5 (multi-user): superseded — see "Auth & multi-user" below, now in progress as an invite-only friends beta.
 
 ## Auth & multi-user (Phase 1-2 friends beta)
-Locked decisions live in `friends-beta-prompt-pack.md` at the repo root — read it before touching auth. Summary of what's implemented:
+Locked decisions from the (private) beta plan — respect these before touching auth: email + password with argon2; an opaque session id in an httpOnly/Secure/SameSite=Lax cookie, ~30-day expiry; same-origin via a Vercel `/api/*` rewrite (no cross-domain cookies); invite code → `pending` → admin approval; no email service (admin-issued temp passwords); every kept feature fully usable at ~390px. Summary of what's implemented:
 - **Every data table carries a `user_id` FK** (models.py), scoped server-side on every query — the client never sends or selects `user_id`. `Exercise` is the one owner-optional table: `user_id IS NULL` is the shared seeded library, set only on a user's own custom exercise. `TrackerLog` has no `user_id` of its own — it's reached only through `tracker_id` (`Tracker.user_id` scopes it; see `routers/trackers.py`'s `_get_tracker`).
 - **Auth is a session cookie**, not a bearer token: `POST /api/auth/login` creates a DB-backed `AuthSession` row and sets an httpOnly/Secure/SameSite=Lax cookie (`app/auth.py`). `require_auth` resolves the current `User` from it; routers depend on it exactly like the old `require_auth` (`current_user: User = Depends(require_auth)`), then filter every query by `current_user.id`. `require_admin` gates `routers/admin.py`. Apple Health ingest (`/api/ingest/health*`) is the one exception — it authenticates via a separate, persistent per-user `ingest_token` bearer header (`require_ingest_auth`), since a Shortcut/HAE automation can't hold a cookie jar.
 - **Signup is invite-code-gated** (`POST /api/auth/join`, checked server-side, not just hidden in the UI) and lands `status='pending'` until an admin approves it from `/admin`. No email service — admin issues temp passwords for resets (`POST /api/admin/users/{id}/temp-password`), which forces `must_change_password` and kills that user's other sessions.
 - **`session_cookie_secure` (config.py) must be `false` for local dev/tests** (plain `http://`) and stays `true` everywhere else — a `Secure` cookie is silently never sent back over a non-HTTPS connection, which looks like "login succeeds then immediately appears logged out." `tests/conftest.py` sets this for the test client automatically.
 - **Frontend**: `src/auth.jsx` (`AuthProvider`/`useAuth`) drives the gate in `App.jsx` — logged out renders only `/login`/`/join`; `must_change_password` forces `ChangePassword`; otherwise the normal app. `src/api.js` sends `credentials: 'include'` on every request, no token handling. The local-first Dexie DB (`src/local/db.js`) is wiped whenever the logged-in user differs from whoever it last synced as (`src/local/sync.js`'s `ensureLocalDbMatchesUser`) — switching accounts on a shared device drops local unsynced changes for the previous account.
 - **Migration**: new tables (`users`, `invite_codes`, `auth_session`) plus a `user_id` retrofit on every existing table happened across three Alembic migrations with a manual backfill script (`app/backfill_owner.py`) in between, attaching all pre-multi-user data to an admin account seeded from `ADMIN_EMAIL`/`ADMIN_PASSWORD`. Never run the backfill or the NOT-NULL migration against production directly — staging first, with a backup and row-count check.
-- **Deferred** (do not implement without being asked): i18n/pt-BR, the onboarding-wizard rewrite, per-user feature flags, mobile-parity pass, rate limiting/hardening — these are later phases in the prompt pack.
+- **Deferred** (do not implement without being asked): i18n/pt-BR, the onboarding-wizard rewrite, per-user feature flags, mobile-parity pass, rate limiting/hardening — these are later phases of the beta plan.
 
 ## Conventions — follow these
 - Auth is a per-user session cookie (see above). Every protected route depends on `require_auth` and filters its queries by `current_user.id`; new endpoints follow the same pattern. Apple Health ingest routes use `require_ingest_auth` instead.
@@ -90,7 +91,7 @@ Locked decisions live in `friends-beta-prompt-pack.md` at the repo root — read
 - Keep the Pytest suite green. The whole suite now uses the session-cookie auth fixtures in `tests/conftest.py` (`auth_client` + shared `TestingSession`/`clean_db`) — see that docstring for how to write new tests (cookie auth, per-user seeding with `user_id`, and the ingest-token bearer for `/api/ingest/health*`). Don't reintroduce the old per-file `APP_TOKEN`/`headers=AUTH` pattern.
 
 ## Code map — consult before exploring broadly
-A pre-built map of this codebase lives at `graphify-out/obsidian-vault/`: one Markdown note per code entity, generated by graphify.
+A pre-built map of this codebase lives at `graphify-out/obsidian-vault/`: one Markdown note per code entity, generated by graphify. It is local-only and git-ignored, so a fresh clone won't have it — skip this section if the folder is missing.
 - Use it to locate code and understand how parts relate before grepping or reading widely. Start with the `_COMMUNITY_*` notes for high-level structure and the "bridge" files between clusters.
 - Each note's frontmatter has `source_file` and `location` (e.g. L20) — use them to jump straight to the real code.
 - The `[[links]]` encode relationships (`calls`, `contains`, `requires`, `references`).

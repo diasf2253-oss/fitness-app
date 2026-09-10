@@ -2,6 +2,13 @@
   "name": "fitness-app-frontend",
   "private": true,
   "version": "0.1.0",
+  "description": "Offline-first PWA for a body-recomposition tracker: workouts, diet, and Apple Health data.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/diasf2253-oss/fitness-app.git",
+    "directory": "frontend"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",

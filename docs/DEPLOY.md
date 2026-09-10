@@ -1,24 +1,67 @@
-# Going always-on
+# Deploying
 
 One service serves everything: FastAPI hosts the API **and** the built
 frontend on a single origin. That one URL is what you open on any device,
-what the installed PWA launches, and what Health Auto Export pushes to.
+what the installed PWA launches, and what the Apple Health Shortcut pushes to.
 
-Before exposing anything publicly, set a strong token:
+The `Dockerfile` builds that single image. On every boot it runs
+`alembic upgrade head` → `python -m app.seed_admin` → `python -m app.seed`
+→ `uvicorn`, and all three setup steps are safe to repeat.
 
-```bash
-# backend/.env
-APP_TOKEN=<long random string>     # e.g. `openssl rand -hex 24`
-```
-
-Enter the same token once on each device (Settings → API Token).
+> **Serve it over HTTPS.** Login uses a `Secure` session cookie
+> (`SESSION_COOKIE_SECURE=true`, the default). Browsers never send a Secure
+> cookie over plain `http://`, so on an http origin every login would appear to
+> succeed and then immediately log you out. Only set it to `false` for local
+> development.
 
 ---
 
-## Option A — your Mac + Cloudflare Tunnel (free, keeps SQLite)
+## Option A — Railway + Postgres (what production uses)
 
-Best fit if the Mac is usually on. Nothing migrates; your existing
-database keeps working.
+1. Railway → **New Project** → deploy this repo (it picks up the `Dockerfile`
+   and `railway.json`, which health-checks `/api/ping`).
+2. Add a **Postgres** service to the project.
+3. On the app service, set variables:
+
+   | Variable | Value |
+   |---|---|
+   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (a bare `postgresql://` URL is fine — it's routed to the psycopg 3 driver automatically) |
+   | `ADMIN_EMAIL` | the first admin account's email |
+   | `ADMIN_PASSWORD` | a strong password (change it later with `python -m app.set_admin_password`) |
+   | `ANTHROPIC_API_KEY` | *(optional)* enables the AI report narrative / Coach endpoints |
+
+4. **Settings → Networking → Generate Domain.** Railway serves it over HTTPS.
+5. Read the deploy log: `seed_admin` prints the **first invite code**. Log in
+   as the admin, then share the invite code with friends — their signups
+   arrive as *pending* under **/admin** until you approve them.
+
+Back up the database with `./scripts/backup.sh` (see the README's
+*Database backups* section). For a separate staging stack, see
+[STAGING.md](STAGING.md).
+
+## Option B — any Docker host with SQLite
+
+```bash
+docker build -t fitness-app .
+docker run -p 8000:8000 \
+  -v fitness-data:/app/data \
+  -e DATABASE_URL=sqlite:////app/data/fitness.sqlite3 \
+  -e ADMIN_EMAIL=you@example.com \
+  -e ADMIN_PASSWORD='a-strong-password' \
+  fitness-app
+```
+
+Mount a volume at `/app/data` so the SQLite file outlives the container, and
+put an HTTPS reverse proxy (Caddy, Cloudflare Tunnel, …) in front of it.
+
+## Option C — your own Mac + Cloudflare Tunnel (free)
+
+Good if the Mac is usually on. The tunnel gives you a public **HTTPS** URL,
+so the Secure cookie works — **but first delete the
+`SESSION_COOKIE_SECURE=false` line from `backend/.env`** (the local-dev
+template adds it). Left in, the session cookie is issued without its
+`Secure` flag on a public site. Also make sure `ADMIN_PASSWORD` is a real
+password, not the template's `changeme`.
 
 ```bash
 # 1. Build the frontend once (rebuild after each update)
@@ -31,7 +74,7 @@ uvicorn app.main:app --port 8000
 # 3. Expose it
 brew install cloudflared
 
-# Quick test (URL changes every run):
+# Quick test (URL changes every run — fine for trying, bad for the Shortcut):
 cloudflared tunnel --url http://localhost:8000
 
 # Permanent named tunnel (stable URL, free Cloudflare account):
@@ -45,35 +88,23 @@ To keep both processes alive across reboots, add them as LaunchAgents or
 run them under `tmux`; `cloudflared service install` handles the tunnel
 side automatically.
 
-## Option B — Railway (managed, ~$5/mo)
-
-The repo's `Dockerfile` is all Railway needs.
-
-1. Push the repo to GitHub, then Railway → New Project → Deploy from repo.
-2. Add a **volume** mounted at `/app/data` (SQLite must outlive deploys).
-3. Set variables:
-   - `APP_TOKEN` — your long random token
-   - `DATABASE_URL` — `sqlite:////app/data/fitness.sqlite3`
-4. Generate a domain (Settings → Networking). Done — migrations and the
-   exercise seed run automatically on each boot.
-
-To bring your existing data along, copy `backend/fitness.sqlite3` into the
-volume once (Railway shell: upload, then move it to `/app/data/`).
-
 ---
 
-## Phone setup (after either option)
+## Phone setup (after any option)
 
-1. Open the URL in Safari/Chrome → Settings → paste your token.
-2. **Install the app**: iOS Safari → Share → *Add to Home Screen*.
-   Android Chrome → menu → *Install app*. You get the cairn icon,
-   standalone window, no browser chrome.
-3. **Point Health Auto Export** at `https://<your-url>/api/ingest/health`
-   with the `Authorization: Bearer <token>` header (full steps in
-   Settings → Apple Health sync).
-4. Upload your `export.zip` once for history (Settings → History backfill).
+1. Open the HTTPS URL on the phone and log in.
+2. **Install the app**: iOS Safari → Share → *Add to Home Screen*;
+   Android Chrome → menu → *Install app*. You get a standalone window with no
+   browser chrome, and it keeps working offline (local-first mode).
+3. **Apple Health**: **Settings → Apple Health sync** walks you through
+   installing the shared iOS Shortcut and shows the *Server* and personal
+   *Token* to paste into it. Full details: [HEALTH_INGEST_SHORTCUT.md](HEALTH_INGEST_SHORTCUT.md).
+4. Optional: upload an Apple Health `export.zip` once for your full history
+   (Settings → History backfill).
 
 ## Updating
 
-Mac + tunnel: `git pull`, rebuild the frontend, restart uvicorn.
-Railway: push to GitHub; it redeploys.
+Railway: merge to `main` and it redeploys. Docker / Mac: `git pull`,
+rebuild the frontend (or the image), restart. Bump `VERSION` in
+`frontend/public/sw.js` on every frontend release — otherwise an installed
+PWA keeps serving its cached old bundle.
