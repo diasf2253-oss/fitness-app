@@ -41,4 +41,8 @@ def seed_admin():
 
 
 if __name__ == "__main__":
-    seed_admin()
+    try:
+        seed_admin()
+    except RuntimeError as e:
+        # Shown by start.sh and the Docker boot log — a message, not a traceback.
+        sys.exit(f"Can't create the admin account: {e}")

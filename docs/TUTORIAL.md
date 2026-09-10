@@ -40,9 +40,12 @@ window open; that's the app being "on". It prints a banner like:
   Active invite code already exists: <code>
 ```
 
-The first run copies `backend/.env.example` to `backend/.env`. **Change
-`ADMIN_EMAIL` and `ADMIN_PASSWORD` there before the first run** (or later
-with `python -m app.set_admin_password` from `backend/`).
+The first run copies `backend/.env.example` to `backend/.env` and then
+**stops, asking you to set a real `ADMIN_PASSWORD`** — it refuses to create an
+admin with the template's `changeme`, because the app is reachable by anyone
+on your Wi-Fi. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` (8+ characters) in
+`backend/.env` and run `./start.sh` again. Change them later with
+`python -m app.set_admin_password` from `backend/`.
 
 (Use `./start.sh --no-build` for faster restarts when you only touched the
 backend.)

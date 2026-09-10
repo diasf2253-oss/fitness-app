@@ -57,7 +57,11 @@ put an HTTPS reverse proxy (Caddy, Cloudflare Tunnel, …) in front of it.
 ## Option C — your own Mac + Cloudflare Tunnel (free)
 
 Good if the Mac is usually on. The tunnel gives you a public **HTTPS** URL,
-so the Secure cookie works without any extra setup.
+so the Secure cookie works — **but first delete the
+`SESSION_COOKIE_SECURE=false` line from `backend/.env`** (the local-dev
+template adds it). Left in, the session cookie is issued without its
+`Secure` flag on a public site. Also make sure `ADMIN_PASSWORD` is a real
+password, not the template's `changeme`.
 
 ```bash
 # 1. Build the frontend once (rebuild after each update)

@@ -150,8 +150,9 @@ cd fitness-app
 This builds the frontend, creates a virtualenv, copies `backend/.env.example`
 to `backend/.env`, runs migrations, creates the admin account and an invite
 code, and serves everything at **http://localhost:8000** (and on your Wi-Fi for
-a phone). Log in with `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `backend/.env` —
-**change them first**. A friendly walkthrough lives in
+a phone). The first run stops until you set a real `ADMIN_PASSWORD` in
+`backend/.env` (it refuses the template's `changeme`); then log in with
+`ADMIN_EMAIL` / `ADMIN_PASSWORD`. A friendly walkthrough lives in
 [docs/TUTORIAL.md](docs/TUTORIAL.md).
 
 ### Manual setup (for development)
