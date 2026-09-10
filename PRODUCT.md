@@ -6,7 +6,8 @@ product
 
 ## Users
 
-One user: Felipe. Two contexts with very different demands:
+An invite-only beta: the owner plus a small group of friends who train
+seriously. Two contexts with very different demands:
 
 - **Phone in the gym** (390px, installed PWA): mid-workout logging with sweaty
   thumbs — large tap targets, glanceable numbers, zero friction. Also quick
@@ -14,17 +15,19 @@ One user: Felipe. Two contexts with very different demands:
 - **Laptop at home/desk** (≥1024px): the reflective surface — reviewing weeks,
   browsing the calendar, reading insights, managing settings.
 
-The job: track everything about a life (training, body, sleep, food,
-habits, mood) with near-zero manual effort — Apple Health pushes the data —
-and make the accumulation legible.
+The job: track body recomposition — training, bodyweight, food, energy — with
+near-zero manual effort (Apple Health pushes the data), and make the
+accumulation legible.
 
 ## Product Purpose
 
-A single-user, self-hosted life tracker. Workout logging is manual and
-deliberate (it happens in the gym); everything else syncs from Apple Health.
-Success = the daily check-in takes under 20 seconds, the dashboard answers
-"how am I doing" in one glance, and insights surface relationships Felipe
-wouldn't have noticed.
+A self-hosted **body recomposition instrument**. The weight / diet / energy
+loop is the core; the quantified-self lab (sleep, habits, correlations) comes
+second; the gym logger third; gamification last — nice, never load-bearing.
+Workout logging is manual and deliberate (it happens in the gym); everything
+else syncs from Apple Health. Success = the daily check-in takes under 20
+seconds, the dashboard answers "how am I doing" in one glance, and insights
+surface relationships you wouldn't have noticed.
 
 ## Brand Personality
 
@@ -36,8 +39,8 @@ caveats are printed, deltas show direction without judgment).
 ## Anti-references
 
 - Generic fitness apps: loud saturated accents, bold condensed type,
-  trophy/flame emoji, confetti, streak-shaming. Felipe rejected an early
-  orange "athletic" theme as "generic… rushed and cheap".
+  trophy/flame emoji, confetti, streak-shaming. An early orange "athletic"
+  theme was rejected as generic, rushed and cheap.
 - Candy-colored dashboard templates (pastel pink/yellow/green tiles).
 - Anything that looks templated or AI-default.
 

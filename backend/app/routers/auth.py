@@ -3,8 +3,8 @@ Auth endpoints (Phase 1-2 friends beta): invite-gated signup, login/logout,
 "who am I", and the forced password-change escape hatch.
 
 Every account starts 'pending' after /join and needs an admin approval
-(see routers/admin.py) before it can log in. No email service in v1 — see
-friends-beta-prompt-pack.md.
+(see routers/admin.py) before it can log in. No email service in v1 —
+password resets are admin-issued temp passwords.
 """
 from datetime import datetime
 

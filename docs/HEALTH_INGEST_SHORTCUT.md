@@ -8,7 +8,7 @@ How **weight, steps and sleep** get off an iPhone and into the app.
 apps only — never to a website or an installed PWA. So this app can never pull
 your health data; the phone has to *push* it.
 
-The H4 diagnosis (`docs/APPLE_HEALTH_DIAGNOSIS.md`) found the old push path
+An internal diagnosis of the Apple Health pipeline found the old push path
 (Health Auto Export's scheduled background jobs) was untrustworthy mostly
 because of *delivery*: HAE's pushes only fire reliably when its app is open,
 and quick-tunnel URLs rot. An iOS **Shortcut** driven by a Personal Automation
@@ -173,9 +173,10 @@ The design points that matter:
 3. **Post a rolling last 7 days**, one item per day per metric — not just
    "today". Because the upserts are idempotent and `apple_health` overwrites
    `apple_health`, every run repairs any day a previous run missed. This
-   self-healing is exactly what HAE lacked (diagnosis §2).
+   self-healing is exactly what HAE lacked (a missed evening push used to
+   freeze a partial day permanently).
 4. **Aggregate steps daily.** Apple Health stores overlapping samples from
-   both iPhone and Watch; a raw sum double-counts them (diagnosis §4). Use
+   both iPhone and Watch; a raw sum double-counts them. Use
    *Get Health Sample* with a **daily** total, or aggregate in the Shortcut.
 5. **Key sleep to the wake-up morning.** The backend's `_night_of` in
    `app/health_ingest.py` expects that, and it's how Apple presents sleep.

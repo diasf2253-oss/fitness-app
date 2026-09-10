@@ -3,8 +3,8 @@ One-off backfill: attaches every pre-multi-user row to the admin account.
 
 Run this AFTER migration a2b3c4d5e6f7 (nullable user_id added) and BEFORE
 migration c4d5e6f7a8b9 (user_id made NOT NULL) — against staging only, with
-a fresh backup and these row counts recorded first. See
-friends-beta-prompt-pack.md Prompt 1 step 1 and CLAUDE.md's backup runbook.
+a fresh backup and these row counts recorded first. See CLAUDE.md's
+"Auth & multi-user" migration note and backup runbook.
 Never run this against PROD_DATABASE_URL.
 
 Usage:

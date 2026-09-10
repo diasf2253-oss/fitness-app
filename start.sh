@@ -1,12 +1,13 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-# One command to run the whole app for daily use.
+# One command to run the whole app locally.
 #
 #   ./start.sh
 #
-# It builds the frontend, applies any new migrations, seeds defaults (safe to
-# re-run), then serves everything on one origin bound to 0.0.0.0 so your phone
-# can reach it over Wi-Fi. Leave the window open — that's the app being "on".
+# It builds the frontend, applies any new migrations, makes sure the admin
+# account + an invite code exist, seeds defaults (all safe to re-run), then
+# serves everything on one origin bound to 0.0.0.0 so your phone can reach it
+# over Wi-Fi. Leave the window open — that's the app being "on".
 #
 # Flags:
 #   --no-build   skip the frontend build (faster restarts when only backend changed)
@@ -41,14 +42,23 @@ if [ ! -d .venv ]; then
 fi
 [ -f .env ] || cp .env.example .env
 
+# This serves plain http:// (localhost / Wi-Fi), where browsers refuse to send
+# a Secure cookie — so login only works with it off. HTTPS deployments keep the
+# secure default.
+export SESSION_COOKIE_SECURE="${SESSION_COOKIE_SECURE:-false}"
+
 echo "Updating the database…"
 ./.venv/bin/alembic upgrade head >/dev/null
+if ! ADMIN_INFO="$(./.venv/bin/python -m app.seed_admin 2>&1)"; then
+  echo "$ADMIN_INFO"
+  echo "Set ADMIN_EMAIL and ADMIN_PASSWORD in backend/.env, then re-run ./start.sh"
+  exit 1
+fi
 ./.venv/bin/python -m app.seed >/dev/null 2>&1 || true
 
-# 3. Friendly banner with the two URLs you actually need
+# 3. Friendly banner with the URLs and login you actually need
 LAN_IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)"
-TOKEN="$(grep -E '^APP_TOKEN=' .env | head -1 | cut -d= -f2-)"
-if [ -n "$LAN_IP" ]; then PHONE="http://$LAN_IP:8000"; else PHONE="(not on Wi-Fi — connect to the same network to sync)"; fi
+if [ -n "$LAN_IP" ]; then PHONE="http://$LAN_IP:8000"; else PHONE="(not on Wi-Fi — connect to the same network)"; fi
 printf '\n'
 printf '  ════════════════════════════════════════════════════\n'
 printf '   Tracker is running\n'
@@ -56,10 +66,11 @@ printf '  ═══════════════════════�
 printf '   This laptop:  http://localhost:8000\n'
 printf '   This phone:   %s\n' "$PHONE"
 printf '\n'
-printf '   Open the laptop URL, then Settings → "Add a device"\n'
-printf '   to onboard your phone by scanning a QR.\n'
+printf '%s\n' "$ADMIN_INFO" | sed 's/^/   /'
+printf '   Log in with ADMIN_EMAIL / ADMIN_PASSWORD from backend/.env.\n'
+printf '   Friends sign up at /join with the invite code; approve them at /admin.\n'
 printf '  ════════════════════════════════════════════════════\n'
-printf '   Token: %s    ·    Ctrl-C to stop\n\n' "$TOKEN"
+printf '   Ctrl-C to stop\n\n'
 
 # 4. Serve (0.0.0.0 = reachable from the phone). --reload off for steady use.
 exec ./.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000

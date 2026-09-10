@@ -100,7 +100,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",        # looks for .env relative to the working directory
         env_file_encoding="utf-8",
-        case_sensitive=False,   # APP_TOKEN and app_token both work
+        case_sensitive=False,   # DATABASE_URL and database_url both work
         extra="ignore",         # stale .env entries must never crash startup
     )
 

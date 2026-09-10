@@ -11,6 +11,7 @@ Run with:
 """
 import sys
 import os
+from datetime import datetime
 
 # Allow running as a standalone script
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -18,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from app.auth_bootstrap import get_or_create_admin_user
 from app.db import SessionLocal
 from app.models import AppSettings, Exercise, Routine, RoutineExercise
+from app.muscles import suggest_muscle_group
 
 
 # ---------------------------------------------------------------------------
@@ -161,11 +163,18 @@ def seed():
             print("Settings row already exists — skipping")
 
         # ---- Exercises ----
+        # primary_muscle_group drives Ranks and per-muscle volume. The phase-10
+        # migration backfilled it, but on a fresh database migrations run
+        # *before* this seed — so tag on insert, and repair any shared-library
+        # exercise still untagged (idempotent; custom exercises are left alone).
         existing_names = {e.name for e in db.query(Exercise.name).all()}
         new_exercises = []
         for ex_data in EXERCISES:
             if ex_data["name"] not in existing_names:
-                new_exercises.append(Exercise(is_custom=False, **ex_data))
+                group = suggest_muscle_group(ex_data["name"], ex_data["primary_muscle"])
+                new_exercises.append(
+                    Exercise(is_custom=False, primary_muscle_group=group, **ex_data)
+                )
 
         if new_exercises:
             db.add_all(new_exercises)
@@ -173,6 +182,21 @@ def seed():
             print(f"Seeded {len(new_exercises)} exercises")
         else:
             print("Exercises already seeded — skipping")
+
+        untagged = db.query(Exercise).filter(
+            Exercise.user_id.is_(None), Exercise.primary_muscle_group.is_(None)
+        ).all()
+        now = datetime.utcnow()
+        tagged = 0
+        for ex in untagged:
+            group = suggest_muscle_group(ex.name, ex.primary_muscle)
+            if group:
+                ex.primary_muscle_group = group
+                ex.updated_at = now   # visible to sync pulls
+                tagged += 1
+        if tagged:
+            db.flush()
+            print(f"Tagged {tagged} library exercises with a muscle group")
 
         # ---- Routines ----
         # Build a name → Exercise id map for quick lookup

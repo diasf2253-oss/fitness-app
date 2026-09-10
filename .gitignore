@@ -12,13 +12,22 @@ build/
 # Environment
 .env
 
-# Database
-*.sqlite3
+# Databases — any local copy may hold real personal data (incl. prod copies
+# like backend/seed_db/). Covers fitness.sqlite3 and its .bak-* snapshots.
+*.sqlite3*
+*.db
+*.db-journal
+**/seed_db/
+*.bak*
 
 # Database backups — real personal training data + the prod connection string.
 # NEVER commit these.
 backups/
+*.dump
 scripts/.env.backup
+
+# Generated device-onboarding QR codes (encode a LAN/private URL)
+phone-qr.*
 
 # Node
 node_modules/
@@ -32,7 +41,15 @@ backend/alembic/versions/*.pyc
 graphify-out/
 .Rhistory
 
-# Claude Code — local settings, agent worktrees, and memory (not source,
-# and may contain secrets/DBs inside worktrees)
-.claude/
+# Private planning notes (kept on disk, not published)
+FLIGHT_WORKBOOK*.md
+friends-beta-prompt-pack.md
+docs/APPLE_HEALTH_DIAGNOSIS.md
+
+# Claude Code — the shared agents and slash commands are part of the repo;
+# local settings, launch config, agent worktrees (may contain DBs) and
+# memory are not.
+.claude/*
+!.claude/agents/
+!.claude/commands/
 memory/
