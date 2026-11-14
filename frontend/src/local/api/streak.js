@@ -1,5 +1,5 @@
 /**
- * Training streak, local-first — mirrors backend app/streak.py + routers/streak.py.
+ * Training streak, local-first — mirrors backend app/services/training/streak.py + routers/streak.py.
  *
  * An "active day" keeps the chain alive: a real workout (≥1 completed working
  * set), a logged sport session, or a 10k-step day — workbook ruling T6a. The
@@ -59,7 +59,7 @@ async function activeDates() {
   )
 }
 
-// Pure port of app/streak.py compute_streak.
+// Pure port of app/services/training/streak.py compute_streak.
 export function computeStreak(dates, restGap = DEFAULT_REST_GAP, today = null) {
   const t = today || todayIso()
   const days = [...new Set(dates)].sort()

@@ -5,5 +5,5 @@ if ! command -v npm >/dev/null 2>&1; then
   # shellcheck disable=SC1091
   [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 fi
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 exec npm run dev

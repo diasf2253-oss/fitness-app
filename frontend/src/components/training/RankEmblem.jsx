@@ -10,12 +10,12 @@
  *                                   Olympian  radiant star
  *
  * Colours are NOT chosen here — they come from the rank engine
- * (backend/app/ranks.py TIER_COLORS, mirrored in src/local/api/ranks.js) and
+ * (backend/app/services/training/ranks.py TIER_COLORS, mirrored in src/local/api/ranks.js) and
  * are passed in, so the emblem, body map and badges always agree.
  */
 import React, { useId } from 'react'
 
-// Mirrors backend/app/ranks.py TIERS (ascending).
+// Mirrors backend/app/services/training/ranks.py TIERS (ascending).
 export const TIERS = ['Wood', 'Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond', 'Champion', 'Titan', 'Olympian']
 const DIVISION_PIPS = { III: 1, II: 2, I: 3 }
 const DIVISIONS = ['III', 'II', 'I']

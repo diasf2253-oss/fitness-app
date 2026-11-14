@@ -7,9 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let status
 vi.mock('./HealthSync', () => ({ useSyncStatus: () => ({ status }) }))
-vi.mock('../auth', () => ({ useAuth: () => ({ user: { id: 7 } }) }))
+vi.mock('../../auth/auth', () => ({ useAuth: () => ({ user: { id: 7 } }) }))
 const openQuickLog = vi.fn()
-vi.mock('./QuickLog', () => ({ openQuickLog: (...a) => openQuickLog(...a) }))
+vi.mock('../training/QuickLog', () => ({ openQuickLog: (...a) => openQuickLog(...a) }))
 
 import HealthSyncBanner from './HealthSyncBanner'
 

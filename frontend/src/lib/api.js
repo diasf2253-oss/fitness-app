@@ -1,7 +1,7 @@
 /**
  * Fetch wrapper. Auth is a Supabase access token sent as
  * `Authorization: Bearer <token>` on every network request (see
- * src/supabase.js) — no cookies involved, so it works the same whether the
+ * src/lib/supabase.js) — no cookies involved, so it works the same whether the
  * API is on this origin or another one.
  *
  * Usage:
@@ -9,8 +9,8 @@
  *   const data = await apiFetch('/api/exercises')
  *   const created = await apiFetch('/api/exercises', { method: 'POST', body: JSON.stringify({...}) })
  */
-import { dispatchLocal } from './local/api'
-import { isLocalFirst } from './local/mode'
+import { dispatchLocal } from '../local/api'
+import { isLocalFirst } from '../local/mode'
 import { apiUrl } from './env'
 import { getAccessToken } from './supabase'
 

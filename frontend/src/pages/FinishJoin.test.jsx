@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const apiFetch = vi.fn()
 const refresh = vi.fn()
-vi.mock('../api', () => ({ apiFetch: (...a) => apiFetch(...a) }))
-vi.mock('../auth', async () => {
+vi.mock('../lib/api', () => ({ apiFetch: (...a) => apiFetch(...a) }))
+vi.mock('../auth/auth', async () => {
   const stash = { current: null }
   return {
     useAuth: () => ({
@@ -20,7 +20,7 @@ vi.mock('../auth', async () => {
   }
 })
 
-import * as auth from '../auth'
+import * as auth from '../auth/auth'
 import FinishJoin from './FinishJoin'
 
 beforeEach(() => { apiFetch.mockReset(); refresh.mockReset(); auth.__stash.current = null })

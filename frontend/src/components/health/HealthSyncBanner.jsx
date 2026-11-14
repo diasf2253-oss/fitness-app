@@ -13,9 +13,9 @@
  */
 import React, { useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { useAuth } from '../auth'
+import { useAuth } from '../../auth/auth'
 import { useSyncStatus } from './HealthSync'
-import { openQuickLog } from './QuickLog'
+import { openQuickLog } from '../training/QuickLog'
 
 const DISMISS_KEY_PREFIX = 'weighin_nudge_dismissed:'
 

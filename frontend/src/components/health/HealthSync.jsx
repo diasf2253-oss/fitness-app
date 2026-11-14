@@ -12,9 +12,9 @@
  * the closest thing to an in-app sync button that the platform allows.
  */
 import { useEffect, useState } from 'react'
-import { apiFetch } from '../api'
-import { HEALTH_SHORTCUT_NAME, HEALTH_SHORTCUT_URL } from '../env'
-import { SYNC_COMPLETE_EVENT } from '../local/sync'
+import { apiFetch } from '../../lib/api'
+import { HEALTH_SHORTCUT_NAME, HEALTH_SHORTCUT_URL } from '../../lib/env'
+import { SYNC_COMPLETE_EVENT } from '../../local/sync'
 
 /**
  * iOS/iPadOS detection. The second clause catches modern iPadOS, which

@@ -8,9 +8,9 @@
  *   onClose()           — close without selecting
  */
 import React, { useEffect, useMemo, useState } from 'react'
-import { apiFetch } from '../api'
-import Modal from './Modal'
-import { Loading, ErrorBox } from './States'
+import { apiFetch } from '../../lib/api'
+import Modal from '../ui/Modal'
+import { Loading, ErrorBox } from '../ui/States'
 
 const MUSCLE_OPTIONS = [
   'chest', 'back', 'shoulders', 'biceps', 'triceps',

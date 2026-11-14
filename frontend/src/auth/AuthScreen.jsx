@@ -3,7 +3,7 @@
  * frame, the "Continue with Google" button, and the little "or" divider.
  */
 import React, { useState } from 'react'
-import { appRedirectUrl, supabase } from '../supabase'
+import { appRedirectUrl, supabase } from '../lib/supabase'
 
 /** Full-screen frame for signed-out / not-yet-let-in screens. */
 export default function AuthScreen({ title, subtitle, children }) {
@@ -23,7 +23,7 @@ export default function AuthScreen({ title, subtitle, children }) {
 
 /**
  * Sends the browser to Google; Supabase brings it back to the app signed in
- * (src/supabase.js picks the session up from the URL). `beforeRedirect` runs
+ * (src/lib/supabase.js picks the session up from the URL). `beforeRedirect` runs
  * first — Join uses it to remember the invite code across the round trip.
  */
 export function GoogleButton({ label = 'Continue with Google', beforeRedirect, onError }) {

@@ -975,7 +975,7 @@ hr {
 
 /* ---- STAGING badge ----
    Fixed pill shown whenever this frontend talks to the staging API
-   (see src/env.js). Above every overlay (rest timer is 150), but
+   (see src/lib/env.js). Above every overlay (rest timer is 150), but
    pointer-events off so it can never block a tap. */
 .staging-badge {
   position: fixed;

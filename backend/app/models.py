@@ -8,7 +8,7 @@ as TEXT in SQLite and as jsonb in Postgres — no code change needed.
 Sync (multi-device): entity tables carry a `uuid` (globally unique identity —
 integer PKs are device-local and collide across devices) and `updated_at`
 (last-write-wins merge). Date-keyed health tables merge on `date`, so they
-carry `updated_at` only. See app/sync.py.
+carry `updated_at` only. See app/services/sync.py.
 
 Multi-user: every data table below carries a `user_id` FK to `users.id`,
 scoping it to its owner. Two exceptions: `Exercise.user_id` is nullable —
@@ -79,7 +79,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     # The Supabase Auth user id (the access token's `sub`) this account signs
     # in as. NULL until the person's first sign-in through Supabase, when
-    # app/auth.py links it by verified email. See app/auth.py.
+    # app/core/auth.py links it by verified email. See app/core/auth.py.
     supabase_uid: Mapped[Optional[str]] = mapped_column(
         String(36), unique=True, index=True, nullable=True
     )
@@ -360,7 +360,7 @@ class RoutineNote(SyncMixin, Base):
         DateTime, default=datetime.utcnow, nullable=False
     )
     # Informational session references (no FK, so deleting a session is safe).
-    # Device-local integer ids — excluded from sync (see app/sync.py).
+    # Device-local integer ids — excluded from sync (see app/services/sync.py).
     created_in_session_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     surfaced_in_session_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     # Pending while NULL; set when consumed at the next session of the routine.

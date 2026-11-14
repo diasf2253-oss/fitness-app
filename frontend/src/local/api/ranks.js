@@ -1,5 +1,5 @@
 /**
- * Rank ladder, local-first — mirrors backend/app/ranks.py (engine) and
+ * Rank ladder, local-first — mirrors backend/app/services/training/ranks.py (engine) and
  * backend/app/routers/ranks.py (GET /api/ranks aggregation) over IndexedDB.
  *
  * 9 tiers (Wood → Olympian) × 3 divisions (III → I) with an LP readout.

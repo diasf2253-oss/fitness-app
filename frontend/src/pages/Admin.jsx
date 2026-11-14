@@ -4,9 +4,9 @@
  * App.jsx; every call below is also enforced server-side regardless.
  */
 import React, { useCallback, useEffect, useState } from 'react'
-import { apiFetch } from '../api'
-import { ErrorBox } from '../components/States'
-import { confirmAction } from '../components/ConfirmSheet'
+import { apiFetch } from '../lib/api'
+import { ErrorBox } from '../components/ui/States'
+import { confirmAction } from '../components/ui/ConfirmSheet'
 
 function fmtTimestamp(iso) {
   if (!iso) return '—'

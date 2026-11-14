@@ -6,7 +6,7 @@
  * Clicking a day calls onSelect(isoDate) so the parent can show details.
  */
 import React, { useEffect, useMemo, useState } from 'react'
-import { apiFetch } from '../api'
+import { apiFetch } from '../../lib/api'
 
 function isoOf(year, month, day) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`

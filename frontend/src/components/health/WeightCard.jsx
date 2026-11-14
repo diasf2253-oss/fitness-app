@@ -15,9 +15,9 @@ import React, { useMemo, useState } from 'react'
 import {
   Area, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import { AXIS, BONE, KHAKI, SAGE, TOOLTIP_STYLE, fmtDay } from '../chartTheme'
-import { NoHealthDataNote } from './States'
-import WidgetLabel from './WidgetLabel'
+import { AXIS, BONE, KHAKI, SAGE, TOOLTIP_STYLE, fmtDay } from '../../lib/chartTheme'
+import { NoHealthDataNote } from '../ui/States'
+import WidgetLabel from '../ui/WidgetLabel'
 
 export const RANGES = [7, 30, 90]
 const DEFAULT_RANGE = 30

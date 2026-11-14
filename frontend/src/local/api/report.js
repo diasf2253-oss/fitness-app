@@ -1,5 +1,5 @@
 /**
- * Weekly / biweekly report, local-first — mirrors backend app/report.py.
+ * Weekly / biweekly report, local-first — mirrors backend app/services/report.py.
  * Every section returns null when there's no data for the period, so the
  * report never breaks on missing Apple-Health-derived data.
  */

@@ -10,12 +10,12 @@ offline-first PWA backed by FastAPI.
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776ab.svg)
 ![React 18](https://img.shields.io/badge/react-18-61dafb.svg)
 
-![Dashboard on desktop](docs/screenshots/dashboard-desktop.png)
+![Dashboard on desktop](.github/assets/screenshots/dashboard-desktop.png)
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/workout-mobile.png" alt="Logging a workout on a phone" width="300"></td>
-    <td><img src="docs/screenshots/diet-mobile.png" alt="Adaptive diet target on a phone" width="300"></td>
+    <td><img src=".github/assets/screenshots/workout-mobile.png" alt="Logging a workout on a phone" width="300"></td>
+    <td><img src=".github/assets/screenshots/diet-mobile.png" alt="Adaptive diet target on a phone" width="300"></td>
   </tr>
 </table>
 
@@ -57,7 +57,7 @@ The design rules, in priority order:
 - Weekly volume targets per muscle group, and a streak that counts workouts,
   sport sessions, or 10k-step days.
 
-![Ranks: a strength tier per muscle group on the body map](docs/screenshots/ranks-desktop.png)
+![Ranks: a strength tier per muscle group on the body map](.github/assets/screenshots/ranks-desktop.png)
 
 **Body & diet**
 - **Adaptive calorie target**: starts from an anchor and moves one step per
@@ -71,13 +71,13 @@ The design rules, in priority order:
 **Health data**
 - **Apple Health via an iOS Shortcut.** A web app can't read HealthKit, so the
   phone pushes weight, steps and sleep daily — plus a one-tap *Sync now*
-  button. See [docs/HEALTH_INGEST_SHORTCUT.md](docs/HEALTH_INGEST_SHORTCUT.md).
+  button. See `notes/runbooks/HEALTH_INGEST_SHORTCUT.md`.
 - One-time history import from Apple Health's `export.zip`, streamed so
   multi-hundred-MB exports are fine; iPhone + Watch overlaps are de-duplicated.
 - Health Auto Export support for nutrition and micronutrients.
 - Freshness tracking per metric, with a stale-data banner.
 
-![Weight trend with 7-day average, steps and sleep](docs/screenshots/trends-desktop.png)
+![Weight trend with 7-day average, steps and sleep](.github/assets/screenshots/trends-desktop.png)
 
 **Insight**
 - Weekly review (this week vs last) and 90-day correlations between your
@@ -114,7 +114,7 @@ flowchart LR
   PWA, the desktop browser and the Shortcut all talk to one URL.
 - **Local-first sync.** In production builds the frontend's API calls are
   answered by an on-device twin of the backend (`frontend/src/local/`), and a
-  sync engine (`backend/app/sync.py`) merges rows — entities by `uuid`, health
+  sync engine (`backend/app/services/sync.py`) merges rows — entities by `uuid`, health
   days by date — last-write-wins, with manual entries beating synced ones.
   The ported math is tested in both languages to stay identical.
 - **Two kinds of auth.** People sign in through **Supabase Auth** (email +
@@ -122,9 +122,9 @@ flowchart LR
   the backend verifies it and then applies its own rules — invite code, admin
   approval, per-user data. The Health Shortcut can't run a sign-in, so it
   sends a per-user, rotatable `ingest_token` instead. Setup:
-  [docs/SUPABASE.md](docs/SUPABASE.md).
+  `notes/runbooks/SUPABASE.md`.
 - **One ingest core.** The Shortcut, Health Auto Export, and the `export.zip`
-  backfill all go through `app/health_ingest.py` — unit conversion, wake-date
+  backfill all go through `app/services/health/ingest.py` — unit conversion, wake-date
   sleep bucketing, per-source de-duplication, idempotent upserts.
 
 ## Tech stack
@@ -157,10 +157,10 @@ to `backend/.env`, runs migrations, creates the admin account and an invite
 code, and serves everything at **http://localhost:8000** (and on your Wi-Fi for
 a phone). The first run stops until you set `ADMIN_EMAIL` in `backend/.env`.
 Signing in needs a Supabase project: put its values in `backend/.env` and
-`frontend/.env.local` (see [docs/SUPABASE.md](docs/SUPABASE.md)), then create
+`frontend/.env.local` (see `notes/runbooks/SUPABASE.md`), then create
 your login with the admin email — it links to the admin account
 automatically. A friendly walkthrough lives in
-[docs/TUTORIAL.md](docs/TUTORIAL.md).
+`notes/runbooks/TUTORIAL.md`.
 
 ### Manual setup (for development)
 
@@ -171,8 +171,8 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env          # then set ADMIN_EMAIL + the SUPABASE_* values
 alembic upgrade head          # create / upgrade the database
-python -m app.seed_admin      # admin account + first invite code
-python -m app.seed            # exercise library, routines, default settings
+python -m app.cli.seed_admin      # admin account + first invite code
+python -m app.cli.seed            # exercise library, routines, default settings
 uvicorn app.main:app --reload
 
 # Frontend — http://localhost:5173 (proxies /api to :8000)
@@ -190,7 +190,7 @@ default to local-first. Force either per device with `?local=1` or
 
 Backend settings come from environment variables or `backend/.env`
 (see [`backend/.env.example`](backend/.env.example) and
-[`backend/app/config.py`](backend/app/config.py)).
+[`backend/app/core/config.py`](backend/app/core/config.py)).
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -198,7 +198,7 @@ Backend settings come from environment variables or `backend/.env`
 | `SUPABASE_URL` | — | The Supabase project (`https://<ref>.supabase.co`); empty ⇒ signed-in routes answer 503 |
 | `SUPABASE_PUBLISHABLE_KEY` | — | Publishable (or legacy anon) key — used to confirm an email is verified |
 | `SUPABASE_SECRET_KEY` | — | Optional, server-only: enables the admin's password *Reset link* |
-| `ADMIN_EMAIL` | — | The first admin account (`python -m app.seed_admin`); its owner signs in through Supabase with this email |
+| `ADMIN_EMAIL` | — | The first admin account (`python -m app.cli.seed_admin`); its owner signs in through Supabase with this email |
 | `AUTH_RATE_LIMIT_ENABLED` | `true` | Brute-force speed bump on signup (`/api/auth/join`); Supabase limits sign-in |
 | `APP_ENV` | `production` | Set `staging` to show the STAGING badge |
 | `CORS_ORIGINS` / `CORS_ALLOW_ORIGIN_REGEX` | — | Only for cross-origin frontends (e.g. Vercel previews) |
@@ -229,10 +229,10 @@ import. [CI](.github/workflows/ci.yml) runs both suites on every pull request.
 
 ## Deployment
 
-- **[docs/DEPLOY.md](docs/DEPLOY.md)**: Railway + Postgres (production), any
+- **`notes/runbooks/DEPLOY.md`**: Railway + Postgres (production), any
   Docker host, or your own Mac behind a Cloudflare Tunnel. The single
   `Dockerfile` runs migrations and seeding on every boot.
-- **[docs/STAGING.md](docs/STAGING.md)**: a fully separate staging stack,
+- **`notes/runbooks/STAGING.md`**: a fully separate staging stack,
   Vercel previews per branch, and the feature → staging → `main` promotion flow.
 
 ### Database backups
@@ -266,22 +266,31 @@ is no flag to bypass it. You need the Postgres client tools (`pg_dump`,
 backend/
   app/
     main.py            FastAPI app; mounts routers, serves the built frontend
-    routers/           one module per area (auth, sessions, diet, health, ranks, sync, …)
     models.py          SQLAlchemy models — every data table carries user_id
     schemas.py         Pydantic request/response models
-    health_ingest.py   shared Apple Health ingest core
-    sync.py            device ↔ server sync engine
-    calorie_adapt.py   adaptive calorie target
-    ranks.py           strength tiers
+    core/              plumbing: settings, database, Supabase sign-in, rate limit
+    routers/           thin HTTP endpoints, one module per feature
+    services/          business logic, no HTTP — health/, training/, diet/,
+                       plus sync, report, insights, user settings
+    cli/               run-once scripts (python -m app.cli.seed_admin, …)
   alembic/             database migrations
   tests/               pytest suite (incl. test_safety_net.py)
 frontend/
   src/pages/           screens (Dashboard, Workout, Diet, Ranks, …)
+  src/components/      ui/ (generic), health/, training/ building blocks
+  src/auth/            sign-in state + auth screens
+  src/lib/             API client, env detection, number/audio/chart helpers
   src/local/           offline-first twin of the API + sync client
   public/              PWA manifest, icons, service worker
-docs/                  deploy, staging, tutorial, Health Shortcut spec
+  dev/                 dev-only helpers (iPhone-frame preview)
 scripts/               backup / restore / staging seed
 ```
+
+The one architectural rule: **routers call services; routers never import
+other routers.** Shared logic always lives in `backend/app/services/`.
+
+Maintainer runbooks (deploy, staging, Supabase setup, the Health Shortcut
+recipe) live in a private, git-ignored `notes/` folder and are not published.
 
 ## Built with Claude Code
 
@@ -295,7 +304,7 @@ of the repo:
   `reviewer` agent.
 - [`.claude/commands/`](.claude/commands) — `/plan-feature` (write the spec
   first) and `/ship` (tests → review → pull request, only with a human's yes).
-- [`docs/DEV_HANDBOOK.md`](docs/DEV_HANDBOOK.md) — the Plan → Build → Verify →
+- `notes/runbooks/DEV_HANDBOOK.md` — the Plan → Build → Verify →
   Ship ritual and a plain-English glossary.
 
 ## Contributing & security

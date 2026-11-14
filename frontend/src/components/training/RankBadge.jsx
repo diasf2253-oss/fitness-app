@@ -2,13 +2,13 @@
  * Per-exercise rank accent + tier badge.
  *
  * Colours are NOT chosen here — they come from the rank engine
- * (backend/app/ranks.py TIER_COLORS / UNRANKED_COLOR, mirrored 1:1 in
+ * (backend/app/services/training/ranks.py TIER_COLORS / UNRANKED_COLOR, mirrored 1:1 in
  * src/local/api/ranks.js) via GET /api/ranks/exercises, so the body map and the
  * exercise cards can never drift apart. Tune the thresholds in ranks.py
  * (EXERCISE_BENCHMARK / COMMON_ANCHORS), not in this file.
  */
 import React, { useEffect, useState } from 'react'
-import { apiFetch } from '../api'
+import { apiFetch } from '../../lib/api'
 
 /**
  * {exercise_id: {ranked, tier, division, lp, color}} for every visible

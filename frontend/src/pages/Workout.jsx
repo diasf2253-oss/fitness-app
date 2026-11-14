@@ -11,16 +11,16 @@
  */
 import React, { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { apiFetch } from '../api'
-import ExercisePicker from '../components/ExercisePicker'
-import RestTimer from '../components/RestTimer'
-import { RankBadge, rankAccent, useExerciseRanks } from '../components/RankBadge'
-import { Loading, ErrorBox } from '../components/States'
-import { playWorkoutComplete } from '../audio'
-import { parseDecimal } from '../num'
-import WidgetLabel from '../components/WidgetLabel'
-import RankEmblem, { overallRank } from '../components/RankEmblem'
-import { confirmAction } from '../components/ConfirmSheet'
+import { apiFetch } from '../lib/api'
+import ExercisePicker from '../components/training/ExercisePicker'
+import RestTimer from '../components/training/RestTimer'
+import { RankBadge, rankAccent, useExerciseRanks } from '../components/training/RankBadge'
+import { Loading, ErrorBox } from '../components/ui/States'
+import { playWorkoutComplete } from '../lib/audio'
+import { parseDecimal } from '../lib/num'
+import WidgetLabel from '../components/ui/WidgetLabel'
+import RankEmblem, { overallRank } from '../components/training/RankEmblem'
+import { confirmAction } from '../components/ui/ConfirmSheet'
 
 // Next-session notes (surfaced from last time) + composer for the next session.
 function SessionNotes({ session }) {

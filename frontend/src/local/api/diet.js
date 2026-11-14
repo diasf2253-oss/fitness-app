@@ -1,6 +1,6 @@
 /**
  * Diet, local-first — mirrors backend app/diet.py + activities.py and the
- * pure engines app/calorie_adapt.py, app/nutrition_rda.py, app/activity_burn.py.
+ * pure engines app/services/diet/calorie_adapt.py, app/services/diet/nutrition_rda.py, app/services/diet/activity_burn.py.
  *
  * The calorie target is an anchored weekly-trend step model: it moves ±one
  * step once per completed ISO week toward the signed weekly goal (− cut ·

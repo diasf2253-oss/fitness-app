@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom'
-import { apiFetch } from './api'
-import { AuthProvider, useAuth } from './auth'
-import { ConfirmHost } from './components/ConfirmSheet'
-import { QuickLogHost } from './components/QuickLog'
+import { apiFetch } from './lib/api'
+import { AuthProvider, useAuth } from './auth/auth'
+import { ConfirmHost } from './components/ui/ConfirmSheet'
+import { QuickLogHost } from './components/training/QuickLog'
 import Dashboard from './pages/Dashboard'
 import Workout from './pages/Workout'
 import Routines from './pages/Routines'
@@ -26,8 +26,8 @@ import AccountStatus from './pages/AccountStatus'
 import Admin from './pages/Admin'
 import Onboarding from './components/Onboarding'
 import StagingBadge from './components/StagingBadge'
-import HealthSyncBanner from './components/HealthSyncBanner'
-import { freshnessLabel, useSyncStatus } from './components/HealthSync'
+import HealthSyncBanner from './components/health/HealthSyncBanner'
+import { freshnessLabel, useSyncStatus } from './components/health/HealthSync'
 
 // Crisp stroke icons (inherit currentColor → active state recolors for free)
 const Icon = {
@@ -290,7 +290,7 @@ function Gate({ children }) {
   )
 }
 
-/** Picks the screen from src/auth.jsx's status — see the list there. */
+/** Picks the screen from src/auth/auth.jsx's status — see the list there. */
 function AppShell() {
   const { status, user } = useAuth()
   switch (status) {

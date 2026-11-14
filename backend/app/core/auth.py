@@ -6,7 +6,7 @@ Two layers, kept deliberately separate:
   1. *Who is calling?* Supabase answers that. The browser signs in with
      Supabase (email + password or Google) and sends the resulting access
      token as `Authorization: Bearer <token>` on every request;
-     app/supabase_auth.py verifies it locally against the project's public
+     app/core/supabase_auth.py verifies it locally against the project's public
      keys.
 
   2. *Are they allowed in?* This app answers that, with its own `users`

@@ -5,10 +5,10 @@
  * "No data for this period" rather than breaking when data is missing.
  */
 import React, { useEffect, useState } from 'react'
-import { apiFetch } from '../api'
-import { Loading, ErrorBox, EmptyNote, NoHealthDataNote } from '../components/States'
-import PageHero from '../components/PageHero'
-import WidgetLabel from '../components/WidgetLabel'
+import { apiFetch } from '../lib/api'
+import { Loading, ErrorBox, EmptyNote, NoHealthDataNote } from '../components/ui/States'
+import PageHero from '../components/ui/PageHero'
+import WidgetLabel from '../components/ui/WidgetLabel'
 import { reportMarkdown } from '../local/api/report'
 
 function Section({ title, aside, children }) {

@@ -5,7 +5,7 @@ import App from './App'
 import './index.css'
 import { isLocalFirst } from './local/mode'
 import { syncNow } from './local/sync'
-import { installUnlockListeners, playAppOpen, playTap, preload } from './audio'
+import { installUnlockListeners, playAppOpen, playTap, preload } from './lib/audio'
 
 // Link-based onboarding via URL params, then strip them so they aren't left
 // in the address bar or history:

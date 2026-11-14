@@ -14,9 +14,9 @@
  */
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { apiFetch } from '../api'
-import { parseDecimal } from '../num'
-import Modal from './Modal'
+import { apiFetch } from '../../lib/api'
+import { parseDecimal } from '../../lib/num'
+import Modal from '../ui/Modal'
 
 export const HEALTH_DATA_CHANGED = 'health-data-changed'
 const METRICS = [

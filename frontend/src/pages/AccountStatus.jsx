@@ -1,11 +1,11 @@
 /**
  * The "you're signed in, but not in the app (yet)" screens: waiting for
  * approval, account disabled, server unreachable, and a build with no
- * Supabase settings. Which one is picked by src/auth.jsx's `status`.
+ * Supabase settings. Which one is picked by src/auth/auth.jsx's `status`.
  */
 import React, { useState } from 'react'
-import { useAuth } from '../auth'
-import AuthScreen from '../components/AuthScreen'
+import { useAuth } from '../auth/auth'
+import AuthScreen from '../auth/AuthScreen'
 
 const COPY = {
   pending: {

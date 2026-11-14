@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * The small rules src/auth.jsx and src/supabase.js lean on: which screen an
+ * The small rules src/auth/auth.jsx and src/lib/supabase.js lean on: which screen an
  * account status maps to, the offline copy of the account (never holding the
  * ingest token, never handed to a different person), the invite-code stash
  * that survives the email-confirmation round trip, Supabase errors in plain
@@ -8,7 +8,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('./supabase', async (importOriginal) => {
+vi.mock('../lib/supabase', async (importOriginal) => {
   const real = await importOriginal()
   return { ...real, supabase: null, landing: { recovery: false, error: null } }
 })
@@ -17,7 +17,7 @@ import {
   clearCachedAccount, clearPendingJoin, friendlyAuthError, readCachedAccount,
   readPendingJoin, saveCachedAccount, stashPendingJoin, statusFromAccount,
 } from './auth'
-import { readLandingFragment } from './supabase'
+import { readLandingFragment } from '../lib/supabase'
 
 beforeEach(() => { localStorage.clear() })
 

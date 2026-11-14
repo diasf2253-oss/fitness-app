@@ -11,10 +11,10 @@
  */
 import React, { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { friendlyAuthError, stashPendingJoin } from '../auth'
-import AuthScreen, { GoogleButton, OrDivider } from '../components/AuthScreen'
-import { ErrorBox } from '../components/States'
-import { appRedirectUrl, supabase } from '../supabase'
+import { friendlyAuthError, stashPendingJoin } from '../auth/auth'
+import AuthScreen, { GoogleButton, OrDivider } from '../auth/AuthScreen'
+import { ErrorBox } from '../components/ui/States'
+import { appRedirectUrl, supabase } from '../lib/supabase'
 
 export default function Join() {
   const [params] = useSearchParams()

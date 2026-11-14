@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { isStagingBuild, probeStagingApi } from '../env'
+import { isStagingBuild, probeStagingApi } from '../lib/env'
 
 /**
  * Fixed "STAGING" pill, shown whenever this frontend talks to the staging

@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     # Supabase Auth: Supabase runs sign-in (email + password, Google) and
-    # hands the browser a signed access token; app/supabase_auth.py checks
+    # hands the browser a signed access token; app/core/supabase_auth.py checks
     # that token on every request. This app still decides who gets in
     # (invite code → pending → admin approval) via its own users table.
     #   SUPABASE_URL              https://<project-ref>.supabase.co
@@ -35,7 +35,7 @@ class Settings(BaseSettings):
         return f"{self.supabase_url}/auth/v1"
 
     # Brute-force speed bump on the signup endpoint (/join), enforced in
-    # app/ratelimit.py. Password sign-in itself is rate-limited by Supabase.
+    # app/core/ratelimit.py. Password sign-in itself is rate-limited by Supabase.
     # Disabled in tests (conftest sets it false); test_rate_limit.py flips it
     # back on to exercise it.
     auth_rate_limit_enabled: bool = True
@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     # The first admin account (python -m app.cli.seed_admin) and the migration
     # backfill that attaches all pre-multi-user data to it. There is no admin
     # password here any more: the admin signs in through Supabase with this
-    # email, and app/auth.py links the two on first sign-in.
+    # email, and app/core/auth.py links the two on first sign-in.
     # Never hardcode it — env vars only.
     admin_email: str = ""
 

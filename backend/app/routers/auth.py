@@ -2,7 +2,7 @@
 Auth endpoints for the invite-only friends beta (Supabase Auth edition).
 
 Signing in, signing out, password changes and resets all happen in the
-browser against Supabase (see frontend/src/auth.jsx) — there are no login or
+browser against Supabase (see frontend/src/auth/auth.jsx) — there are no login or
 password endpoints here any more. What's left is this app's own say over who
 gets in:
 

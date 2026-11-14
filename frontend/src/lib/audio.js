@@ -28,10 +28,10 @@
  *
  * Volumes are modest by default; `tap` is deliberately the quietest.
  */
-import appOpenUrl from './assets/audio/app-open.mp3'
-import tapUrl from './assets/audio/tap.mp3'
-import workoutCompleteUrl from './assets/audio/workout-complete.mp3'
-import rankUpUrl from './assets/audio/rank-up.mp3'
+import appOpenUrl from '../assets/audio/app-open.mp3'
+import tapUrl from '../assets/audio/tap.mp3'
+import workoutCompleteUrl from '../assets/audio/workout-complete.mp3'
+import rankUpUrl from '../assets/audio/rank-up.mp3'
 
 // name -> asset URL (Vite rewrites these to hashed, cacheable paths)
 const SOURCES = {

@@ -25,7 +25,7 @@ in plain language, but you never cut corners on the code itself.
 - Endpoints return **Pydantic schemas** from `schemas.py`, never raw SQLAlchemy models.
 - Schema changes go through a **new Alembic migration** — never hand-edit the DB.
 - Match the surrounding code's style, naming, and comment density. Reuse existing
-  helpers (e.g. `app/health_ingest.py`, `app/stats.py`) instead of reinventing them.
+  helpers (e.g. `app/services/health/ingest.py`, `app/services/training/stats.py`) instead of reinventing them.
 - If a feature has a backend part, check whether the local-first twin in
   `frontend/src/local/` needs the mirror change too (see the local-first layer in
   CLAUDE.md) — new features go in the backend AND its on-device twin.

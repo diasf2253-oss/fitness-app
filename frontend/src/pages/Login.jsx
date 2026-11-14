@@ -1,16 +1,16 @@
 /**
  * Sign-in screen — shown whenever nobody is signed in. Signing in happens
  * against Supabase (email + password, or Google); once it succeeds,
- * src/auth.jsx hears about it and asks the backend who you are. "Forgot
+ * src/auth/auth.jsx hears about it and asks the backend who you are. "Forgot
  * password?" has Supabase email a reset link that brings you back to the
  * app's SetNewPassword screen.
  */
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { friendlyAuthError } from '../auth'
-import AuthScreen, { GoogleButton, OrDivider } from '../components/AuthScreen'
-import { ErrorBox } from '../components/States'
-import { appRedirectUrl, landing, supabase } from '../supabase'
+import { friendlyAuthError } from '../auth/auth'
+import AuthScreen, { GoogleButton, OrDivider } from '../auth/AuthScreen'
+import { ErrorBox } from '../components/ui/States'
+import { appRedirectUrl, landing, supabase } from '../lib/supabase'
 
 export default function Login() {
   const [mode, setMode] = useState('signin')   // 'signin' | 'forgot'

@@ -5,7 +5,7 @@
  * sync.
  *
  * Auth: the signed-in user's Supabase access token as a bearer header,
- * exactly like the rest of the app — see src/api.js and src/supabase.js.
+ * exactly like the rest of the app — see src/lib/api.js and src/lib/supabase.js.
  * The probe step doubles as the reachability check AND the "who am I" check
  * (GET /api/auth/me), since sync can't proceed without an active account.
  *
@@ -15,7 +15,7 @@
  * any local unsynced changes for the previous account. Acceptable because
  * each person installs the PWA on their own device.
  *
- * Protocol (see backend/app/routers/sync.py + app/sync.py):
+ * Protocol (see backend/app/routers/sync.py + app/services/sync.py):
  *   1. GET  /api/auth/me — reachability + identity probe (short timeout)
  *   2. POST /api/sync/push     — send locally-dirty rows; server merges
  *      last-write-wins with health source precedence
@@ -23,14 +23,14 @@
  *      server-side; merge into IndexedDB with the same rules
  *   4. Remember the server_time for the next incremental pull
  *
- * Tables mirror app/sync.py SYNC_TABLES: parents before children so the
+ * Tables mirror app/services/sync.py SYNC_TABLES: parents before children so the
  * server can resolve FK uuids on push, and rows land locally in an order
  * that keeps references intact.
  */
 import { db, getMeta, setMeta } from './db'
 import { writeBlocked } from './weights'
-import { apiUrl } from '../env'
-import { getAccessToken } from '../supabase'
+import { apiUrl } from '../lib/env'
+import { getAccessToken } from '../lib/supabase'
 
 const PROBE_TIMEOUT_MS = 3000
 

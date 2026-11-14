@@ -1,5 +1,5 @@
 /**
- * Workout generator, local-first — mirrors backend app/generator.py +
+ * Workout generator, local-first — mirrors backend app/services/training/generator.py +
  * routers/generator.py. Pure program-building over IndexedDB; only PRIMARY
  * muscle groups count.
  */

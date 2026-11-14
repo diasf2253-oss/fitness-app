@@ -6,10 +6,10 @@
  * the backend, never just here.
  */
 import React, { useState } from 'react'
-import { apiFetch } from '../api'
-import { clearPendingJoin, readPendingJoin, useAuth } from '../auth'
-import AuthScreen from '../components/AuthScreen'
-import { ErrorBox } from '../components/States'
+import { apiFetch } from '../lib/api'
+import { clearPendingJoin, readPendingJoin, useAuth } from '../auth/auth'
+import AuthScreen from '../auth/AuthScreen'
+import { ErrorBox } from '../components/ui/States'
 
 function codeFromUrl() {
   try { return new URLSearchParams(window.location.search).get('code') || '' } catch { return '' }

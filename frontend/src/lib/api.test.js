@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let accessToken = null
 vi.mock('./supabase', () => ({ getAccessToken: async () => accessToken }))
-vi.mock('./local/mode', () => ({ isLocalFirst: () => false }))
+vi.mock('../local/mode', () => ({ isLocalFirst: () => false }))
 
 import { apiFetch, apiUpload } from './api'
 

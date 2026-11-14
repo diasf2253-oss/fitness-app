@@ -5,7 +5,7 @@
  * Meets / Above RDA).
  */
 import React from 'react'
-import WidgetLabel from './WidgetLabel'
+import WidgetLabel from '../ui/WidgetLabel'
 
 // Calm-palette mapping of the four RDA bands.
 const STATUS = {

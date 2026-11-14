@@ -14,8 +14,8 @@
  * track and are left out of the average (missing ≠ zero).
  */
 import React, { useMemo, useState } from 'react'
-import { fmtDay } from '../chartTheme'
-import WidgetLabel from './WidgetLabel'
+import { fmtDay } from '../../lib/chartTheme'
+import WidgetLabel from '../ui/WidgetLabel'
 
 export const RANGES = [30, 60, 90]
 const DEFAULT_RANGE = 30

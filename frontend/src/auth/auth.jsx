@@ -2,7 +2,7 @@
  * Auth state — two questions, answered in order:
  *
  *   1. Is someone signed in with Supabase? supabase-js keeps the session on
- *      this device and renews it (see src/supabase.js).
+ *      this device and renews it (see src/lib/supabase.js).
  *   2. What does this app's backend say about them? GET /api/auth/me returns
  *      the account and its status — or 403 "no_account" (signed in, but no
  *      invite code redeemed yet), or 401 (the token is no good).
@@ -24,8 +24,8 @@
  * whose data lives on the phone anyway — when there's no network.
  */
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { apiFetch } from './api'
-import { landing, supabase } from './supabase'
+import { apiFetch } from '../lib/api'
+import { landing, supabase } from '../lib/supabase'
 
 const AuthContext = createContext(null)
 

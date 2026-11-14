@@ -5,10 +5,10 @@
  * and then carries on into the app.
  */
 import React, { useState } from 'react'
-import { friendlyAuthError, useAuth } from '../auth'
-import AuthScreen from '../components/AuthScreen'
-import { ErrorBox } from '../components/States'
-import { supabase } from '../supabase'
+import { friendlyAuthError, useAuth } from '../auth/auth'
+import AuthScreen from '../auth/AuthScreen'
+import { ErrorBox } from '../components/ui/States'
+import { supabase } from '../lib/supabase'
 
 export default function SetNewPassword() {
   const { finishRecovery, logout } = useAuth()

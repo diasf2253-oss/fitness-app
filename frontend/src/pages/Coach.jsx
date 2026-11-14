@@ -7,8 +7,8 @@
  */
 import React, { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { apiFetch, apiStream } from '../api'
-import { Loading, ErrorBox } from '../components/States'
+import { apiFetch, apiStream } from '../lib/api'
+import { Loading, ErrorBox } from '../components/ui/States'
 
 function localTodayIso() {
   const d = new Date()

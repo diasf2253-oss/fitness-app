@@ -9,7 +9,7 @@ reach the laptop on the LAN — on app open and via a manual Sync button:
   POST /api/sync/push          — device's changes, merged last-write-wins
 
 The server is stateless about peers: each device remembers its own last
-sync time and passes it as `since`. Merge semantics live in app/sync.py.
+sync time and passes it as `since`. Merge semantics live in app/services/sync.py.
 """
 import logging
 from datetime import datetime

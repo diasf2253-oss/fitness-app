@@ -4,7 +4,7 @@
  */
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { openQuickLog } from './QuickLog'
+import { openQuickLog } from '../training/QuickLog'
 
 export function Loading({ label = 'Loading…' }) {
   return <div className="loading">{label}</div>

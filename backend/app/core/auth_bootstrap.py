@@ -5,7 +5,7 @@ account) and the idempotent `python -m app.cli.seed_admin` CLI.
 
 There's no admin password: sign-in runs through Supabase Auth. The admin
 account is created here from ADMIN_EMAIL alone, and the first time someone
-signs in through Supabase with that (verified) email, app/auth.py links the
+signs in through Supabase with that (verified) email, app/core/auth.py links the
 two — that's the moment the admin can actually log in.
 """
 from sqlalchemy.orm import Session as DBSession

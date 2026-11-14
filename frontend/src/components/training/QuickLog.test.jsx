@@ -8,9 +8,9 @@ import React from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../api', () => ({ apiFetch: vi.fn() }))
+vi.mock('../../lib/api', () => ({ apiFetch: vi.fn() }))
 
-import { apiFetch } from '../api'
+import { apiFetch } from '../../lib/api'
 import { HEALTH_DATA_CHANGED, QuickLogForm } from './QuickLog'
 
 function localIso(offset = 0) {

@@ -1,6 +1,6 @@
 /**
  * Weekly (ISO-week) weight averaging, local-first — mirrors backend
- * app/weight_trend.py. Single source of truth for the weekly-average chart
+ * app/services/diet/weight_trend.py. Single source of truth for the weekly-average chart
  * and the adaptive-calorie engine. Weeks with no entry are omitted (gaps are
  * never interpolated); the week containing `today` is flagged provisional.
  */

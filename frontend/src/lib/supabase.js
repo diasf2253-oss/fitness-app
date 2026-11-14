@@ -5,11 +5,11 @@
  * Google button, "forgot password" emails, keeping you signed in (it saves
  * the session in this device's localStorage and quietly renews the
  * short-lived access token). The app's own backend still decides who is
- * *allowed in* — invite code, admin approval — see src/auth.jsx.
+ * *allowed in* — invite code, admin approval — see src/auth/auth.jsx.
  *
  * Every API request carries the current access token as
- * `Authorization: Bearer <token>` (src/api.js, src/local/sync.js); the
- * backend verifies it (backend/app/supabase_auth.py).
+ * `Authorization: Bearer <token>` (src/lib/api.js, src/local/sync.js); the
+ * backend verifies it (backend/app/core/supabase_auth.py).
  *
  * Configured at build time with two Vite env vars — both public by design
  * (the publishable key only identifies the project; it unlocks nothing):

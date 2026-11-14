@@ -9,8 +9,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { apiFetch } from '../api'
-import { Loading, ErrorBox, EmptyState } from '../components/States'
+import { apiFetch } from '../lib/api'
+import { Loading, ErrorBox, EmptyState } from '../components/ui/States'
 
 export default function ExerciseDetail() {
   const { id } = useParams()

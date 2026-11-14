@@ -19,11 +19,11 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { apiFetch } from '../api'
-import { friendlyAuthError, useAuth } from '../auth'
-import { supabase } from '../supabase'
-import { isMuted, setMuted, subscribeMuted, playTap } from '../audio'
-import { confirmAction } from '../components/ConfirmSheet'
+import { apiFetch } from '../lib/api'
+import { friendlyAuthError, useAuth } from '../auth/auth'
+import { supabase } from '../lib/supabase'
+import { isMuted, setMuted, subscribeMuted, playTap } from '../lib/audio'
+import { confirmAction } from '../components/ui/ConfirmSheet'
 
 /* ------------------------------------------------------------------ */
 /* Building blocks                                                     */
