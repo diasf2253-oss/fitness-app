@@ -23,6 +23,9 @@ engine = create_engine(
     settings.database_url,
     connect_args=connect_args,
     echo=False,  # set True to log every SQL statement while debugging
+    # Serverless hosts (Vercel) freeze and thaw instances between requests, so a
+    # pooled connection can be dead by the time it's reused. Ping before use.
+    pool_pre_ping=True,
 )
 
 # Session factory — each request gets its own session via the dependency below
