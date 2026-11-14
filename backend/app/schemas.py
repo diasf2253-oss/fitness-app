@@ -3,7 +3,7 @@ Pydantic v2 schemas for request/response validation.
 We never return raw SQLAlchemy objects from API endpoints — always use these.
 """
 from datetime import date, datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -820,6 +820,12 @@ class JoinRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
 
 
+class JoinOut(BaseModel):
+    """The account's status after joining: 'pending' for a new account, or
+    the existing account's status when this login was already linked."""
+    status: str
+
+
 class UpdateMeRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
 
@@ -850,8 +856,11 @@ class AdminUserOut(OrmBase):
 
 
 class UserStatusUpdate(BaseModel):
-    status: Optional[str] = None   # 'active' | 'disabled'
-    role: Optional[str] = None     # 'admin' | 'user'
+    # Only values the auth layer understands — a typo would otherwise be
+    # stored and silently lock the person out (require_auth treats anything
+    # but 'active' as disabled).
+    status: Optional[Literal["active", "disabled"]] = None
+    role: Optional[Literal["admin", "user"]] = None
 
 
 class ResetLinkOut(BaseModel):

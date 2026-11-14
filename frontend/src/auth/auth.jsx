@@ -16,6 +16,8 @@
  *   'recovery'     arrived from a password-reset link — SetNewPassword
  *   'unreachable'  signed in, but the server can't be reached and there's no
  *                  saved copy of the account on this device to fall back on
+ *   'server_error' same, but the server answered with an error (5xx) — a
+ *                  problem on our side, not the person's connection
  *   'unconfigured' this build has no Supabase settings
  *   'ready'        the app
  *
@@ -180,7 +182,10 @@ export function AuthProvider({ children }) {
       // Network / server trouble: carry on with this person's saved account.
       const cached = readCachedAccount(current.user?.id)
       if (cached) { show(statusFromAccount(cached), cached); return cached }
-      show('unreachable')
+      // An HTTP status means the server *did* answer — with an error on its
+      // side (e.g. a missed database migration). Don't send people off to
+      // check their Wi-Fi for that.
+      show(err.status >= 500 ? 'server_error' : 'unreachable')
       return null
     }
   }, [])

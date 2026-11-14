@@ -1,5 +1,7 @@
 """
 Admin invite codes: create, list, switch off/on. Admin-only throughout.
+Also the admin's own-account guards (can't reject yourself) and the
+status/role value check on the user-update endpoint.
 That sign-up refuses a switched-off or used-up code is covered in
 test_supabase_auth.py (test_used_up_or_inactive_codes_are_refused).
 """
@@ -54,3 +56,16 @@ def test_regular_users_cannot_touch_invite_codes(auth_client):
     assert auth_client.get("/api/admin/invite-codes").status_code == 403
     assert auth_client.post("/api/admin/invite-codes", json={}).status_code == 403
     assert auth_client.patch("/api/admin/invite-codes/1", json={"active": False}).status_code == 403
+
+
+def test_admin_cannot_reject_themselves(admin_client):
+    me = admin_client.get("/api/auth/me").json()
+    r = admin_client.post(f"/api/admin/users/{me['id']}/reject")
+    assert r.status_code == 400
+    assert admin_client.get("/api/auth/me").json()["status"] == "active"
+
+
+def test_status_and_role_must_be_known_values(admin_client):
+    me = admin_client.get("/api/auth/me").json()
+    assert admin_client.patch(f"/api/admin/users/{me['id']}", json={"status": "Active"}).status_code == 422
+    assert admin_client.patch(f"/api/admin/users/{me['id']}", json={"role": "superuser"}).status_code == 422

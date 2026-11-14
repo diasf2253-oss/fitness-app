@@ -104,6 +104,21 @@ SET password_hash        = (SELECT pw_hash FROM _anon),
     ingest_token         = replace(gen_random_uuid()::text, '-', '')
                         || replace(gen_random_uuid()::text, '-', '');
 
+-- Supabase login links: staging signs in through its OWN Supabase project,
+-- so production's login ids mean nothing here — and while they're set, no
+-- staging login can link to these accounts (linking only fills an empty
+-- supabase_uid). Clear them; testers create staging logins and link by
+-- email. Conditional because a dump taken before the Supabase migration
+-- (d3f5a7b9c1e2) has no such column yet — then there's nothing to clear.
+DO $uid$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'users' AND column_name = 'supabase_uid') THEN
+    UPDATE users SET supabase_uid = NULL;
+  END IF;
+END
+$uid$;
+
 -- Live prod session ids would otherwise log you in on staging.
 DELETE FROM auth_session;
 

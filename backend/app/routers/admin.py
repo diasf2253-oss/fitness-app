@@ -41,12 +41,19 @@ def approve_user(user_id: int, db: DBSession = Depends(get_db), _: User = Depend
 
 
 @router.post("/users/{user_id}/reject", response_model=AdminUserOut)
-def reject_user(user_id: int, db: DBSession = Depends(get_db), _: User = Depends(require_admin)):
+def reject_user(
+    user_id: int, db: DBSession = Depends(get_db), current_admin: User = Depends(require_admin)
+):
     """Soft-disable, not delete — preserves the invite code's use count and
     the account as an audit trail. Same effect as later disabling them."""
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    if user.id == current_admin.id:
+        # Same guard as update_user: rejecting yourself would lock the only
+        # way back in (the Admin page) behind account_disabled.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Cannot demote or disable your own admin account")
     user.status = "disabled"
     db.commit()
     db.refresh(user)

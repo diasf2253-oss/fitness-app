@@ -22,6 +22,11 @@ const COPY = {
     body: "You're signed in, but the app's server didn't answer. Check your connection and try again.",
     retry: 'Try again',
   },
+  server_error: {
+    title: 'Something went wrong on our side',
+    body: "You're signed in, but the app's server hit an error. It's not your connection — try again in a moment, and if it keeps happening, tell whoever invited you.",
+    retry: 'Try again',
+  },
   unconfigured: {
     title: "Login isn't set up",
     body: 'This build has no Supabase settings (VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY). See notes/runbooks/SUPABASE.md.',

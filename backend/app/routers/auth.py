@@ -14,6 +14,7 @@ gets in:
   - POST /ingest-token/rotate — new Apple Health ingest credential.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import or_, update
 from sqlalchemy.orm import Session as DBSession
 
 from app.core.auth import (
@@ -27,12 +28,12 @@ from app.core.auth import (
 from app.core.db import get_db
 from app.core.ratelimit import rate_limit
 from app.models import InviteCode, User, _new_ingest_token
-from app.schemas import JoinRequest, UpdateMeRequest, UserMeOut
+from app.schemas import JoinOut, JoinRequest, UpdateMeRequest, UserMeOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-@router.post("/join", dependencies=[Depends(rate_limit(5, scope="join"))])
+@router.post("/join", response_model=JoinOut, dependencies=[Depends(rate_limit(5, scope="join"))])
 def join(
     body: JoinRequest,
     signed_in: SignedIn = Depends(require_signed_in),
@@ -52,7 +53,7 @@ def join(
 
     existing = db.query(User).filter(User.supabase_uid == identity.uid).first()
     if existing is not None:
-        return {"status": existing.status}
+        return JoinOut(status=existing.status)
 
     if not identity.email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
@@ -68,7 +69,7 @@ def join(
         if linked is None:
             raise HTTPException(status.HTTP_403_FORBIDDEN,
                                 "Confirm your email address first, then try again.")
-        return {"status": linked.status}
+        return JoinOut(status=linked.status)
 
     code = (
         db.query(InviteCode)
@@ -88,15 +89,30 @@ def join(
         raise HTTPException(status.HTTP_403_FORBIDDEN,
                             "Confirm your email address first, then try again.")
 
+    # Claim one use atomically: the database re-checks the limit as it adds
+    # one, so two people joining at the same instant can't both squeeze
+    # through the last use of a code (a plain `code.uses += 1` could).
+    claimed = db.execute(
+        update(InviteCode)
+        .where(
+            InviteCode.id == code.id,
+            InviteCode.active.is_(True),
+            or_(InviteCode.max_uses.is_(None), InviteCode.uses < InviteCode.max_uses),
+        )
+        .values(uses=InviteCode.uses + 1)
+    ).rowcount
+    if claimed != 1:
+        db.rollback()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired invite code")
+
     db.add(User(
         email=identity.email,
         supabase_uid=identity.uid,
         name=name,
         status="pending",
     ))
-    code.uses += 1
     db.commit()
-    return {"status": "pending"}
+    return JoinOut(status="pending")
 
 
 @router.get("/me", response_model=UserMeOut)

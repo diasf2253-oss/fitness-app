@@ -287,6 +287,27 @@ class TestJoin:
         for code in ("full", "off"):
             assert client.post("/api/auth/join", json={"code": code, "name": "X"}).status_code == 400
 
+    def test_last_use_taken_mid_join_is_refused(self, client, monkeypatch):
+        """Two people race for the last use of a code: the one whose claim
+        lands second gets a clean 'invalid' and no account (the use count is
+        re-checked by the database, not trusted from an earlier read)."""
+        import app.routers.auth as auth_router
+        code = _invite("last-one", max_uses=1)
+
+        def rival_takes_it_first(signed_in):
+            db = TestingSession()
+            db.query(InviteCode).filter(InviteCode.code == code).one().uses = 1
+            db.commit()
+            db.close()
+            return True
+        monkeypatch.setattr(auth_router, "email_confirmed", rival_takes_it_first)
+
+        sign_in(client, "second@example.com")
+        r = client.post("/api/auth/join", json={"code": code, "name": "Second"})
+        assert r.status_code == 400
+        assert _user("second@example.com") is None
+        assert _invite_uses(code) == 1
+
     def test_unverified_email_cannot_join(self, client, fake_supabase):
         code = _invite()
         fake_supabase.email_confirmed = False

@@ -301,6 +301,7 @@ function AppShell() {
     case 'pending':
     case 'disabled':
     case 'unreachable':
+    case 'server_error':
     case 'unconfigured': return <Gate><AccountStatus kind={status} /></Gate>
     default:             return <AnonApp />   // 'signed_out'
   }
