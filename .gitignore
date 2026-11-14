@@ -36,3 +36,6 @@ graphify-out/
 # and may contain secrets/DBs inside worktrees)
 .claude/
 memory/
+
+# Vite local overrides (dev auto-login credentials etc.)
+.env.*.local

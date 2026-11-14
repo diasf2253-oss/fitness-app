@@ -10,7 +10,7 @@
  * tab mid-workout is safe — on reload we fetch the in-progress session back.
  */
 import React, { useCallback, useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { apiFetch } from '../api'
 import ExercisePicker from '../components/ExercisePicker'
 import RestTimer from '../components/RestTimer'
@@ -19,6 +19,8 @@ import { Loading, ErrorBox } from '../components/States'
 import { playWorkoutComplete } from '../audio'
 import { parseDecimal } from '../num'
 import WidgetLabel from '../components/WidgetLabel'
+import RankEmblem, { overallRank } from '../components/RankEmblem'
+import { confirmAction } from '../components/ConfirmSheet'
 
 // Next-session notes (surfaced from last time) + composer for the next session.
 function SessionNotes({ session }) {
@@ -120,6 +122,31 @@ export default function Workout() {
 // Start screen
 // ---------------------------------------------------------------------------
 
+/** Overall-rank button at the top of the Workout tab → opens the Ranks page. */
+function RankButton() {
+  const [overall, setOverall] = useState(undefined)   // undefined = loading
+  useEffect(() => {
+    let alive = true
+    apiFetch('/api/ranks')
+      .then(d => { if (alive) setOverall(overallRank(d)) })
+      .catch(() => { if (alive) setOverall(null) })
+    return () => { alive = false }
+  }, [])
+  if (overall === undefined) return <div className="rank-button rank-button-skeleton" aria-hidden="true" />
+  return (
+    <Link to="/ranks" className="rank-button" aria-label={`Your rank: ${overall ? `${overall.tier} ${overall.division}` : 'unranked'}. Open ranks.`}>
+      <RankEmblem tier={overall?.tier} division={overall?.division} color={overall?.color} size={52} />
+      <span className="rank-button-text">
+        <WidgetLabel>your rank</WidgetLabel>
+        <span className="rank-button-tier" style={{ color: overall?.color }}>
+          {overall ? `${overall.tier} ${overall.division}` : 'Unranked'}
+        </span>
+      </span>
+      <span className="rank-button-cta">Ranks ›</span>
+    </Link>
+  )
+}
+
 function StartScreen({ onStarted, setError, error }) {
   const [routines, setRoutines] = useState([])
   const [loading, setLoading] = useState(true)
@@ -147,6 +174,8 @@ function StartScreen({ onStarted, setError, error }) {
     <div className="page">
       <h1>Start a <em>workout</em></h1>
       <ErrorBox error={error} />
+
+      <RankButton />
 
       <button onClick={() => start(null)} style={{ width: '100%', marginBottom: '1rem' }}>
         + Start empty workout
@@ -279,7 +308,10 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
   }
 
   async function removeExercise(seId) {
-    if (!confirm('Remove this exercise from the workout?')) return
+    if (!(await confirmAction({
+      title: 'Remove this exercise?', message: 'Its sets in this workout will be removed.',
+      confirmLabel: 'Remove', danger: true,
+    }))) return
     try {
       await apiFetch(`/api/sessions/${session.id}/exercises/${seId}`, { method: 'DELETE' })
       refresh()
@@ -289,7 +321,10 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
   }
 
   async function finishWorkout() {
-    if (!confirm('Finish this workout?')) return
+    if (!(await confirmAction({
+      title: 'Finish this workout?', message: 'It will be saved to your history.',
+      confirmLabel: 'Finish workout',
+    }))) return
     try {
       const nowUtc = new Date().toISOString().slice(0, 19)  // naive UTC for backend
       await apiFetch(`/api/sessions/${session.id}`, {
@@ -304,7 +339,10 @@ function ActiveSession({ session, setSession, refresh, onFinish, error, setError
   }
 
   async function cancelWorkout() {
-    if (!confirm('Discard this workout? All logged sets will be deleted.')) return
+    if (!(await confirmAction({
+      title: 'Discard this workout?', message: 'All logged sets will be deleted. This can\'t be undone.',
+      confirmLabel: 'Discard', danger: true,
+    }))) return
     try {
       await apiFetch(`/api/sessions/${session.id}`, { method: 'DELETE' })
       setSession(null)

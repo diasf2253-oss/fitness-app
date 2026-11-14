@@ -19,9 +19,9 @@ function CairnMark() {
   return (
     <svg viewBox="0 0 48 48" width="34" height="34" aria-hidden="true"
       style={{ display: 'block', margin: '0 auto 0.55rem', opacity: 0.45 }}>
-      <ellipse cx="24" cy="33" rx="14" ry="5" fill="#7f9b78" />
-      <ellipse cx="24" cy="24.5" rx="10.5" ry="4.4" fill="#a8bfa1" />
-      <ellipse cx="24" cy="17" rx="7" ry="3.6" fill="#ece9e0" />
+      <ellipse cx="24" cy="33" rx="14" ry="5" fill="#809076" />
+      <ellipse cx="24" cy="24.5" rx="10.5" ry="4.4" fill="#9db08f" />
+      <ellipse cx="24" cy="17" rx="7" ry="3.6" fill="#f1ead9" />
     </svg>
   )
 }

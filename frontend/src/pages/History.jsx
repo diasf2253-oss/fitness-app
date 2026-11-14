@@ -10,6 +10,7 @@ import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../api'
 import { Loading, ErrorBox, EmptyState } from '../components/States'
+import { confirmAction } from '../components/ConfirmSheet'
 
 // Format an ISO datetime (stored UTC, naive) into a friendly local string
 function fmtDate(iso) {
@@ -74,7 +75,11 @@ export default function History() {
   const selected = sessions.find(s => s.id === selectedId)
 
   async function deleteSession(s) {
-    if (!confirm(`Delete "${s.name}" (${fmtDate(s.started_at)})? Its logged sets are removed for good and PRs/ranks will recompute without them.`)) return
+    if (!(await confirmAction({
+      title: `Delete "${s.name}"?`,
+      message: `${fmtDate(s.started_at)} — its logged sets are removed for good, and PRs and ranks will recompute without them.`,
+      confirmLabel: 'Delete workout', danger: true,
+    }))) return
     try {
       await apiFetch(`/api/sessions/${s.id}`, { method: 'DELETE' })
       setSessions(list => list.filter(x => x.id !== s.id))

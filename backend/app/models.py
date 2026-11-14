@@ -519,6 +519,8 @@ class AppSettings(UpdatedAtMixin, Base):
 
     # ---- Profile (drives the RDA targets and the onboarding wizard) ----
     age: Mapped[int] = mapped_column(Integer, default=19, nullable=False)
+    # Standing height in cm — optional, set from Settings > Profile
+    height_cm: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     # First-run onboarding: the wizard flips this after the profile questions.
     # Existing installs are backfilled to True by the migration.
     onboarded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

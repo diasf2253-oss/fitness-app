@@ -15,14 +15,14 @@ import { apiFetch } from '../api'
 import { Loading, ErrorBox } from '../components/States'
 import WidgetLabel from '../components/WidgetLabel'
 
-const GRID = 'rgba(236,233,224,0.07)'
-const AXIS = '#9aa69b'
-const SAGE = '#a8bfa1'
+const GRID = 'rgba(241, 234, 217,0.07)'
+const AXIS = '#93a08c'
+const SAGE = '#9db08f'
 const TOOLTIP_STYLE = {
-  background: '#1d2521',
-  border: '1px solid rgba(236,233,224,0.12)',
+  background: '#172320',
+  border: '1px solid rgba(241, 234, 217,0.12)',
   borderRadius: 12,
-  color: '#ece9e0',
+  color: '#f1ead9',
 }
 
 // Neutral delta: direction without judgment
@@ -290,7 +290,7 @@ export default function Insights() {
                   onClick={() => setSelected(i)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '0.6rem', width: '100%',
-                    background: i === selected ? 'rgba(236,233,224,0.06)' : 'transparent',
+                    background: i === selected ? 'rgba(241, 234, 217,0.06)' : 'transparent',
                     border: 'none', boxShadow: 'none', borderRadius: 10,
                     padding: '0.45rem 0.6rem', minHeight: 0,
                     color: 'var(--color-text)', fontWeight: 400, textAlign: 'left',
@@ -328,7 +328,7 @@ export default function Insights() {
                       />
                       <Tooltip
                         contentStyle={TOOLTIP_STYLE}
-                        cursor={{ stroke: 'rgba(236,233,224,0.2)' }}
+                        cursor={{ stroke: 'rgba(241, 234, 217,0.2)' }}
                         formatter={(value, name) => [value, name]}
                         labelFormatter={() => ''}
                       />

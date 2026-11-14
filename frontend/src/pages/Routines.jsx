@@ -14,6 +14,7 @@ import ExercisePicker from '../components/ExercisePicker'
 import Modal from '../components/Modal'
 import { Loading, ErrorBox, EmptyState, EmptyNote } from '../components/States'
 import { RankBadge, rankAccent, useExerciseRanks } from '../components/RankBadge'
+import { confirmAction } from '../components/ConfirmSheet'
 
 export default function Routines() {
   const [routines, setRoutines] = useState([])
@@ -41,7 +42,7 @@ export default function Routines() {
   useEffect(load, [])
 
   async function handleDelete(id) {
-    if (!confirm('Delete this routine?')) return
+    if (!(await confirmAction({ title: 'Delete this routine?', confirmLabel: 'Delete routine', danger: true }))) return
     try {
       await apiFetch(`/api/routines/${id}`, { method: 'DELETE' })
       load()
@@ -51,7 +52,11 @@ export default function Routines() {
   }
 
   async function handleDeleteSplit(split) {
-    if (!confirm(`Delete the split "${split.name}"? Its ${split.routine_count} day(s) are kept — they just become ungrouped.`)) return
+    if (!(await confirmAction({
+      title: `Delete the split "${split.name}"?`,
+      message: `Its ${split.routine_count} day(s) are kept — they just become ungrouped.`,
+      confirmLabel: 'Delete split', danger: true,
+    }))) return
     try {
       await apiFetch(`/api/splits/${split.id}`, { method: 'DELETE' })
       load()

@@ -10,6 +10,7 @@ import { apiFetch } from '../api'
 import { Loading, ErrorBox } from '../components/States'
 import PageHero from '../components/PageHero'
 import WidgetLabel from '../components/WidgetLabel'
+import { confirmAction } from '../components/ConfirmSheet'
 
 function statusColor(count, t) {
   if (count < t.low) return 'var(--color-muted)'
@@ -110,7 +111,11 @@ export default function Generator() {
   }
 
   async function save() {
-    if (!confirm('Save this program as your routines? This replaces any previously generated routines — your hand-made ones are untouched.')) return
+    if (!(await confirmAction({
+      title: 'Save as your routines?',
+      message: 'This replaces any previously generated routines — your hand-made ones are untouched.',
+      confirmLabel: 'Save program',
+    }))) return
     setSaving(true); setError(null)
     try {
       const body = { priority_muscles: priority, days_per_week: Number(days), split_type: split }

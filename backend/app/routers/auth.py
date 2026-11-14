@@ -23,7 +23,9 @@ from app.config import settings
 from app.db import get_db
 from app.ratelimit import rate_limit
 from app.models import AuthSession, InviteCode, User, _new_ingest_token
-from app.schemas import ChangePasswordRequest, JoinRequest, LoginRequest, UserMeOut
+from app.schemas import (
+    ChangePasswordRequest, JoinRequest, LoginRequest, UpdateMeRequest, UserMeOut,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -106,6 +108,22 @@ def me(current_user: User = Depends(require_auth)):
     return current_user
 
 
+@router.patch("/me", response_model=UserMeOut)
+def update_me(
+    body: UpdateMeRequest,
+    db: DBSession = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Change the display name (the email stays fixed — it is the login)."""
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name can't be empty.")
+    current_user.name = name
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
 @router.post("/ingest-token/rotate", response_model=UserMeOut)
 def rotate_ingest_token(
     db: DBSession = Depends(get_db),
@@ -140,6 +158,15 @@ def change_password(
     every *other* session for this account (keeps the current tab logged
     in) — matters most right after an admin-issued temp password.
     """
+    # A normal password change proves you know the current one, so a stolen
+    # session can't quietly lock the owner out. The forced temp-password flow
+    # is exempt — the person has just been handed a password they can't "know".
+    if not current_user.must_change_password:
+        if not body.current_password or not verify_password(
+            body.current_password, current_user.password_hash
+        ):
+            raise HTTPException(status_code=400, detail="Current password is incorrect.")
+
     current_user.password_hash = hash_password(body.new_password)
     current_user.must_change_password = False
 

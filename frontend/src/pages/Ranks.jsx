@@ -8,6 +8,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../api'
 import { Loading, ErrorBox } from '../components/States'
 import WidgetLabel from '../components/WidgetLabel'
+import RankEmblem, { overallRank } from '../components/RankEmblem'
 import { IMG_W, IMG_H, MUSCLE_SHAPES } from '../data/muscleShapes'
 import { detectRankUp } from '../rankSignature'
 import { playRankUp } from '../audio'
@@ -75,10 +76,11 @@ function BodyMap({ byMuscle, selected, onSelect }) {
 function TierBadge({ color, tier, division, lp }) {
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0.25rem 0.6rem',
+      display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0.15rem 0.6rem 0.15rem 0.3rem',
       borderRadius: 999, background: `${color}22`, border: `1px solid ${color}`, color,
       fontSize: '0.8rem', fontWeight: 600,
     }}>
+      <RankEmblem tier={tier} division={division} color={color} size={22} />
       {tier} {division}{lp != null && <span style={{ opacity: 0.85, fontWeight: 400 }}>· {lp} LP</span>}
     </span>
   )
@@ -117,6 +119,7 @@ export default function Ranks() {
   )
 
   const sel = selected && byMuscle[selected]
+  const overall = useMemo(() => overallRank(data), [data])
 
   return (
     <div className="page">
@@ -130,6 +133,22 @@ export default function Ranks() {
       {data && (
         <>
           {data.note && <p className="muted" style={{ marginBottom: '1rem' }}>{data.note}</p>}
+
+          {/* Overall rank hero */}
+          <div className="card rank-hero" style={overall ? { '--rank-color': overall.color } : undefined}>
+            <RankEmblem tier={overall?.tier} division={overall?.division} color={overall?.color} size={104} />
+            <div>
+              <WidgetLabel>overall rank</WidgetLabel>
+              <div className="rank-hero-title" style={{ color: overall?.color }}>
+                {overall ? `${overall.tier} ${overall.division}` : 'Unranked'}
+              </div>
+              <p className="muted" style={{ fontSize: '0.8rem' }}>
+                {overall
+                  ? `Average of your ${overall.n} ranked ${overall.n === 1 ? 'muscle' : 'muscles'}`
+                  : 'Log a lift to get your first rank.'}
+              </p>
+            </div>
+          </div>
 
           {/* Body map + selection detail */}
           <div className="card">
@@ -163,12 +182,12 @@ export default function Ranks() {
           {/* Tier legend */}
           <div className="card">
             <WidgetLabel>tiers</WidgetLabel>
-            <div className="row" style={{ flexWrap: 'wrap', gap: '0.45rem', marginTop: '0.5rem' }}>
+            <div className="rank-legend">
               {data.tiers.map(t => (
-                <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.74rem' }}>
-                  <span style={{ width: 12, height: 12, borderRadius: 3, background: data.tier_colors[t] }} />
-                  {t}
-                </span>
+                <div key={t} className="rank-legend-item">
+                  <RankEmblem tier={t} division="I" color={data.tier_colors[t]} size={40} />
+                  <span>{t}</span>
+                </div>
               ))}
             </div>
           </div>

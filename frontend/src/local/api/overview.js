@@ -13,12 +13,14 @@ const WINDOW_DAYS = 90
 const MIN_PAIR_N = 10
 const MIN_SPLIT_N = 5
 const MAX_PAIRS = 8
+// Mirrors backend/app/routers/dashboard.py STEPS_SLEEP_DAYS
+const STEPS_SLEEP_DAYS = 90
 const MAX_RECENT_PRS = 5
 
 const DEFAULT_SETTINGS = {
   id: 1, calorie_target: 2300, protein_target_g: 180, fat_max_g: 100,
   unit_system: 'metric', sex: 'male', rank_config: null, health_last_ingest: null,
-  age: 19, onboarded: false,
+  age: 19, height_cm: null, onboarded: false,
   goal_kg_per_week: 0.5, adapt_step_kcal: 100, adapt_tolerance_kg: 0.15,
   calorie_floor: 1800, calorie_ceiling: null, last_adapted_week: null,
   volume_targets: null, streak_rest_gap: 1, default_rest_seconds: 120,
@@ -57,11 +59,11 @@ async function dashboard() {
     week_start: w.week_start, avg_kg: w.avg_kg, n_entries: w.n_entries, provisional: w.is_current_week,
   }))
 
-  const steps = dateInRange(await db.steps_log.toArray(), addDays(today, -14), today)
+  const steps = dateInRange(await db.steps_log.toArray(), addDays(today, -(STEPS_SLEEP_DAYS - 1)), today)
     .sort((a, b) => (a.date < b.date ? -1 : 1))
     .map(r => ({ date: r.date, steps: r.steps }))
 
-  const sleep = dateInRange(await db.sleep_log.toArray(), addDays(today, -14), today)
+  const sleep = dateInRange(await db.sleep_log.toArray(), addDays(today, -(STEPS_SLEEP_DAYS - 1)), today)
     .sort((a, b) => (a.date < b.date ? -1 : 1))
     .map(r => ({ date: r.date, asleep_hours: round(r.asleep_minutes / 60, 1) }))
 

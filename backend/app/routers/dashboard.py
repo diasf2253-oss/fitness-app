@@ -4,8 +4,8 @@ so the phone PWA pays a single round-trip on cold start.
 
 GET /api/dashboard
   - weight: last 90 days + 7-day moving average
-  - steps: last 14 days
-  - sleep: hours per night, last 14 days
+  - steps: last 90 days (the card's 30/60/90D chip slices it)
+  - sleep: hours per night, last 90 days
   - nutrition_today: today's intake (zeros + logged=False when empty)
   - targets: from the settings row
   - training: rolling-7-day volume, session count, and recent PRs
@@ -35,6 +35,9 @@ router = APIRouter(tags=["dashboard"])
 # Cap the PR list so one big session doesn't flood the widget
 MAX_RECENT_PRS = 5
 
+
+# Steps/sleep history sent to the dashboard (the cards slice 30/60/90 days client-side).
+STEPS_SLEEP_DAYS = 90
 
 def moving_average_7d(series: list[tuple[date, float]]) -> list[tuple[date, float]]:
     """
@@ -97,7 +100,7 @@ def get_dashboard(
     # ---- Steps: last 14 days ----
     steps_rows = (
         db.query(StepsLog)
-        .filter(StepsLog.user_id == user_id, StepsLog.date >= today - timedelta(days=14))
+        .filter(StepsLog.user_id == user_id, StepsLog.date >= today - timedelta(days=STEPS_SLEEP_DAYS - 1))
         .order_by(StepsLog.date)
         .all()
     )
@@ -106,7 +109,7 @@ def get_dashboard(
     # ---- Sleep: hours per night, last 14 days ----
     sleep_rows = (
         db.query(SleepLog)
-        .filter(SleepLog.user_id == user_id, SleepLog.date >= today - timedelta(days=14))
+        .filter(SleepLog.user_id == user_id, SleepLog.date >= today - timedelta(days=STEPS_SLEEP_DAYS - 1))
         .order_by(SleepLog.date)
         .all()
     )

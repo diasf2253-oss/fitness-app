@@ -57,7 +57,7 @@ const ctrlBtn = {
   flex: '0 0 auto',
   minWidth: 92,
   minHeight: 44,
-  background: 'rgba(27,33,29,0.14)',
+  background: 'rgba(17, 26, 25,0.14)',
   color: 'var(--color-on-primary)',
   boxShadow: 'none',
   padding: '0.4rem 0.6rem',
@@ -128,7 +128,7 @@ export default function RestTimer({ seconds, onDone, onClose }) {
         </button>
       )}
       <button
-        style={{ ...ctrlBtn, minWidth: 76, background: 'rgba(27,33,29,0.22)' }}
+        style={{ ...ctrlBtn, minWidth: 76, background: 'rgba(17, 26, 25,0.22)' }}
         onClick={onClose}
       >
         {isDone ? 'Dismiss' : 'Skip'}

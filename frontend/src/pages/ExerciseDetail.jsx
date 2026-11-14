@@ -86,11 +86,11 @@ export default function ExerciseDetail() {
             <h3>Estimated 1RM over time</h3>
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={history} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(236,233,224,0.07)" />
-                <XAxis dataKey="date" stroke="#9aa69b" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis stroke="#9aa69b" fontSize={11} domain={['auto', 'auto']} tickLine={false} axisLine={false} />
-                <Tooltip contentStyle={{ background: '#1d2521', border: '1px solid rgba(236,233,224,0.12)', borderRadius: 12, color: '#ece9e0' }} />
-                <Line type="monotone" dataKey="estimated_1rm" stroke="#a8bfa1" strokeWidth={2} dot={{ r: 3, fill: '#a8bfa1', strokeWidth: 0 }} name="Est. 1RM (kg)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(241, 234, 217,0.07)" />
+                <XAxis dataKey="date" stroke="#93a08c" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis stroke="#93a08c" fontSize={11} domain={['auto', 'auto']} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={{ background: '#172320', border: '1px solid rgba(241, 234, 217,0.12)', borderRadius: 12, color: '#f1ead9' }} />
+                <Line type="monotone" dataKey="estimated_1rm" stroke="#9db08f" strokeWidth={2} dot={{ r: 3, fill: '#9db08f', strokeWidth: 0 }} name="Est. 1RM (kg)" />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -99,11 +99,11 @@ export default function ExerciseDetail() {
             <h3>Volume per session</h3>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={history} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(236,233,224,0.07)" />
-                <XAxis dataKey="date" stroke="#9aa69b" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis stroke="#9aa69b" fontSize={11} tickLine={false} axisLine={false} />
-                <Tooltip contentStyle={{ background: '#1d2521', border: '1px solid rgba(236,233,224,0.12)', borderRadius: 12, color: '#ece9e0' }} cursor={{ fill: 'rgba(236,233,224,0.05)' }} />
-                <Bar dataKey="volume_kg" fill="#7f9b78" name="Volume (kg)" radius={[6, 6, 0, 0]} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(241, 234, 217,0.07)" />
+                <XAxis dataKey="date" stroke="#93a08c" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis stroke="#93a08c" fontSize={11} tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={{ background: '#172320', border: '1px solid rgba(241, 234, 217,0.12)', borderRadius: 12, color: '#f1ead9' }} cursor={{ fill: 'rgba(241, 234, 217,0.05)' }} />
+                <Bar dataKey="volume_kg" fill="#809076" name="Volume (kg)" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
