@@ -1,0 +1,18 @@
+# Never upload these if the project is ever deployed from a laptop with the
+# `vercel` CLI (Git-connected deploys only see committed files, which already
+# exclude them via .gitignore). Local databases and backups hold real personal data.
+*.sqlite3*
+*.db
+*.db-journal
+*.bak*
+*.dump
+**/seed_db/
+backups/
+.env
+.env.*
+!.env.example
+!frontend/.env.production
+scripts/.env.backup
+**/.venv/
+**/node_modules/
+graphify-out/
