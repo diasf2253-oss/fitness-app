@@ -28,5 +28,5 @@ reports from automated scanners without a demonstrated impact.
 - Serve the app over HTTPS.
 - Keep the Supabase **secret** key (`SUPABASE_SECRET_KEY`) server-side only —
   never in a `VITE_` variable — and use separate Supabase projects for
-  production and staging/dev (see docs/SUPABASE.md).
+  production and staging/dev (see notes/runbooks/SUPABASE.md).
 - Rotate any ingest token that may have leaked (Settings → Apple Health sync).

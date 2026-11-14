@@ -24,7 +24,7 @@ const COPY = {
   },
   unconfigured: {
     title: "Login isn't set up",
-    body: 'This build has no Supabase settings (VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY). See docs/SUPABASE.md.',
+    body: 'This build has no Supabase settings (VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY). See notes/runbooks/SUPABASE.md.',
   },
 }
 

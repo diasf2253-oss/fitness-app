@@ -147,7 +147,7 @@ export function AuthProvider({ children }) {
         // Dev-only shortcut past the login screen while designing the UI.
         // import.meta.env.DEV is false in every production build, so this
         // whole branch is stripped from what ships. The SIGNED_IN event that
-        // follows runs refresh() again. Details: docs/DEV_HANDBOOK.md.
+        // follows runs refresh() again. Details: notes/runbooks/DEV_HANDBOOK.md.
         autoLoginTried.current = true
         const { error } = await supabase.auth.signInWithPassword({
           email: import.meta.env.VITE_DEV_AUTOLOGIN_EMAIL,

@@ -50,7 +50,7 @@ export function absoluteApiUrl(path) {
  *
  * Overridable per deployment (VITE_HEALTH_SHORTCUT_URL) so the link can be
  * replaced without a code change. Empty ⇒ the UI falls back to the manual
- * build recipe in docs/HEALTH_INGEST_SHORTCUT.md.
+ * build recipe in notes/runbooks/HEALTH_INGEST_SHORTCUT.md.
  */
 export const HEALTH_SHORTCUT_URL = import.meta.env.VITE_HEALTH_SHORTCUT_URL || ''
 

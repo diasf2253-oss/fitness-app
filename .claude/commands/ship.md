@@ -45,7 +45,7 @@ Show the user:
 - Give the user the PR link and explain what happens next for *this* repo: CI runs
   both test suites on the PR; once it's green and merged to `main`, production
   deploys (Railway). Remind them of the staging step if this is risky (auth,
-  production data, or a database migration — see `docs/STAGING.md`).
+  production data, or a database migration — see `notes/runbooks/STAGING.md`).
 
 ### Teaching note
 After shipping, add a short **"🎓 What you just learned"** recap covering the words
