@@ -1,93 +1,62 @@
 /**
- * "Your health data is stale" nudge, shown on every page.
+ * Daily weigh-in nudge, shown at the top of every page.
  *
- * The app is a body-recomposition instrument first: without weight, steps and
- * sleep flowing in, most of it is guessing. But a PWA can't read HealthKit, so
- * data only arrives when the phone pushes it — and when that quietly stops
- * (automation off, token rotated, Shortcut never installed) nothing else in
- * the UI says so. The charts just thin out. This is the thing that says so.
+ * The app is a body-recomposition instrument first, and the weight trend is
+ * its spine. Apple Health sync is paused (a web app can't read HealthKit), so
+ * weight arrives by hand — and a missed weigh-in is the one gap that quietly
+ * degrades everything downstream (trend, adaptive calories, ranks).
  *
- * On iOS it offers a real one-tap fix, because `shortcuts://` lets a web page
- * start the sync. Elsewhere it points at the setup instructions instead.
+ * So: when today's weight isn't logged yet, offer a one-tap "Log weight" that
+ * opens the quick-log sheet. Dismissible for the rest of the day. Freshness
+ * comes from GET /api/health/sync-status (real readings only — estimates and
+ * sample rows never count as logged), refreshed after every quick-log save.
  */
 import React, { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { SyncNowButton, useSyncStatus } from './HealthSync'
+import { useSyncStatus } from './HealthSync'
+import { openQuickLog } from './QuickLog'
 
-// Data older than this is worth interrupting the user about. One day of lag is
-// normal — a morning automation hasn't run yet when you open the app at 07:00.
-const STALE_AFTER_DAYS = 2
+const DISMISS_KEY_PREFIX = 'weighin_nudge_dismissed:'
 
-const DISMISS_KEY_PREFIX = 'health_sync_banner_dismissed:'
+function localToday() {
+  const d = new Date()
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+}
 
-// Scoped by user id: this is an invite-only beta where switching accounts on
-// a shared device is a documented, expected flow (CLAUDE.md). An unscoped
-// key would let one person's dismissal hide the banner for the next person
-// who logs in on the same tab — logout doesn't clear sessionStorage.
-function dismissedThisSession(userId) {
-  try {
-    return sessionStorage.getItem(DISMISS_KEY_PREFIX + userId) === '1'
-  } catch {
-    return false  // private mode / blocked storage — just show it
-  }
+// Scoped by user AND day: a dismissal lasts until tomorrow, and switching
+// accounts on a shared device (a documented flow) never hides it for someone else.
+const dismissKey = userId => `${DISMISS_KEY_PREFIX}${userId}:${localToday()}`
+
+function dismissedToday(userId) {
+  try { return localStorage.getItem(dismissKey(userId)) === '1' } catch { return false }
 }
 
 export default function HealthSyncBanner() {
   const { user } = useAuth()
-  const { status, unreachable } = useSyncStatus()
+  const { status } = useSyncStatus()
   const { pathname } = useLocation()
-  const [dismissed, setDismissed] = useState(() => dismissedThisSession(user.id))
+  const [dismissed, setDismissed] = useState(() => dismissedToday(user.id))
 
   function dismiss() {
     setDismissed(true)
-    try { sessionStorage.setItem(DISMISS_KEY_PREFIX + user.id, '1') } catch { /* non-critical */ }
+    try { localStorage.setItem(dismissKey(user.id), '1') } catch { /* non-critical */ }
   }
 
-  // Settings is where the fix lives — no point nagging someone already there.
-  if (dismissed || pathname === '/settings') return null
+  // Already on the full log page — no need to nudge.
+  if (dismissed || pathname === '/log' || !status) return null
 
-  // Every attempt to check has failed — surface that distinctly rather than
-  // rendering nothing, which is exactly the "sync silently died and nothing
-  // says so" failure this banner exists to catch.
-  if (unreachable) {
-    return (
-      <div className="sync-banner" role="status">
-        <span className="sync-banner-text">Couldn't check your health sync status.</span>
-        <div className="sync-banner-actions">
-          <button className="sync-banner-close" onClick={dismiss} aria-label="Dismiss">×</button>
-        </div>
-      </div>
-    )
-  }
-
-  if (!status) return null  // still loading — nothing to say yet
-
-  const never = !status.has_any_data
-  const stale = status.stalest_days !== null && status.stalest_days >= STALE_AFTER_DAYS
-  if (!never && !stale) return null
-
-  const message = never
-    ? 'No health data yet. Connect Apple Health to track weight, steps and sleep.'
-    : `Health data is ${status.stalest_days} days old.`
+  const weighedToday = status.weight?.last_date === localToday()
+  if (weighedToday) return null
 
   return (
     <div className="sync-banner" role="status">
-      <span className="sync-banner-text">{message}</span>
+      <span className="sync-banner-text">Weight not logged today.</span>
       <div className="sync-banner-actions">
-        <SyncNowButton className="secondary sync-banner-btn" label="Sync now" />
-        <Link to="/settings">
-          <button className="secondary sync-banner-btn">
-            {never ? 'Set up' : 'Fix'}
-          </button>
-        </Link>
-        <button
-          className="sync-banner-close"
-          onClick={dismiss}
-          aria-label="Dismiss"
-        >
-          ×
+        <button className="secondary sync-banner-btn" onClick={() => openQuickLog('weight')}>
+          Log weight
         </button>
+        <button className="sync-banner-close" onClick={dismiss} aria-label="Dismiss for today">×</button>
       </div>
     </div>
   )

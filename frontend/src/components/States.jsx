@@ -4,6 +4,7 @@
  */
 import React from 'react'
 import { Link } from 'react-router-dom'
+import { openQuickLog } from './QuickLog'
 
 export function Loading({ label = 'Loading…' }) {
   return <div className="loading">{label}</div>
@@ -48,16 +49,17 @@ export function EmptyNote({ children }) {
 }
 
 /**
- * Empty note for a chart that Apple Health is supposed to fill.
- *
- * "No data yet — log manually" is the wrong advice here: nobody wants to type
- * their step count in by hand every day, and the real reason the chart is
- * blank is almost always that the phone isn't pushing yet. Point at the fix.
+ * Empty note for a weight / steps / sleep chart. Health sync is paused, so
+ * the fix is logging it: `log` ('weight' | 'steps' | 'sleep') opens the
+ * quick-log sheet on that tab; without it, link to the full manual log.
  */
-export function NoHealthDataNote({ metric = 'health data' }) {
+export function NoHealthDataNote({ metric = 'health data', log }) {
   return (
     <p className="muted" style={{ textAlign: 'center', padding: '1.1rem 0' }}>
-      No {metric} yet. <Link to="/settings">Connect Apple Health ›</Link>
+      No {metric} yet.{' '}
+      {log
+        ? <button type="button" className="link-button" onClick={() => openQuickLog(log)}>Log it ›</button>
+        : <Link to="/log">Log it ›</Link>}
     </p>
   )
 }

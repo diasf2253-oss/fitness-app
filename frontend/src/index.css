@@ -1100,3 +1100,74 @@ button.danger.confirm-danger:hover { background: #d98f5a; }
   color: var(--color-muted);
 }
 .goal-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.35rem; vertical-align: 1px; }
+
+/* ---- Quick-log sheet (components/QuickLog.jsx) ---- */
+.card-head-actions { display: inline-flex; gap: 0.4rem; align-items: center; }
+button.range-chip.log-chip { color: var(--color-on-primary); background: var(--color-primary); border-color: transparent; }
+button.range-chip.log-chip:hover { background: var(--color-primary-dk); }
+button.range-chip.on { background: var(--tint-primary); border-color: var(--color-primary); color: var(--color-primary); }
+.ql-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface2);
+  border: 1px solid var(--color-border);
+}
+button.ql-tab {
+  min-height: 38px;
+  padding: 0.3rem;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-muted);
+  box-shadow: none;
+  font-size: 0.86rem;
+}
+button.ql-tab:hover { background: rgba(241, 234, 217, 0.05); }
+button.ql-tab.on { background: var(--color-elevated); color: var(--color-text); }
+.ql-date { width: auto; min-height: 32px; padding: 0.2rem 0.6rem; font-size: 0.8rem; margin-left: auto; }
+.ql-stepper { display: flex; align-items: center; gap: 0.6rem; }
+button.ql-step {
+  flex: 0 0 auto;
+  width: 52px;
+  height: 52px;
+  min-height: 52px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.5rem;
+  font-weight: 500;
+  background: var(--color-surface2);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-str);
+  box-shadow: none;
+}
+button.ql-step:hover { background: var(--color-elevated); }
+.ql-big { flex: 1; display: flex; align-items: baseline; justify-content: center; gap: 0.3rem; }
+input.ql-input {
+  width: 6.5ch;
+  min-width: 0;
+  text-align: center;
+  font-size: 2.2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--color-border-str);
+  border-radius: 0;
+  padding: 0.1rem 0;
+  min-height: 56px;
+  box-shadow: none;
+  -moz-appearance: textfield;
+}
+input.ql-input::-webkit-outer-spin-button, input.ql-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input.ql-input:focus { border-bottom-color: var(--color-primary); box-shadow: none; }
+input.ql-input.ql-input-sm { width: 2.6ch; }
+.ql-unit { color: var(--color-muted); font-size: 0.95rem; font-weight: 600; }
+.ql-hint { font-size: 0.76rem; text-align: center; margin-top: 0.4rem; }
+.ql-more { text-align: center; font-size: 0.82rem; }
+button.link-button {
+  background: none; border: none; box-shadow: none; padding: 0; min-height: 0;
+  color: var(--color-accent); font: inherit; font-weight: 600; cursor: pointer;
+}
+button.link-button:hover { background: none; color: var(--color-text); }

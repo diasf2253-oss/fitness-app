@@ -51,7 +51,7 @@ export default function NutrientBreakdown({ nutrients, days }) {
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Micronutrients</h3>
         <p className="muted" style={{ fontSize: '0.85rem' }}>
-          No micronutrient data yet — log a few days of food (Apple Health or the manual log)
+          No micronutrient data yet — log a few days of food in the manual log
           and the breakdown appears here.
         </p>
       </div>

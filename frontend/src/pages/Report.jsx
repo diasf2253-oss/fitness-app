@@ -113,7 +113,7 @@ export default function Report() {
 
           {/* Bodyweight */}
           <Section title="Bodyweight trend" aside="weekly avg">
-            {!r.bodyweight ? <NoHealthDataNote metric="weight readings for this period" /> : (
+            {!r.bodyweight ? <NoHealthDataNote metric="weight readings for this period" log="weight" /> : (
               <div className="row" style={{ alignItems: 'baseline', gap: '0.5rem' }}>
                 <span className="tnum">{r.bodyweight.start_avg} kg</span>
                 <span className="muted">→</span>
@@ -137,7 +137,7 @@ export default function Report() {
 
           {/* Sleep */}
           <Section title="Sleep" aside={r.sleep ? `${r.sleep.nights} nights` : null}>
-            {!r.sleep ? <NoHealthDataNote metric="sleep data for this period" /> : (
+            {!r.sleep ? <NoHealthDataNote metric="sleep data for this period" log="sleep" /> : (
               <div className="row" style={{ alignItems: 'baseline', gap: '0.5rem' }}>
                 <span className="stat-num" style={{ fontSize: '1.8rem' }}>{r.sleep.avg_hours} h</span>
                 {r.sleep.change_h != null && (

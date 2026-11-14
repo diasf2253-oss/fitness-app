@@ -3,9 +3,9 @@
  * One call to GET /api/dashboard renders every widget: nutrition vs
  * targets, weight trend with 7-day moving average, steps, sleep, and
  * training (week volume + recent PRs).
- * Every widget renders a quiet empty state until data exists — real
- * health data arrives with the Apple Health sync in Phase 3, or via
- * the manual Log page.
+ * Every widget renders a quiet empty state until data exists. Health data is
+ * logged by hand for now (quick-log sheet, or the full Log page) — Apple
+ * Health sync is paused until a native app exists.
  */
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -15,6 +15,7 @@ import MonthCalendar from '../components/MonthCalendar'
 import WidgetLabel from '../components/WidgetLabel'
 import WeightCard from '../components/WeightCard'
 import GoalBarCard from '../components/GoalBarCard'
+import { HEALTH_DATA_CHANGED, openQuickLog } from '../components/QuickLog'
 import CheckIn from '../components/CheckIn'
 
 function MacroBar({ label, value, target, over }) {
@@ -228,10 +229,14 @@ export default function Dashboard() {
   useEffect(() => {
     // In local-first mode apiFetch serves this from the on-device DB,
     // so the dashboard works with no server reachable.
-    apiFetch('/api/dashboard')
+    const load = () => apiFetch('/api/dashboard')
       .then(setData)
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
+    load()
+    // Re-fetch after a quick-log save so the cards update in place
+    window.addEventListener(HEALTH_DATA_CHANGED, load)
+    return () => window.removeEventListener(HEALTH_DATA_CHANGED, load)
   }, [])
 
   const now = new Date()
@@ -329,7 +334,7 @@ export default function Dashboard() {
           </div>
 
           {/* ---- Weight trend ---- */}
-          <WeightCard weight={data.weight} />
+          <WeightCard weight={data.weight} onLog={() => openQuickLog('weight')} />
 
           {/* ---- Steps: fill a 9k bar each day ---- */}
           <GoalBarCard
@@ -340,7 +345,8 @@ export default function Dashboard() {
             unit="steps"
             formatValue={v => Math.round(v).toLocaleString()}
             storageKey="steps_range_days"
-            empty={<NoHealthDataNote metric="step data" />}
+            empty={<NoHealthDataNote metric="step data" log="steps" />}
+            onLog={() => openQuickLog('steps')}
           />
 
           {/* ---- Sleep: fill an 8h bar each night ---- */}
@@ -352,7 +358,8 @@ export default function Dashboard() {
             unit="asleep"
             formatValue={fmtHours}
             storageKey="sleep_range_days"
-            empty={<NoHealthDataNote metric="sleep data" />}
+            empty={<NoHealthDataNote metric="sleep data" log="sleep" />}
+            onLog={() => openQuickLog('sleep')}
           />
 
           </div>

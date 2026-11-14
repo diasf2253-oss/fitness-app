@@ -133,7 +133,10 @@ export function useSyncStatus() {
     const onSyncComplete = () => refreshSyncStatus({ force: true })
     document.addEventListener('visibilitychange', onVisible)
     window.addEventListener(SYNC_COMPLETE_EVENT, onSyncComplete)
+    // A manual quick-log save changes freshness too (see components/QuickLog)
+    window.addEventListener('health-data-changed', onSyncComplete)
     return () => {
+      window.removeEventListener('health-data-changed', onSyncComplete)
       listeners.delete(onChange)
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener(SYNC_COMPLETE_EVENT, onSyncComplete)

@@ -72,7 +72,7 @@ const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
   !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
-export default function WeightCard({ weight }) {
+export default function WeightCard({ weight, onLog }) {
   const [range, setRange] = useState(readRange)
   const all = useMemo(() => mergeWeight(weight), [weight])
   const points = useMemo(() => sliceRange(all, range), [all, range])
@@ -135,10 +135,13 @@ export default function WeightCard({ weight }) {
     <div className="card span-2 weight-card">
       <div className="weight-card-head">
         <WidgetLabel>⚖ Weight</WidgetLabel>
-        <button type="button" className="range-chip" onClick={cycleRange}
-          aria-label={`Showing ${range} days. Tap to change range.`}>
-          {range}D
-        </button>
+        <span className="card-head-actions">
+          {onLog && <button type="button" className="range-chip log-chip" onClick={onLog} aria-label="Log weight">+ Log</button>}
+          <button type="button" className="range-chip" onClick={cycleRange}
+            aria-label={`Showing ${range} days. Tap to change range.`}>
+            {range}D
+          </button>
+        </span>
       </div>
 
       {summary ? (
@@ -196,7 +199,7 @@ export default function WeightCard({ weight }) {
           )}
         </>
       ) : (
-        <NoHealthDataNote metric="weight readings" />
+        <NoHealthDataNote metric="weight readings" log="weight" />
       )}
     </div>
   )

@@ -69,7 +69,7 @@ const W = 340, H = 150, TOP = 6, LABEL_H = 18
 
 export default function GoalBarCard({
   label, points, goal, unit, formatValue, formatAvg = formatValue,
-  goalLabel, storageKey, empty,
+  goalLabel, storageKey, empty, onLog,
 }) {
   const [range, setRange] = useState(() => readRange(storageKey))
   const [active, setActive] = useState(null)       // index of the bar being read
@@ -111,10 +111,13 @@ export default function GoalBarCard({
     <div className="card goal-card">
       <div className="weight-card-head">
         <WidgetLabel>{label}</WidgetLabel>
-        <button type="button" className="range-chip" onClick={cycleRange}
-          aria-label={`Showing ${range} days. Tap to change range.`}>
-          {range}D
-        </button>
+        <span className="card-head-actions">
+          {onLog && <button type="button" className="range-chip log-chip" onClick={onLog} aria-label={`Log ${unit === 'steps' ? 'steps' : 'sleep'}`}>+ Log</button>}
+          <button type="button" className="range-chip" onClick={cycleRange}
+            aria-label={`Showing ${range} days. Tap to change range.`}>
+            {range}D
+          </button>
+        </span>
       </div>
 
       {summary ? (
