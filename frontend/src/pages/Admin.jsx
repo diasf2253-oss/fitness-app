@@ -66,22 +66,33 @@ function PendingCard({ pending, onChange }) {
   )
 }
 
-function TempPasswordResult({ result, onDismiss }) {
+function ResetLinkResult({ result, onDismiss }) {
+  const [copied, setCopied] = useState(false)
   if (!result) return null
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(result.action_link)
+      setCopied(true)
+    } catch { /* clipboard blocked — the link is selectable below */ }
+  }
+
   return (
     <div className="card" style={{ borderColor: 'var(--color-primary)' }}>
-      <h3 style={{ marginTop: 0 }}>Temporary password for {result.email}</h3>
+      <h3 style={{ marginTop: 0 }}>Password reset link for {result.email}</h3>
       <p className="muted" style={{ marginBottom: '0.6rem' }}>
-        Shown once — send it to them directly. They'll be forced to set a new
-        password on first login, and their other sessions are now signed out.
+        Send it to them directly — opening it signs them in and asks for a new
+        password. It works once and expires; anyone holding it can get into
+        their account, so send it only to them.
       </p>
       <code style={{
-        display: 'block', padding: '0.5rem 0.75rem', borderRadius: 6,
-        background: 'var(--surface-2, rgba(127,127,127,0.12))', fontSize: '0.95rem',
-      }}>{result.temp_password}</code>
-      <button className="secondary" style={{ width: '100%', marginTop: '0.75rem' }} onClick={onDismiss}>
-        Done
-      </button>
+        display: 'block', padding: '0.5rem 0.75rem', borderRadius: 6, wordBreak: 'break-all',
+        background: 'var(--surface-2, rgba(127,127,127,0.12))', fontSize: '0.8rem',
+      }}>{result.action_link}</code>
+      <div className="row" style={{ gap: '0.5rem', marginTop: '0.75rem' }}>
+        <button style={{ flex: 1 }} onClick={copy}>{copied ? 'Copied' : 'Copy link'}</button>
+        <button className="secondary" style={{ flex: 1 }} onClick={onDismiss}>Done</button>
+      </div>
     </div>
   )
 }
@@ -89,7 +100,7 @@ function TempPasswordResult({ result, onDismiss }) {
 function UsersCard({ users, onChange }) {
   const [busyId, setBusyId] = useState(null)
   const [error, setError] = useState(null)
-  const [tempResult, setTempResult] = useState(null)
+  const [resetResult, setResetResult] = useState(null)
 
   async function setStatus(u, status) {
     setBusyId(u.id)
@@ -106,17 +117,16 @@ function UsersCard({ users, onChange }) {
     }
   }
 
-  async function issueTempPassword(u) {
+  async function createResetLink(u) {
     if (!(await confirmAction({
-      title: 'Issue a temporary password?',
-      message: `For ${u.email}. Their other sessions will be signed out.`,
-      confirmLabel: 'Issue password',
+      title: 'Create a password reset link?',
+      message: `For ${u.email}. Anyone with the link can get into their account — send it only to them.`,
+      confirmLabel: 'Create link',
     }))) return
     setBusyId(u.id)
     setError(null)
     try {
-      const r = await apiFetch(`/api/admin/users/${u.id}/temp-password`, { method: 'POST' })
-      setTempResult({ email: u.email, temp_password: r.temp_password })
+      setResetResult(await apiFetch(`/api/admin/users/${u.id}/reset-link`, { method: 'POST' }))
     } catch (err) {
       setError(err.message)
     } finally {
@@ -128,14 +138,15 @@ function UsersCard({ users, onChange }) {
     <div className="card">
       <h2>All users</h2>
       {error && <p className="muted" style={{ color: 'var(--color-danger)' }}>{error}</p>}
-      <TempPasswordResult result={tempResult} onDismiss={() => setTempResult(null)} />
-      <div className="col" style={{ gap: '0.6rem', marginTop: tempResult ? '0.75rem' : 0 }}>
+      <ResetLinkResult result={resetResult} onDismiss={() => setResetResult(null)} />
+      <div className="col" style={{ gap: '0.6rem', marginTop: resetResult ? '0.75rem' : 0 }}>
         {users.map(u => (
           <div key={u.id} className="row" style={{ alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 160 }}>
               <div>{u.name} {u.role === 'admin' && <span className="badge">admin</span>}</div>
               <div className="muted" style={{ fontSize: '0.8rem' }}>
-                {u.email} · {u.status} · last login {fmtTimestamp(u.last_login_at)}
+                {u.email} · {u.status} · last seen {fmtTimestamp(u.last_login_at)}
+                {!u.login_linked && ' · not on the new login yet'}
               </div>
             </div>
             {u.status !== 'disabled' ? (
@@ -160,9 +171,9 @@ function UsersCard({ users, onChange }) {
               className="secondary"
               style={{ minWidth: 140 }}
               disabled={busyId === u.id}
-              onClick={() => issueTempPassword(u)}
+              onClick={() => createResetLink(u)}
             >
-              Set temp password
+              Reset link
             </button>
           </div>
         ))}

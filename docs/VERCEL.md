@@ -8,8 +8,10 @@ at the repo root):
 | `backend` | `backend/` | `/api/*` | FastAPI (`app/main.py` → `app`), runs as Vercel Functions |
 | `frontend` | `frontend/` | everything else | Vite build (the React PWA) |
 
-Both live on **one domain**, so the login cookie works with no CORS setup and
-`VITE_API_BASE_URL` stays **empty** (API paths are relative). The backend gets
+Both live on **one domain**, so API calls need no CORS setup and
+`VITE_API_BASE_URL` stays **empty** (API paths are relative). Sign-in runs on
+**Supabase Auth**, which also hosts the database — set that up first:
+[SUPABASE.md](SUPABASE.md). The backend gets
 the full path (`/api/auth/login`), which is what its routes already expect.
 No service-to-service bindings: the browser calls the backend directly.
 
@@ -17,14 +19,17 @@ No service-to-service bindings: the browser calls the backend directly.
 
 1. **Import**: vercel.com → Add New → Project → `fitness-app` → choose
    **Import multi-service project** (it reads `vercel.json`).
-2. **Database**: Vercel → Storage → Create → **Neon (Postgres)** → connect it
-   to this project (Production). It injects `DATABASE_URL`. Use the
-   **pooled** connection string for the app.
-   - Give **Preview** deployments a *separate* database (or a Neon branch) —
-     never point previews at the production database.
+2. **Database**: the production Supabase project's **Transaction pooler**
+   string (port 6543) as `DATABASE_URL`. Supabase → Connect shows it.
+   - Give **Preview** deployments the *staging* project's string — never point
+     previews at the production database.
 3. **Environment variables** (Project → Settings → Environment Variables,
    Production):
-   - `ADMIN_EMAIL`, `ADMIN_PASSWORD` (strong, ≥ 8 chars, not `changeme`)
+   - `ADMIN_EMAIL` (no password — the admin signs in through Supabase)
+   - `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, optionally `SUPABASE_SECRET_KEY`
+   - `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (same project; the
+     frontend build bakes them in)
+   - Preview gets the same names with the **staging** project's values
    - leave `VITE_API_BASE_URL` **unset/empty**
    - do **not** set `ENABLE_DEV_SEED`
    - optional: `ANTHROPIC_API_KEY` (Coach is hidden; empty is fine)
@@ -33,16 +38,17 @@ No service-to-service bindings: the browser calls the backend directly.
 
    ```bash
    cd backend
-   export DATABASE_URL='<Neon connection string — direct, not pooled>'
-   export ADMIN_EMAIL='you@example.com' ADMIN_PASSWORD='<strong password>'
+   export DATABASE_URL='<Supabase session-pooler or direct string — not the transaction pooler>'
+   export ADMIN_EMAIL='you@example.com'
    .venv/bin/alembic upgrade head      # create / update tables
    .venv/bin/python -m app.seed_admin  # admin account + first invite code
    .venv/bin/python -m app.seed        # exercise library + routine templates
-   unset DATABASE_URL ADMIN_PASSWORD
+   unset DATABASE_URL
    ```
 
 5. **Deploy**, then check `https://<your-app>.vercel.app/api/ping` →
-   `{"status":"ok","env":"production"}` and log in.
+   `{"status":"ok","env":"production"}`, and create your login with the admin
+   email (or Google) — it links to the admin account.
 
 ## Every release
 - Schema change in the release? Run `alembic upgrade head` against the
@@ -51,10 +57,10 @@ No service-to-service bindings: the browser calls the backend directly.
   cached bundle.
 
 ## Known limits on Vercel
-- **Login rate limiting is per instance** (`app/ratelimit.py` keeps counts in
-  memory). Serverless instances come and go, so brute-force protection is
-  weaker than on a single server. Move it to the database before opening
-  invites widely.
+- **Password guessing is rate-limited by Supabase.** The app's own limiter
+  only guards invite-code attempts (`/api/auth/join`), and it is per instance
+  (`app/ratelimit.py` keeps counts in memory) — serverless instances come and
+  go, so move it to the database before opening invites widely.
 - **Request bodies max 4.5 MB** — only matters for the old Apple Health
   `export.zip` upload (paused).
 - **Services are a Vercel beta feature.**

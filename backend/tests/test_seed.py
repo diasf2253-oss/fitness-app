@@ -19,7 +19,7 @@ def _run_seed(monkeypatch):
 
 
 def test_fresh_seed_tags_every_library_exercise(monkeypatch):
-    _make_user("admin@example.com", "testpassword123", role="admin")
+    _make_user("admin@example.com", role="admin")
     _run_seed(monkeypatch)
 
     db = TestingSession()
@@ -32,7 +32,7 @@ def test_fresh_seed_tags_every_library_exercise(monkeypatch):
 
 
 def test_seed_repairs_untagged_library_but_leaves_custom_alone(monkeypatch):
-    admin_id = _make_user("admin@example.com", "testpassword123", role="admin")
+    admin_id = _make_user("admin@example.com", role="admin")
     db = TestingSession()
     db.add(Exercise(name="Barbell Bench Press", primary_muscle="chest", is_custom=False))
     db.add(Exercise(name="My Curl Variation", primary_muscle="biceps",

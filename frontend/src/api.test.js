@@ -1,12 +1,19 @@
 /**
- * apiUpload's Authorization-header passthrough — the bug this covers: the
- * export.zip history backfill hits an ingest endpoint (require_ingest_auth,
- * a bearer token), but apiUpload only ever sent the session cookie, so
- * backfill 401'd with "missing bearer token" on every attempt.
+ * The fetch wrappers' auth headers. Since the switch to Supabase Auth every
+ * request carries the signed-in user's access token as a bearer header — no
+ * cookies. Ingest uploads pass their own bearer (the per-user ingest token,
+ * which require_ingest_auth expects), and that one must win: the export.zip
+ * backfill once 401'd on every attempt because its header never got sent.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiUpload } from './api'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+let accessToken = null
+vi.mock('./supabase', () => ({ getAccessToken: async () => accessToken }))
+vi.mock('./local/mode', () => ({ isLocalFirst: () => false }))
+
+import { apiFetch, apiUpload } from './api'
+
+beforeEach(() => { accessToken = null })
 afterEach(() => vi.unstubAllGlobals())
 
 function stubFetch(status = 200, body = { status: 'ok' }) {
@@ -22,32 +29,48 @@ function stubFetch(status = 200, body = { status: 'ok' }) {
   return calls
 }
 
-describe('apiUpload', () => {
-  it('sends no extra headers by default (cookie-only, as before)', async () => {
+describe('apiFetch', () => {
+  it('sends the Supabase access token when signed in, and no cookies', async () => {
+    accessToken = 'supabase-token'
     const calls = stubFetch()
-    const form = new FormData()
-    await apiUpload('/api/ingest/health-export', form)
+    await apiFetch('/api/settings')
+
+    expect(calls[0].opts.headers.Authorization).toBe('Bearer supabase-token')
+    expect(calls[0].opts.credentials).toBeUndefined()
+  })
+
+  it('sends no Authorization header when signed out', async () => {
+    const calls = stubFetch()
+    await apiFetch('/api/ping')
+    expect(calls[0].opts.headers.Authorization).toBeUndefined()
+  })
+
+  it('throws the FastAPI detail with the HTTP status attached', async () => {
+    stubFetch(403, { detail: 'no_account' })
+    await expect(apiFetch('/api/auth/me')).rejects.toMatchObject({ message: 'no_account', status: 403 })
+  })
+})
+
+describe('apiUpload', () => {
+  it('sends no extra headers when signed out', async () => {
+    const calls = stubFetch()
+    await apiUpload('/api/ingest/health-export', new FormData())
 
     expect(calls).toHaveLength(1)
-    expect(calls[0].opts.credentials).toBe('include')
     expect(calls[0].opts.headers).toEqual({})
   })
 
-  it('attaches an Authorization bearer header when passed', async () => {
+  it("an explicit bearer (the ingest token) wins over the user's token", async () => {
+    accessToken = 'supabase-token'
     const calls = stubFetch()
-    const form = new FormData()
-    await apiUpload('/api/ingest/health-export', form, { Authorization: 'Bearer abc123' })
+    await apiUpload('/api/ingest/health-export', new FormData(), { Authorization: 'Bearer abc123' })
 
     expect(calls[0].opts.headers).toEqual({ Authorization: 'Bearer abc123' })
-    // Still sends the cookie too — ingest is bearer-only server-side, but
-    // nothing stops the cookie riding along, and other callers still rely on it
-    expect(calls[0].opts.credentials).toBe('include')
   })
 
   it('never sets Content-Type — the browser must own the multipart boundary', async () => {
     const calls = stubFetch()
-    const form = new FormData()
-    await apiUpload('/api/ingest/health-export', form, { Authorization: 'Bearer abc123' })
+    await apiUpload('/api/ingest/health-export', new FormData(), { Authorization: 'Bearer abc123' })
 
     expect(calls[0].opts.headers['Content-Type']).toBeUndefined()
   })

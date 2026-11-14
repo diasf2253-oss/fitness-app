@@ -54,5 +54,6 @@ docs/APPLE_HEALTH_DIAGNOSIS.md
 !.claude/commands/
 memory/
 
-# Vite local overrides (dev auto-login credentials etc.)
+# Vite local overrides (Supabase project values, dev auto-login credentials)
+.env.local
 .env.*.local

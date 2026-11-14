@@ -68,20 +68,35 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # The Supabase Auth user id (the access token's `sub`) this account signs
+    # in as. NULL until the person's first sign-in through Supabase, when
+    # app/auth.py links it by verified email. See app/auth.py.
+    supabase_uid: Mapped[Optional[str]] = mapped_column(
+        String(36), unique=True, index=True, nullable=True
+    )
+    # Legacy: argon2 hashes from before Supabase Auth. Nothing reads them any
+    # more (passwords live in Supabase); kept until a cleanup migration drops
+    # this column together with must_change_password and auth_session.
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     # 'admin' | 'user'
     role: Mapped[str] = mapped_column(String(20), default="user", nullable=False)
     # 'pending' | 'active' | 'disabled'
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
-    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # legacy, unused
     # Bearer credential for the Apple Health Shortcut/HAE pushes — separate
-    # from the browser cookie session, since a Shortcut can't hold a cookie.
+    # from the Supabase sign-in, since a Shortcut can't run one.
     ingest_token: Mapped[str] = mapped_column(
         String(64), default=_new_ingest_token, unique=True, index=True, nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    # Despite the name, "last seen": refreshed (hourly) by require_auth.
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    @property
+    def login_linked(self) -> bool:
+        """Whether this account has signed in through Supabase yet."""
+        return self.supabase_uid is not None
 
 
 class InviteCode(Base):
@@ -97,8 +112,10 @@ class InviteCode(Base):
 
 
 class AuthSession(Base):
-    """A logged-in browser session. Table name `auth_session`, not `session`
-    — that name is taken by the workout Session model/table below."""
+    """Legacy: a browser session from the old cookie login. Unused since the
+    switch to Supabase Auth; the table stays until the cleanup migration.
+    Table name `auth_session`, not `session` — that name is taken by the
+    workout Session model/table below."""
     __tablename__ = "auth_session"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

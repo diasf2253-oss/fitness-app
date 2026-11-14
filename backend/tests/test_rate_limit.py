@@ -1,45 +1,36 @@
 """
-Rate limiting on the auth endpoints (app/ratelimit.py).
+Rate limiting on the signup endpoint (app/ratelimit.py).
 
-The limiter is disabled suite-wide by conftest (AUTH_RATE_LIMIT_ENABLED=false)
-so the many logins across the suite don't trip it. These tests flip
+Password sign-in itself now happens at Supabase, which rate-limits it; what's
+left here is /api/auth/join, the invite-code check. The limiter is disabled
+suite-wide by conftest (AUTH_RATE_LIMIT_ENABLED=false); these tests flip
 settings.auth_rate_limit_enabled back on and reset the shared counter, so they
 exercise the real 429 behaviour in isolation. monkeypatch restores the flag
 after each test.
 """
 from app import ratelimit
 from app.config import settings
+from tests.conftest import sign_in
 
-
-def test_login_is_rate_limited(client, monkeypatch):
-    monkeypatch.setattr(settings, "auth_rate_limit_enabled", True)
-    ratelimit.reset()
-    # 10 attempts/min/IP are allowed; each returns 401 (wrong creds), not 429.
-    for _ in range(10):
-        r = client.post("/api/auth/login", json={"email": "x@example.com", "password": "nope"})
-        assert r.status_code == 401, r.text
-    # The 11th within the window is blocked.
-    r = client.post("/api/auth/login", json={"email": "x@example.com", "password": "nope"})
-    assert r.status_code == 429
-    assert "retry-after" in {k.lower() for k in r.headers}
-    ratelimit.reset()
+BAD_CODE = {"code": "bad-code", "name": "A"}
 
 
 def test_join_is_rate_limited(client, monkeypatch):
     monkeypatch.setattr(settings, "auth_rate_limit_enabled", True)
     ratelimit.reset()
-    body = {"code": "bad-code", "name": "A", "email": "a@example.com", "password": "password123"}
+    sign_in(client, "newcomer@example.com")   # a Supabase login with no account yet
     # 5 attempts/min/IP allowed; each returns 400 (invalid code), not 429.
     for _ in range(5):
-        r = client.post("/api/auth/join", json=body)
+        r = client.post("/api/auth/join", json=BAD_CODE)
         assert r.status_code == 400, r.text
-    r = client.post("/api/auth/join", json=body)
+    r = client.post("/api/auth/join", json=BAD_CODE)
     assert r.status_code == 429
+    assert "retry-after" in {k.lower() for k in r.headers}
     ratelimit.reset()
 
 
 def test_limiter_is_off_by_default_in_tests(client):
-    # With the suite default (flag off) many rapid logins never hit 429.
+    sign_in(client, "newcomer@example.com")
+    # With the suite default (flag off) many rapid attempts never hit 429.
     for _ in range(15):
-        r = client.post("/api/auth/login", json={"email": "x@example.com", "password": "nope"})
-        assert r.status_code == 401
+        assert client.post("/api/auth/join", json=BAD_CODE).status_code == 400

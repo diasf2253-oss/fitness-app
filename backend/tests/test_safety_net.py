@@ -2,8 +2,10 @@
 Safety net — the handful of flows whose breakage would erode trust in the app.
 
 One legible file, one test class per flow:
-  - Auth: every protected route rejects an unauthenticated request, accepts a
-    logged-in session; a second user can never reach the first user's data
+  - Auth: every protected route rejects a request without a valid Supabase
+    access token and accepts one for an active account; a pending account
+    can't reach data; a second user can never reach the first user's data
+    (deep coverage: test_supabase_auth.py)
   - Weight: logging a weight entry round-trips; re-saving a day corrects it
   - Workout: exercise → session → sets → complete → finish, end to end
   - Calories: a fresh app holds at the 2,300 kcal anchor (deep coverage of the
@@ -11,17 +13,16 @@ One legible file, one test class per flow:
   - Apple Health: the sample Health Auto Export payload imports cleanly
     (deep coverage lives in test_health_ingest.py and test_apple_health.py)
 
-Auth fixtures (`client`, `auth_client`) come from conftest.py — see its
-docstring for the pattern other test files still need to migrate to.
+Auth fixtures (`client`, `auth_client`) and the sign_in() helper come from
+conftest.py — see its docstring.
 """
 import json
 import os
 from datetime import date, datetime
 
-from app.auth import hash_password
-from app.models import User, WeightLog
+from app.models import WeightLog
 
-from tests.conftest import TestingSession
+from tests.conftest import TestingSession, _make_user, make_token, sign_in, uid_for
 
 SAMPLE_PAYLOAD_PATH = os.path.join(os.path.dirname(__file__), "sample_health_payload.json")
 
@@ -52,22 +53,24 @@ class TestAuth:
         assert routine.status_code == 201
         routine_id = routine.json()["id"]
 
-        db = TestingSession()
-        other = User(
-            email="other@example.com", password_hash=hash_password("otherpassword123"),
-            name="Other User", role="user", status="active",
-        )
-        db.add(other)
-        db.commit()
-        db.close()
-
-        r = client.post("/api/auth/login", json={
-            "email": "other@example.com", "password": "otherpassword123", "remember": True,
-        })
-        assert r.status_code == 200
+        _make_user("other@example.com", name="Other User")
+        sign_in(client, "other@example.com")
 
         assert client.get(f"/api/routines/{routine_id}").status_code == 404
         assert client.get("/api/routines").json() == []
+
+    def test_expired_token_is_rejected(self, auth_client):
+        token = make_token(uid_for("test@example.com"), "test@example.com", expires_in=-3600)
+        auth_client.headers["Authorization"] = f"Bearer {token}"
+        assert auth_client.get("/api/settings").status_code == 401
+
+    def test_pending_account_cannot_reach_data(self, client):
+        """Signed in with Supabase and joined, but not approved yet."""
+        _make_user("waiting@example.com", status="pending")
+        sign_in(client, "waiting@example.com")
+        r = client.get("/api/settings")
+        assert r.status_code == 403
+        assert r.json()["detail"] == "pending_approval"
 
 
 # ---------------------------------------------------------------------------

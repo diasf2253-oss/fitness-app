@@ -20,7 +20,9 @@ import Diet from './pages/Diet'
 // Coach page killed per workbook H9 (grade D) — code kept at pages/Coach.jsx
 import Login from './pages/Login'
 import Join from './pages/Join'
-import ChangePassword from './pages/ChangePassword'
+import FinishJoin from './pages/FinishJoin'
+import SetNewPassword from './pages/SetNewPassword'
+import AccountStatus from './pages/AccountStatus'
 import Admin from './pages/Admin'
 import Onboarding from './components/Onboarding'
 import StagingBadge from './components/StagingBadge'
@@ -193,7 +195,7 @@ function Sidebar({ isAdmin }) {
   )
 }
 
-/** Everything shown once a session is confirmed active. */
+/** Everything shown once the account is confirmed active. */
 function AuthedApp({ user }) {
   // First-run gate: show the onboarding wizard only when settings say the
   // user hasn't onboarded. `null` = still loading (render nothing wizard-wise).
@@ -201,22 +203,10 @@ function AuthedApp({ user }) {
   const [onboarded, setOnboarded] = useState(null)
 
   useEffect(() => {
-    if (user.must_change_password) return   // settings 403s until the password is set
     apiFetch('/api/settings')
       .then(s => setOnboarded(s.onboarded !== false))
       .catch(() => setOnboarded(true))   // never block the app on a settings error
-  }, [user.must_change_password])
-
-  // Forced password change (admin-issued temp password) — the only screen
-  // reachable until it's done; require_auth blocks every other route too.
-  if (user.must_change_password) {
-    return (
-      <>
-        <StagingBadge />
-        <ChangePassword />
-      </>
-    )
-  }
+  }, [])
 
   if (onboarded === false) {
     return (
@@ -276,7 +266,7 @@ function AuthedApp({ user }) {
   )
 }
 
-/** Everything shown while logged out — no data, no sidebar, no nav. */
+/** Everything shown while signed out — no data, no sidebar, no nav. */
 function AnonApp() {
   return (
     <>
@@ -290,11 +280,30 @@ function AnonApp() {
   )
 }
 
+/** Signed in with Supabase, but not (yet) let into the app. */
+function Gate({ children }) {
+  return (
+    <>
+      <StagingBadge />
+      {children}
+    </>
+  )
+}
+
+/** Picks the screen from src/auth.jsx's status — see the list there. */
 function AppShell() {
   const { status, user } = useAuth()
-  if (status === 'loading') return null
-  if (status === 'anon') return <AnonApp />
-  return <AuthedApp user={user} />
+  switch (status) {
+    case 'loading':      return null
+    case 'ready':        return <AuthedApp user={user} />
+    case 'needs_invite': return <Gate><FinishJoin /></Gate>
+    case 'recovery':     return <Gate><SetNewPassword /></Gate>
+    case 'pending':
+    case 'disabled':
+    case 'unreachable':
+    case 'unconfigured': return <Gate><AccountStatus kind={status} /></Gate>
+    default:             return <AnonApp />   // 'signed_out'
+  }
 }
 
 export default function App() {

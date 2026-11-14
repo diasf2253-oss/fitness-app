@@ -815,23 +815,10 @@ class SyncPushOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 class JoinRequest(BaseModel):
-    code: str
-    name: str
-    email: str
-    password: str = Field(min_length=8)
-
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-    remember: bool = False
-
-
-class ChangePasswordRequest(BaseModel):
-    new_password: str = Field(min_length=8)
-    # Required unless the account is on an admin-issued temp password
-    # (must_change_password) — see routers/auth.py.
-    current_password: Optional[str] = None
+    # Email and password aren't here: the caller is already signed in with
+    # Supabase, and the email comes from their verified access token.
+    code: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=200)
 
 
 class UpdateMeRequest(BaseModel):
@@ -843,8 +830,7 @@ class UserMeOut(OrmBase):
     email: str
     name: str
     role: str
-    status: str
-    must_change_password: bool
+    status: str          # 'pending' | 'active' | 'disabled'
     ingest_token: str
 
 
@@ -861,6 +847,7 @@ class AdminUserOut(OrmBase):
     status: str
     created_at: datetime
     last_login_at: Optional[datetime] = None
+    login_linked: bool = False   # has signed in through Supabase yet
 
 
 class UserStatusUpdate(BaseModel):
@@ -868,8 +855,9 @@ class UserStatusUpdate(BaseModel):
     role: Optional[str] = None     # 'admin' | 'user'
 
 
-class TempPasswordOut(BaseModel):
-    temp_password: str
+class ResetLinkOut(BaseModel):
+    email: str
+    action_link: str
 
 
 class InviteCodeCreate(BaseModel):

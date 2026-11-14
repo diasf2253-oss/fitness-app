@@ -1,7 +1,8 @@
 /**
- * Fetch wrapper for the multi-user friends beta — auth is a same-origin
- * httpOnly session cookie (see src/auth.js), never a bearer token, so every
- * request just needs `credentials: 'include'` and the browser does the rest.
+ * Fetch wrapper. Auth is a Supabase access token sent as
+ * `Authorization: Bearer <token>` on every network request (see
+ * src/supabase.js) — no cookies involved, so it works the same whether the
+ * API is on this origin or another one.
  *
  * Usage:
  *   import { apiFetch } from './api'
@@ -11,12 +12,33 @@
 import { dispatchLocal } from './local/api'
 import { isLocalFirst } from './local/mode'
 import { apiUrl } from './env'
+import { getAccessToken } from './supabase'
+
+/** The signed-in user's bearer header, or {} when signed out. */
+async function authHeaders() {
+  const token = await getAccessToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+async function errorFrom(response) {
+  // Try to parse a FastAPI {"detail": "..."} error body
+  let detail = `HTTP ${response.status}`
+  try {
+    const err = await response.json()
+    detail = err.detail || JSON.stringify(err)
+  } catch (_) {
+    // ignore JSON parse errors on error responses
+  }
+  const error = new Error(detail)
+  error.status = response.status
+  return error
+}
 
 /**
  * Core fetch wrapper.
- * - Sends the session cookie automatically (credentials: 'include')
+ * - Sends the Supabase access token when someone is signed in
  * - Sets Content-Type: application/json when a body is provided
- * - Throws an Error with the response detail on non-2xx responses
+ * - Throws an Error (with .status) carrying the response detail on non-2xx
  *
  * Local-first mode: requests are offered to the on-device API first
  * (IndexedDB-backed twin of the backend). Matched routes never touch the
@@ -34,24 +56,12 @@ export async function apiFetch(path, options = {}) {
 async function networkFetch(path, options = {}) {
   const headers = {
     ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(await authHeaders()),
     ...(options.headers || {}),
   }
 
-  const response = await fetch(apiUrl(path), { ...options, headers, credentials: 'include' })
-
-  if (!response.ok) {
-    // Try to parse a FastAPI {"detail": "..."} error body
-    let detail = `HTTP ${response.status}`
-    try {
-      const err = await response.json()
-      detail = err.detail || JSON.stringify(err)
-    } catch (_) {
-      // ignore JSON parse errors on error responses
-    }
-    const error = new Error(detail)
-    error.status = response.status
-    throw error
-  }
+  const response = await fetch(apiUrl(path), { ...options, headers })
+  if (!response.ok) throw await errorFrom(response)
 
   // 204 No Content — return null instead of trying to parse empty body
   if (response.status === 204) return null
@@ -60,36 +70,22 @@ async function networkFetch(path, options = {}) {
 }
 
 /**
- * Multipart upload variant (file uploads). Same cookie auth, but no
- * Content-Type header — the browser must set the multipart boundary.
+ * Multipart upload variant (file uploads). No Content-Type header — the
+ * browser must set the multipart boundary.
  *
  * Its one caller (the export.zip history backfill) hits an ingest endpoint,
  * and every ingest endpoint authenticates via the per-user `ingest_token`
- * bearer header (require_ingest_auth) rather than the session cookie — a
- * Shortcut/HAE automation can't hold a cookie jar, so ingest never accepts
- * one. This upload was never passing that header, so backfill 401'd with
- * "missing bearer token" every time — `extraHeaders` fixes that; pass
- * { Authorization: `Bearer ${ingestToken}` }.
+ * bearer (require_ingest_auth), not the Supabase token — pass
+ * { Authorization: `Bearer ${ingestToken}` } as `extraHeaders`; it takes
+ * precedence over the signed-in user's token.
  */
 export async function apiUpload(path, formData, extraHeaders = {}) {
   const response = await fetch(apiUrl(path), {
     method: 'POST',
-    credentials: 'include',
-    headers: extraHeaders,
+    headers: { ...(await authHeaders()), ...extraHeaders },
     body: formData,
   })
-
-  if (!response.ok) {
-    let detail = `HTTP ${response.status}`
-    try {
-      const err = await response.json()
-      detail = err.detail || JSON.stringify(err)
-    } catch (_) {
-      // ignore JSON parse errors on error responses
-    }
-    throw new Error(detail)
-  }
-
+  if (!response.ok) throw await errorFrom(response)
   return response.json()
 }
 
@@ -101,21 +97,10 @@ export async function apiUpload(path, formData, extraHeaders = {}) {
 export async function apiStream(path, body, onChunk) {
   const response = await fetch(apiUrl(path), {
     method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
     body: JSON.stringify(body),
   })
-
-  if (!response.ok) {
-    let detail = `HTTP ${response.status}`
-    try {
-      const err = await response.json()
-      detail = err.detail || JSON.stringify(err)
-    } catch (_) {
-      // ignore JSON parse errors on error responses
-    }
-    throw new Error(detail)
-  }
+  if (!response.ok) throw await errorFrom(response)
 
   const reader = response.body.getReader()
   const decoder = new TextDecoder()

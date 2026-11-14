@@ -46,7 +46,7 @@ def test_refuses_a_remote_database(monkeypatch):
 
 
 def test_fills_only_the_demo_account(demo_on):
-    other = _make_user("real@example.com", "testpassword123")
+    other = _make_user("real@example.com")
     seed_demo.seed_demo()
 
     db = TestingSession()
@@ -72,7 +72,7 @@ def test_rerun_is_idempotent_and_reset_removes_everything(demo_on, monkeypatch):
     assert _count(Session) == first          # wiped + refilled, not doubled
     assert _count(User, email=seed_demo.DEMO_EMAIL) == 1
 
-    other = _make_user("real@example.com", "testpassword123")
+    other = _make_user("real@example.com")
     monkeypatch.setattr("sys.argv", ["seed_demo", "--reset"])
     seed_demo.main()
     assert _count(User, email=seed_demo.DEMO_EMAIL) == 0

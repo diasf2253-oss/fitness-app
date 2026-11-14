@@ -41,11 +41,10 @@ window open; that's the app being "on". It prints a banner like:
 ```
 
 The first run copies `backend/.env.example` to `backend/.env` and then
-**stops, asking you to set a real `ADMIN_PASSWORD`** — it refuses to create an
-admin with the template's `changeme`, because the app is reachable by anyone
-on your Wi-Fi. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` (8+ characters) in
-`backend/.env` and run `./start.sh` again. Change them later with
-`python -m app.set_admin_password` from `backend/`.
+**stops, asking you to set `ADMIN_EMAIL`** — the email you'll sign in with as
+the admin. Signing in itself goes through Supabase: create a free project and
+put its values in `backend/.env` and `frontend/.env.local` (step-by-step in
+[SUPABASE.md](SUPABASE.md)), then run `./start.sh` again.
 
 (Use `./start.sh --no-build` for faster restarts when you only touched the
 backend.)
@@ -54,7 +53,9 @@ backend.)
 
 ## 2. Log in on the laptop
 
-1. Open **http://localhost:8000** and log in with your admin email + password.
+1. Open **http://localhost:8000**, tap **Create an account** and sign up with
+   your admin email (or **Continue with Google** using that address). Confirm
+   the email if asked; the app links the login to your admin account.
 2. **Install as an app** (optional): Chrome address bar → **install icon**. It
    lands in your dock, in its own window.
 

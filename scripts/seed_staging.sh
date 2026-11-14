@@ -8,8 +8,11 @@
 # Flow: pg_dump production (scripts/backup.sh) -> pg_restore into
 # STAGING_DATABASE_URL (scripts/restore.sh, keeping its typed-confirmation
 # guard) -> run scripts/anonymise_staging.sql on the restored copy, so real
-# free text (journal entries, notes) never sits in staging and body/health
-# numbers are masked while every trend stays realistic.
+# free text (journal entries, notes) never sits in staging, body/health
+# numbers are masked while every trend stays realistic, and no production
+# credential survives: non-admin emails/names rewritten, every password reset
+# to STAGING_USER_PASSWORD, ingest tokens regenerated, sessions deleted,
+# invite codes regenerated and deactivated.
 #
 # Guards, on top of restore.sh's:
 #   - STAGING_DATABASE_URL is required and must differ from PROD_DATABASE_URL
@@ -20,6 +23,9 @@
 # Env (scripts/.env.backup is loaded if present):
 #   PROD_DATABASE_URL      Railway prod PUBLIC url (required — dump source).
 #   STAGING_DATABASE_URL   Railway staging PUBLIC url (required — target).
+#   STAGING_USER_PASSWORD  Password EVERY staging account gets after the scrub,
+#                          admin included (required, 12+ chars, staging-only).
+#                          Hashed locally with argon2; only the hash is sent.
 #   BACKUP_DIR             Where dumps land (default: backups).
 # ---------------------------------------------------------------------------
 set -euo pipefail
@@ -31,6 +37,11 @@ fi
 
 : "${PROD_DATABASE_URL:?Set PROD_DATABASE_URL (prod public connection string) — seed_staging dumps production first.}"
 : "${STAGING_DATABASE_URL:?Set STAGING_DATABASE_URL (staging Postgres public connection string, see scripts/.env.backup.example).}"
+: "${STAGING_USER_PASSWORD:?Set STAGING_USER_PASSWORD (the password every staging account gets after the scrub, see scripts/.env.backup.example).}"
+if [ "${#STAGING_USER_PASSWORD}" -lt 12 ]; then
+  echo "STAGING_USER_PASSWORD must be at least 12 characters — staging is reachable from the internet." >&2
+  exit 1
+fi
 
 command -v psql >/dev/null 2>&1 || { echo "psql not found. Install the Postgres client (e.g. brew install libpq)." >&2; exit 1; }
 
@@ -53,6 +64,22 @@ if [ "$PROD_HP" = "$STAGING_HP" ]; then
   exit 1
 fi
 
+# ---- 0. hash the staging password (before touching any database) ---------
+# Same argon2 defaults as app/auth.py's PasswordHasher(), so the app verifies
+# it like any other hash. Prefers the backend venv (has argon2-cffi). The
+# password reaches Python via the environment, not argv, so `ps` can't see it.
+HASH_PY=python3
+[ -x backend/.venv/bin/python ] && HASH_PY=backend/.venv/bin/python
+STAGING_PW_HASH="$(STAGING_USER_PASSWORD="$STAGING_USER_PASSWORD" "$HASH_PY" - <<'PY'
+import os, sys
+try:
+    from argon2 import PasswordHasher
+except ImportError:
+    sys.exit("argon2-cffi is not installed for this Python — run ./start.sh once (creates backend/.venv) or pip install argon2-cffi.")
+print(PasswordHasher().hash(os.environ["STAGING_USER_PASSWORD"]))
+PY
+)"
+
 # ---- 1. get a dump --------------------------------------------------------
 DUMP="${1:-}"
 if [ -z "$DUMP" ]; then
@@ -72,10 +99,23 @@ STAGING_HOSTS="$STAGING_HOST" \
   ./scripts/restore.sh "$DUMP"
 
 # ---- 3. anonymise the restored copy ---------------------------------------
-echo "Anonymising staging (free text scrubbed, body data masked)…"
-psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -q -f scripts/anonymise_staging.sql
+# One transaction: it either fully scrubs or changes nothing. The restore has
+# already happened, so a failure here leaves staging holding an UNSCRUBBED
+# production copy — say so loudly rather than exiting quietly.
+echo "Anonymising staging (free text scrubbed, body data masked, credentials replaced)…"
+if ! psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -v staging_pw_hash="$STAGING_PW_HASH" \
+       -q -f scripts/anonymise_staging.sql; then
+  echo >&2
+  echo "!! ANONYMISATION FAILED — staging now holds an UNSCRUBBED production copy" >&2
+  echo "!! (real emails, password hashes, ingest tokens, live session ids)." >&2
+  echo "!! Fix the error above and re-run ./scripts/seed_staging.sh $DUMP now," >&2
+  echo "!! or stop the staging service until you can." >&2
+  exit 1
+fi
 
 echo
 echo "Staging seeded from $DUMP and anonymised."
+echo "Every account's password is now STAGING_USER_PASSWORD — log in as the admin"
+echo "with its usual email, or as anyone else with user<id>@example.test."
 echo "If the staging branch has newer migrations than production, redeploy or"
 echo "restart the staging service so its boot-time 'alembic upgrade head' runs."

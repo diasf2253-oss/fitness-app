@@ -102,10 +102,11 @@ flowchart LR
     PWA["Installed PWA<br/>React + Vite"] --- IDB[("IndexedDB<br/>(Dexie)")]
     SC["iOS Shortcut<br/>Tracker Health Sync"]
   end
-  Desk["Desktop browser"] -->|"REST · session cookie"| API
+  Desk["Desktop browser"] -->|"REST · Bearer access token"| API
+  Desk & PWA -.->|"sign in"| Auth["Supabase Auth"]
   PWA <-->|"sync · last-write-wins by updated_at"| API["FastAPI<br/>API + built frontend"]
   SC -->|"POST /api/ingest/health/shortcut<br/>Bearer ingest_token"| API
-  API --> DB[("Postgres (prod)<br/>SQLite (dev)")]
+  API --> DB[("Postgres on Supabase (prod)<br/>SQLite (dev)")]
   API -.->|optional| Claude["Claude API"]
 ```
 
@@ -116,9 +117,12 @@ flowchart LR
   sync engine (`backend/app/sync.py`) merges rows — entities by `uuid`, health
   days by date — last-write-wins, with manual entries beating synced ones.
   The ported math is tested in both languages to stay identical.
-- **Two kinds of auth.** People log in with email + password (argon2) and get
-  an httpOnly session cookie. The Health Shortcut can't hold cookies, so it
-  sends a per-user, rotatable `ingest_token` instead.
+- **Two kinds of auth.** People sign in through **Supabase Auth** (email +
+  password or Google) and send its signed access token with every request;
+  the backend verifies it and then applies its own rules — invite code, admin
+  approval, per-user data. The Health Shortcut can't run a sign-in, so it
+  sends a per-user, rotatable `ingest_token` instead. Setup:
+  [docs/SUPABASE.md](docs/SUPABASE.md).
 - **One ingest core.** The Shortcut, Health Auto Export, and the `export.zip`
   backfill all go through `app/health_ingest.py` — unit conversion, wake-date
   sleep bucketing, per-source de-duplication, idempotent upserts.
@@ -127,8 +131,9 @@ flowchart LR
 
 | Layer | Tools |
 |---|---|
-| Backend | Python, FastAPI, SQLAlchemy 2, Pydantic v2, Alembic, argon2 |
-| Database | SQLite (local dev) · PostgreSQL (production) |
+| Backend | Python, FastAPI, SQLAlchemy 2, Pydantic v2, Alembic, PyJWT |
+| Auth | Supabase Auth (email + password, Google) |
+| Database | SQLite (local dev) · PostgreSQL on Supabase (production) |
 | Frontend | React 18, Vite, React Router, Recharts, Dexie (IndexedDB) |
 | PWA | Web app manifest + a versioned service worker precaching the app shell |
 | AI (optional) | Anthropic Claude API |
@@ -150,9 +155,11 @@ cd fitness-app
 This builds the frontend, creates a virtualenv, copies `backend/.env.example`
 to `backend/.env`, runs migrations, creates the admin account and an invite
 code, and serves everything at **http://localhost:8000** (and on your Wi-Fi for
-a phone). The first run stops until you set a real `ADMIN_PASSWORD` in
-`backend/.env` (it refuses the template's `changeme`); then log in with
-`ADMIN_EMAIL` / `ADMIN_PASSWORD`. A friendly walkthrough lives in
+a phone). The first run stops until you set `ADMIN_EMAIL` in `backend/.env`.
+Signing in needs a Supabase project: put its values in `backend/.env` and
+`frontend/.env.local` (see [docs/SUPABASE.md](docs/SUPABASE.md)), then create
+your login with the admin email — it links to the admin account
+automatically. A friendly walkthrough lives in
 [docs/TUTORIAL.md](docs/TUTORIAL.md).
 
 ### Manual setup (for development)
@@ -162,7 +169,7 @@ a phone). The first run stops until you set a real `ADMIN_PASSWORD` in
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # then edit ADMIN_EMAIL / ADMIN_PASSWORD
+cp .env.example .env          # then set ADMIN_EMAIL + the SUPABASE_* values
 alembic upgrade head          # create / upgrade the database
 python -m app.seed_admin      # admin account + first invite code
 python -m app.seed            # exercise library, routines, default settings
@@ -170,6 +177,7 @@ uvicorn app.main:app --reload
 
 # Frontend — http://localhost:5173 (proxies /api to :8000)
 cd frontend
+cp .env.example .env.local    # then set the VITE_SUPABASE_* values
 npm install
 npm run dev
 ```
@@ -187,10 +195,11 @@ Backend settings come from environment variables or `backend/.env`
 | Variable | Default | Purpose |
 |---|---|---|
 | `DATABASE_URL` | `sqlite:///./fitness.sqlite3` | Any SQLAlchemy URL; a bare `postgresql://` URL is routed to psycopg 3 |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | — | Create the first admin account (`python -m app.seed_admin`) |
-| `SESSION_COOKIE_SECURE` | `true` | Must be `false` on plain `http://` (local dev), or logins won't stick |
-| `SESSION_MAX_AGE_DAYS` | `30` | Session lifetime |
-| `AUTH_RATE_LIMIT_ENABLED` | `true` | Brute-force speed bump on login / join |
+| `SUPABASE_URL` | — | The Supabase project (`https://<ref>.supabase.co`); empty ⇒ signed-in routes answer 503 |
+| `SUPABASE_PUBLISHABLE_KEY` | — | Publishable (or legacy anon) key — used to confirm an email is verified |
+| `SUPABASE_SECRET_KEY` | — | Optional, server-only: enables the admin's password *Reset link* |
+| `ADMIN_EMAIL` | — | The first admin account (`python -m app.seed_admin`); its owner signs in through Supabase with this email |
+| `AUTH_RATE_LIMIT_ENABLED` | `true` | Brute-force speed bump on signup (`/api/auth/join`); Supabase limits sign-in |
 | `APP_ENV` | `production` | Set `staging` to show the STAGING badge |
 | `CORS_ORIGINS` / `CORS_ALLOW_ORIGIN_REGEX` | — | Only for cross-origin frontends (e.g. Vercel previews) |
 | `ENABLE_DEV_SEED` | `false` | Allow the admin to load invented demo health data — never in production |
@@ -201,6 +210,7 @@ Frontend build-time variables (Vite):
 
 | Variable | Purpose |
 |---|---|
+| `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` | The Supabase project the app signs in with (public values) |
 | `VITE_LOCAL_FIRST` | `1` (production default) = offline-first on-device API; `0` = thin client |
 | `VITE_API_BASE_URL` | Point a separately hosted frontend at an API origin |
 | `VITE_APP_ENV` | `staging` bakes in the STAGING badge |

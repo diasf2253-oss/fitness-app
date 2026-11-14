@@ -1,110 +1,112 @@
 """
-Auth endpoints (Phase 1-2 friends beta): invite-gated signup, login/logout,
-"who am I", and the forced password-change escape hatch.
+Auth endpoints for the invite-only friends beta (Supabase Auth edition).
 
-Every account starts 'pending' after /join and needs an admin approval
-(see routers/admin.py) before it can log in. No email service in v1 —
-password resets are admin-issued temp passwords.
+Signing in, signing out, password changes and resets all happen in the
+browser against Supabase (see frontend/src/auth.jsx) — there are no login or
+password endpoints here any more. What's left is this app's own say over who
+gets in:
+
+  - POST /join  — a signed-in Supabase user with no app account redeems an
+                  invite code; the account starts 'pending' until an admin
+                  approves it (routers/admin.py).
+  - GET  /me    — who am I, including a pending/disabled status.
+  - PATCH /me   — rename.
+  - POST /ingest-token/rotate — new Apple Health ingest credential.
 """
-from datetime import datetime
-
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session as DBSession
 
 from app.auth import (
-    create_session,
-    clear_session_cookie,
-    hash_password,
+    SignedIn,
+    email_confirmed,
+    get_account,
+    link_existing_account,
     require_auth,
-    set_session_cookie,
-    verify_password,
+    require_signed_in,
 )
-from app.config import settings
 from app.db import get_db
 from app.ratelimit import rate_limit
-from app.models import AuthSession, InviteCode, User, _new_ingest_token
-from app.schemas import (
-    ChangePasswordRequest, JoinRequest, LoginRequest, UpdateMeRequest, UserMeOut,
-)
+from app.models import InviteCode, User, _new_ingest_token
+from app.schemas import JoinRequest, UpdateMeRequest, UserMeOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/join", dependencies=[Depends(rate_limit(5, scope="join"))])
-def join(body: JoinRequest, db: DBSession = Depends(get_db)):
+def join(
+    body: JoinRequest,
+    signed_in: SignedIn = Depends(require_signed_in),
+    db: DBSession = Depends(get_db),
+):
     """
-    Creates a 'pending' account if — and only if — `code` is a valid, active,
-    not-yet-exhausted invite code. Enforced here at the API, not just hidden
-    in the frontend: a request with no/invalid code can never create an
-    account, full stop.
+    Turn a Supabase sign-in into a 'pending' app account, if — and only if —
+    `code` is a valid, active, not-yet-exhausted invite code. Enforced here
+    at the API, not just in the UI: a valid Supabase login alone can never
+    create an account.
+
+    Idempotent for someone who already has an account (returns its status),
+    and an existing account with this email that has no Supabase login yet
+    is simply linked — no invite needed to get your own data back.
     """
+    identity = signed_in.identity
+
+    existing = db.query(User).filter(User.supabase_uid == identity.uid).first()
+    if existing is not None:
+        return {"status": existing.status}
+
+    if not identity.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Your login has no email address, which this app needs.")
+
+    by_email = db.query(User).filter(User.email == identity.email).first()
+    if by_email is not None:
+        if by_email.supabase_uid is not None:
+            # Linked to a different Supabase login — reconnecting is an admin job.
+            raise HTTPException(status.HTTP_409_CONFLICT,
+                                "An account with that email already exists")
+        linked = link_existing_account(db, signed_in)
+        if linked is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN,
+                                "Confirm your email address first, then try again.")
+        return {"status": linked.status}
+
     code = (
         db.query(InviteCode)
-        .filter(InviteCode.code == body.code, InviteCode.active.is_(True))
+        .filter(InviteCode.code == body.code.strip(), InviteCode.active.is_(True))
         .first()
     )
     if code is None or (code.max_uses is not None and code.uses >= code.max_uses):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired invite code")
 
-    email = body.email.strip().lower()
-    if db.query(User).filter(User.email == email).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, "An account with that email already exists")
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Name can't be empty.")
 
-    user = User(
-        email=email,
-        password_hash=hash_password(body.password),
-        name=body.name.strip(),
+    # Only a verified address may claim an account: otherwise someone could
+    # sign up as friend@example.com without owning it and squat that email.
+    if not email_confirmed(signed_in):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "Confirm your email address first, then try again.")
+
+    db.add(User(
+        email=identity.email,
+        supabase_uid=identity.uid,
+        name=name,
         status="pending",
-    )
-    db.add(user)
+    ))
     code.uses += 1
     db.commit()
     return {"status": "pending"}
 
 
-@router.post("/login", dependencies=[Depends(rate_limit(10, scope="login"))])
-def login(body: LoginRequest, response: Response, db: DBSession = Depends(get_db)):
-    email = body.email.strip().lower()
-    user = db.query(User).filter(User.email == email).first()
-
-    # Same generic message for "no such user" and "wrong password" — avoid
-    # leaking which emails have accounts.
-    if user is None or not verify_password(body.password, user.password_hash):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect email or password")
-
-    if user.status == "pending":
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "pending_approval")
-    if user.status == "disabled":
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "account_disabled")
-
-    session_id, max_age = create_session(db, user, remember=body.remember)
-    set_session_cookie(response, session_id, max_age)
-
-    user.last_login_at = datetime.utcnow()
-    db.commit()
-    return {"status": "ok"}
-
-
-@router.post("/logout")
-def logout(
-    request: Request,
-    response: Response,
-    db: DBSession = Depends(get_db),
-    current_user: User = Depends(require_auth),
-):
-    """Kills only the current device's session — other logged-in devices
-    for this user are unaffected (that's what temp-password reset is for)."""
-    session_id = request.cookies.get(settings.session_cookie_name)
-    if session_id:
-        db.query(AuthSession).filter(AuthSession.session_id == session_id).delete()
-        db.commit()
-    clear_session_cookie(response)
-    return {"status": "ok"}
-
-
 @router.get("/me", response_model=UserMeOut)
-def me(current_user: User = Depends(require_auth)):
-    """A 401 here is the normal logged-out state, not an error."""
+def me(current_user: User = Depends(get_account)):
+    """
+    Who's signed in — answered for pending and disabled accounts too, so
+    the app can show the right screen. A 401 here is the normal signed-out
+    state; a 403 "no_account" means "signed in with Supabase, but hasn't
+    joined with an invite code yet".
+    """
     return current_user
 
 
@@ -114,7 +116,8 @@ def update_me(
     db: DBSession = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Change the display name (the email stays fixed — it is the login)."""
+    """Change the display name (the email is the Supabase login — it's
+    changed there, not here)."""
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name can't be empty.")
@@ -133,48 +136,12 @@ def rotate_ingest_token(
     Issue a fresh Apple Health ingest token, invalidating the old one.
 
     The ingest token is a long-lived bearer credential that gets pasted into
-    an iOS Shortcut (a Shortcut can't hold a cookie jar), so it travels
-    further than a session does — into screenshots, shared setup notes, a
-    Shortcut someone re-shares. Until now there was no way to revoke one
-    short of disabling the whole account. Rotating breaks any Shortcut still
-    holding the old value, which is the point.
+    an iOS Shortcut (a Shortcut can't run a Supabase sign-in), so it travels
+    further than a login does — into screenshots, shared setup notes, a
+    Shortcut someone re-shares. Rotating breaks any Shortcut still holding
+    the old value, which is the point.
     """
     current_user.ingest_token = _new_ingest_token()
     db.commit()
     db.refresh(current_user)
     return current_user
-
-
-@router.post("/change-password")
-def change_password(
-    body: ChangePasswordRequest,
-    request: Request,
-    db: DBSession = Depends(get_db),
-    current_user: User = Depends(require_auth),
-):
-    """
-    Allowed even while must_change_password is set — this IS the escape
-    hatch require_auth otherwise blocks everything behind. Invalidates
-    every *other* session for this account (keeps the current tab logged
-    in) — matters most right after an admin-issued temp password.
-    """
-    # A normal password change proves you know the current one, so a stolen
-    # session can't quietly lock the owner out. The forced temp-password flow
-    # is exempt — the person has just been handed a password they can't "know".
-    if not current_user.must_change_password:
-        if not body.current_password or not verify_password(
-            body.current_password, current_user.password_hash
-        ):
-            raise HTTPException(status_code=400, detail="Current password is incorrect.")
-
-    current_user.password_hash = hash_password(body.new_password)
-    current_user.must_change_password = False
-
-    current_session_id = request.cookies.get(settings.session_cookie_name)
-    db.query(AuthSession).filter(
-        AuthSession.user_id == current_user.id,
-        AuthSession.session_id != current_session_id,
-    ).delete(synchronize_session=False)
-
-    db.commit()
-    return {"status": "ok"}

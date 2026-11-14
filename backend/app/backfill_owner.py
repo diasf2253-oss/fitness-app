@@ -10,7 +10,7 @@ Never run this against PROD_DATABASE_URL.
 Usage:
     cd backend
     source .venv/bin/activate
-    ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=... python -m app.backfill_owner
+    ADMIN_EMAIL=you@example.com python -m app.backfill_owner
 """
 import sys
 import os

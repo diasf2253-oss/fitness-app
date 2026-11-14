@@ -25,7 +25,8 @@ reports from automated scanners without a demonstrated impact.
 
 - Never commit `backend/.env`, database files, or `backups/` — all are
   git-ignored.
-- Serve the app over HTTPS and keep `SESSION_COOKIE_SECURE` at its default
-  (`true`).
-- Change the seeded admin password (`python -m app.set_admin_password`) and
-  rotate any ingest token that may have leaked (Settings → Apple Health sync).
+- Serve the app over HTTPS.
+- Keep the Supabase **secret** key (`SUPABASE_SECRET_KEY`) server-side only —
+  never in a `VITE_` variable — and use separate Supabase projects for
+  production and staging/dev (see docs/SUPABASE.md).
+- Rotate any ingest token that may have leaked (Settings → Apple Health sync).

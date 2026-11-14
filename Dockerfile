@@ -18,6 +18,11 @@ COPY frontend/ ./
 # STAGING badge without waiting for the runtime /api/ping probe.
 ARG VITE_APP_ENV=""
 ENV VITE_APP_ENV=$VITE_APP_ENV
+# The Supabase project the frontend signs in with (public values, baked in
+# at build time — pass them as build args; see docs/SUPABASE.md).
+ARG VITE_SUPABASE_URL=""
+ARG VITE_SUPABASE_PUBLISHABLE_KEY=""
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
 RUN npm run build
 
 

@@ -8,11 +8,11 @@ The `Dockerfile` builds that single image. On every boot it runs
 `alembic upgrade head` → `python -m app.seed_admin` → `python -m app.seed`
 → `uvicorn`, and all three setup steps are safe to repeat.
 
-> **Serve it over HTTPS.** Login uses a `Secure` session cookie
-> (`SESSION_COOKIE_SECURE=true`, the default). Browsers never send a Secure
-> cookie over plain `http://`, so on an http origin every login would appear to
-> succeed and then immediately log you out. Only set it to `false` for local
-> development.
+> **Sign-in runs on Supabase Auth.** Every option below needs a Supabase
+> project and its `SUPABASE_*` / `VITE_SUPABASE_*` values — see
+> [SUPABASE.md](SUPABASE.md). The `VITE_` ones are baked in when the frontend
+> is built, so set them before building (Docker: as build args). Serve the app
+> over HTTPS, and add its URL to the Supabase project's Redirect URLs.
 
 ---
 
@@ -27,12 +27,13 @@ The `Dockerfile` builds that single image. On every boot it runs
    |---|---|
    | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (a bare `postgresql://` URL is fine — it's routed to the psycopg 3 driver automatically) |
    | `ADMIN_EMAIL` | the first admin account's email |
-   | `ADMIN_PASSWORD` | a strong password (change it later with `python -m app.set_admin_password`) |
+   | `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` | from the Supabase project ([SUPABASE.md](SUPABASE.md)); `SUPABASE_SECRET_KEY` optional |
    | `ANTHROPIC_API_KEY` | *(optional)* enables the AI report narrative / Coach endpoints |
 
 4. **Settings → Networking → Generate Domain.** Railway serves it over HTTPS.
-5. Read the deploy log: `seed_admin` prints the **first invite code**. Log in
-   as the admin, then share the invite code with friends — their signups
+5. Read the deploy log: `seed_admin` prints the **first invite code**. Create
+   your login with the admin email (or Google) — it links to the admin
+   account — then share the invite code with friends — their signups
    arrive as *pending* under **/admin** until you approve them.
 
 Back up the database with `./scripts/backup.sh` (see the README's
@@ -47,7 +48,8 @@ docker run -p 8000:8000 \
   -v fitness-data:/app/data \
   -e DATABASE_URL=sqlite:////app/data/fitness.sqlite3 \
   -e ADMIN_EMAIL=you@example.com \
-  -e ADMIN_PASSWORD='a-strong-password' \
+  -e SUPABASE_URL=https://<ref>.supabase.co \
+  -e SUPABASE_PUBLISHABLE_KEY=sb_publishable_… \
   fitness-app
 ```
 
@@ -56,12 +58,9 @@ put an HTTPS reverse proxy (Caddy, Cloudflare Tunnel, …) in front of it.
 
 ## Option C — your own Mac + Cloudflare Tunnel (free)
 
-Good if the Mac is usually on. The tunnel gives you a public **HTTPS** URL,
-so the Secure cookie works — **but first delete the
-`SESSION_COOKIE_SECURE=false` line from `backend/.env`** (the local-dev
-template adds it). Left in, the session cookie is issued without its
-`Secure` flag on a public site. Also make sure `ADMIN_PASSWORD` is a real
-password, not the template's `changeme`.
+Good if the Mac is usually on. The tunnel gives you a public **HTTPS** URL —
+add it to your Supabase project's Redirect URLs (and set it as the Site URL)
+so email links and Google sign-in come back to it.
 
 ```bash
 # 1. Build the frontend once (rebuild after each update)

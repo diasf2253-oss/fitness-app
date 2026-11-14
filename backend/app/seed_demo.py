@@ -6,7 +6,11 @@ to look at while the app is being designed.
     ENABLE_DEV_SEED=true python -m app.seed_demo           # (re)create + fill
     ENABLE_DEV_SEED=true python -m app.seed_demo --reset   # delete the demo account only
 
-Then log in as  demo@example.com  /  demo-password-123  (a local-only throwaway).
+Signing in as the demo account goes through Supabase Auth like any other
+account, so create its login once in your dev Supabase project: Dashboard →
+Authentication → Users → Add user → demo@example.com / demo-password-123,
+with "Auto Confirm User" ticked (example.com can't receive a confirmation
+email). The first sign-in links that login to this account by email.
 
 Safety rules (they follow CLAUDE.md's "never let invented data render as real"):
   * It only ever touches the demo account. Your real/admin account is never
@@ -30,7 +34,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from sqlalchemy import delete
 
-from app.auth import hash_password
 from app.config import settings
 from app.db import SessionLocal
 from app.models import (
@@ -42,7 +45,7 @@ from app.muscles import suggest_muscle_group
 from app.seed import EXERCISES, ROUTINES
 
 DEMO_EMAIL = "demo@example.com"
-DEMO_PASSWORD = "demo-password-123"
+DEMO_PASSWORD = "demo-password-123"   # the Supabase login you create for it (see above)
 DEMO_WEEKS = 12
 
 # Starting working weights (kg) for the lifts the Ranks ladder understands;
@@ -109,7 +112,7 @@ def seed_demo() -> None:
         today = date.today()
 
         user = User(
-            email=DEMO_EMAIL, password_hash=hash_password(DEMO_PASSWORD),
+            email=DEMO_EMAIL,
             name="Demo Lifter", role="user", status="active",
         )
         db.add(user)
@@ -226,7 +229,7 @@ def seed_demo() -> None:
         db.add(TrackerLog(tracker_id=journal.id, date=today, value_text="Felt strong on bench today."))
 
         db.commit()
-        print(f"Demo account ready: {DEMO_EMAIL} / {DEMO_PASSWORD}")
+        print(f"Demo account ready: {DEMO_EMAIL} (sign in via Supabase as {DEMO_EMAIL} / {DEMO_PASSWORD})")
         print(f"  {n_sessions} workouts over {DEMO_WEEKS} weeks, {DEMO_WEEKS * 7 + 1} days of "
               "weight/steps/sleep/nutrition, 4 football sessions, 3 trackers.")
     except Exception:

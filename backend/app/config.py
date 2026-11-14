@@ -7,27 +7,45 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # Cookie session auth (Phase 1-2 friends beta). The cookie carries an
-    # opaque session id (never a JWT) looked up against the auth_session
-    # table, so logout / temp-password resets can invalidate it server-side.
-    session_cookie_name: str = "session_id"
-    session_max_age_days: int = 30
-    # False only for local dev over http:// and tests — browsers silently
-    # refuse to store/send a Secure cookie on a non-HTTPS connection, so this
-    # must be false there or every login would appear to succeed and then
-    # immediately look logged-out. Always true on Railway/Vercel (HTTPS).
-    session_cookie_secure: bool = True
+    # Supabase Auth: Supabase runs sign-in (email + password, Google) and
+    # hands the browser a signed access token; app/supabase_auth.py checks
+    # that token on every request. This app still decides who gets in
+    # (invite code → pending → admin approval) via its own users table.
+    #   SUPABASE_URL              https://<project-ref>.supabase.co
+    #   SUPABASE_PUBLISHABLE_KEY  the publishable (or legacy anon) key — public
+    #                             by design; used to ask Supabase whether an
+    #                             email address is confirmed
+    #   SUPABASE_SECRET_KEY       optional, server-only — a secret key
+    #                             (sb_secret_…) or the legacy service_role key;
+    #                             only needed for the admin "reset link" button
+    # Empty SUPABASE_URL ⇒ every signed-in route answers 503 "login isn't
+    # configured", and the rest (ping, the built frontend) still works.
+    supabase_url: str = ""
+    supabase_publishable_key: str = ""
+    supabase_secret_key: str = ""
 
-    # Brute-force speed bump on the auth endpoints (login/join), enforced in
-    # app/ratelimit.py. Disabled in tests (conftest sets it false) so the
-    # suite's many logins don't trip the limit.
+    @field_validator("supabase_url")
+    @classmethod
+    def _strip_trailing_slash(cls, v: str) -> str:
+        return v.strip().rstrip("/")
+
+    @property
+    def supabase_issuer(self) -> str:
+        """The `iss` claim every genuine user token from this project carries."""
+        return f"{self.supabase_url}/auth/v1"
+
+    # Brute-force speed bump on the signup endpoint (/join), enforced in
+    # app/ratelimit.py. Password sign-in itself is rate-limited by Supabase.
+    # Disabled in tests (conftest sets it false); test_rate_limit.py flips it
+    # back on to exercise it.
     auth_rate_limit_enabled: bool = True
 
-    # Seeds the first admin account (python -m app.seed_admin) and the
-    # migration backfill that attaches all pre-multi-user data to it.
-    # Never hardcode these — env vars only.
+    # The first admin account (python -m app.seed_admin) and the migration
+    # backfill that attaches all pre-multi-user data to it. There is no admin
+    # password here any more: the admin signs in through Supabase with this
+    # email, and app/auth.py links the two on first sign-in.
+    # Never hardcode it — env vars only.
     admin_email: str = ""
-    admin_password: str = ""
 
     # SQLAlchemy connection string. SQLite by default; Postgres in production
     # (Railway). A bare postgres URL is normalized to the psycopg (v3) driver

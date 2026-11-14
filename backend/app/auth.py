@@ -1,117 +1,163 @@
 """
-Session-cookie authentication for the multi-user friends beta.
+Authentication for the invite-only friends beta — Supabase Auth edition.
 
-Login creates an AuthSession row keyed by an opaque session id (never a
-JWT — a DB-backed session lets logout and admin-issued temp-password resets
-invalidate it server-side, which a stateless token can't do without a
-blocklist table anyway). The id travels in an httpOnly, Secure, SameSite=Lax
-cookie. Apple Health ingest (a Shortcut/HAE automation, not a browser)
-authenticates separately via a per-user bearer `ingest_token` — see
-require_ingest_auth — since a Shortcut can't hold a cookie jar.
+Two layers, kept deliberately separate:
+
+  1. *Who is calling?* Supabase answers that. The browser signs in with
+     Supabase (email + password or Google) and sends the resulting access
+     token as `Authorization: Bearer <token>` on every request;
+     app/supabase_auth.py verifies it locally against the project's public
+     keys.
+
+  2. *Are they allowed in?* This app answers that, with its own `users`
+     table, exactly as before: an invite code creates a 'pending' account,
+     an admin approves it, and every query is scoped by `users.id`. A Supabase
+     login on its own grants nothing.
+
+The bridge between the two is `users.supabase_uid` (the token's `sub`). It's
+filled in on a person's first signed-in request: an existing account whose
+email matches the token's — and which has no Supabase login linked yet — gets
+linked, but only once Supabase confirms that email is verified. That's how
+pre-Supabase accounts (the admin, the first friends) carry over with all
+their data and no manual migration step. A linked account is never re-linked
+automatically; reconnecting one is an admin job.
+
+Apple Health ingest (an iOS Shortcut / Health Auto Export, not a browser)
+still authenticates with the per-user `ingest_token` — see
+require_ingest_auth — since a Shortcut can't run a Supabase sign-in.
 """
-import secrets
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional
 
-from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError, InvalidHashError
-from fastapi import Depends, HTTPException, Request, Response, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session as DBSession
 
-from app.config import settings
+from app import supabase_auth
 from app.db import get_db
-from app.models import AuthSession, User
+from app.models import User
+from app.supabase_auth import Identity
 
-_hasher = PasswordHasher()
+# How stale users.last_login_at may get before a request refreshes it. It's
+# the Admin page's "last seen" column — hourly precision is plenty, and it
+# keeps most requests from writing to the database.
+_LAST_SEEN_RESOLUTION = timedelta(hours=1)
 
-# Routes still reachable while a user's must_change_password flag is set —
-# everything else 403s until they set a new password (see require_auth).
-_PASSWORD_CHANGE_EXEMPT_PATHS = {
-    "/api/auth/change-password",
-    "/api/auth/logout",
-    "/api/auth/me",
-}
+_BEARER_CHALLENGE = {"WWW-Authenticate": "Bearer"}
 
 
-def hash_password(raw: str) -> str:
-    return _hasher.hash(raw)
+@dataclass(frozen=True)
+class SignedIn:
+    """A verified Supabase sign-in, plus the raw token for follow-up calls."""
+    identity: Identity
+    token: str
 
 
-def verify_password(raw: str, hashed: str) -> bool:
-    try:
-        return _hasher.verify(hashed, raw)
-    except (VerifyMismatchError, InvalidHashError):
-        return False
+def _bearer_token(request: Request) -> str | None:
+    header = request.headers.get("authorization", "")
+    if header[:7].lower() == "bearer ":
+        return header[7:].strip() or None
+    return None
 
 
-def create_session(db: DBSession, user: User, remember: bool) -> tuple[str, Optional[int]]:
-    """
-    Creates an AuthSession row and returns (session_id, cookie_max_age).
-    cookie_max_age is None for a browser-session cookie ("stay signed in"
-    unchecked — dies when the browser closes); otherwise
-    session_max_age_days in seconds. The server-side row always expires
-    after session_max_age_days regardless — only the cookie's own Max-Age
-    (and therefore how long the browser keeps offering it back) differs.
-    """
-    session_id = secrets.token_urlsafe(32)
-    max_age = settings.session_max_age_days * 86400 if remember else None
-    expires_at = datetime.utcnow() + timedelta(days=settings.session_max_age_days)
-    db.add(AuthSession(session_id=session_id, user_id=user.id, expires_at=expires_at))
-    db.commit()
-    return session_id, max_age
-
-
-def set_session_cookie(response: Response, session_id: str, max_age: Optional[int]) -> None:
-    response.set_cookie(
-        key=settings.session_cookie_name,
-        value=session_id,
-        max_age=max_age,
-        httponly=True,
-        secure=settings.session_cookie_secure,
-        samesite="lax",
-        path="/",
+def _service_unavailable(exc: Exception) -> HTTPException:
+    if isinstance(exc, supabase_auth.AuthNotConfigured):
+        return HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            f"Login isn't configured on this server (missing {exc}).",
+        )
+    return HTTPException(
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        "Couldn't reach the login service. Try again in a moment.",
     )
 
 
-def clear_session_cookie(response: Response) -> None:
-    response.delete_cookie(key=settings.session_cookie_name, path="/")
+def require_signed_in(request: Request) -> SignedIn:
+    """
+    Dependency: a valid Supabase access token, whether or not the person has
+    an account in this app yet. Used directly only by /join and /me; data
+    routes use require_auth.
+    """
+    token = _bearer_token(request)
+    if token is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated",
+                            headers=_BEARER_CHALLENGE)
+    try:
+        identity = supabase_auth.verify_access_token(token)
+    except supabase_auth.InvalidToken:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session expired or invalid",
+                            headers=_BEARER_CHALLENGE)
+    except (supabase_auth.AuthNotConfigured, supabase_auth.AuthServerUnavailable) as exc:
+        raise _service_unavailable(exc)
+    return SignedIn(identity=identity, token=token)
+
+
+def email_confirmed(signed_in: SignedIn) -> bool:
+    """Ask Supabase whether this sign-in's email is verified (HTTP errors
+    become a 503 for the caller)."""
+    try:
+        return supabase_auth.email_is_confirmed(signed_in.token)
+    except supabase_auth.InvalidToken:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session expired or invalid",
+                            headers=_BEARER_CHALLENGE)
+    except (supabase_auth.AuthNotConfigured, supabase_auth.AuthServerUnavailable) as exc:
+        raise _service_unavailable(exc)
+
+
+def link_existing_account(db: DBSession, signed_in: SignedIn) -> User | None:
+    """
+    Attach this Supabase login to an existing, not-yet-linked account with
+    the same email — only if Supabase confirms the email is verified.
+    Returns the linked user, or None when there's nothing (safe) to link.
+    """
+    email = signed_in.identity.email
+    if not email:
+        return None
+    user = (
+        db.query(User)
+        .filter(User.email == email, User.supabase_uid.is_(None))
+        .first()
+    )
+    if user is None or not email_confirmed(signed_in):
+        return None
+    user.supabase_uid = signed_in.identity.uid
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def get_account(request: Request, db: DBSession = Depends(get_db)) -> User:
+    """
+    Dependency: the app account behind this sign-in, whatever its status
+    (pending and disabled included — /me reports the status so the app can
+    show "waiting for approval"). 403 "no_account" means a valid Supabase
+    login with no app account: the frontend then asks for an invite code.
+    """
+    signed_in = require_signed_in(request)
+    user = db.query(User).filter(User.supabase_uid == signed_in.identity.uid).first()
+    if user is None:
+        user = link_existing_account(db, signed_in)
+    if user is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "no_account")
+    return user
 
 
 def require_auth(request: Request, db: DBSession = Depends(get_db)) -> User:
     """
-    Dependency that resolves the current User from the session cookie.
-    Raises 401 if there's no cookie, the session is unknown/expired, or the
-    account isn't active (pending/disabled users can't use the API either).
-    Also enforces a pending must_change_password reset: every route 403s
-    except the small exempt set above, until the user sets a new password.
+    Dependency for every data route: the current, *active* user. Routers
+    filter every query by its id. 401 = not signed in (or token expired);
+    403 = signed in but not allowed in yet ("no_account",
+    "pending_approval") or any more ("account_disabled").
     """
-    session_id = request.cookies.get(settings.session_cookie_name)
-    if not session_id:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+    user = get_account(request, db)
+    if user.status == "pending":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "pending_approval")
+    if user.status != "active":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "account_disabled")
 
-    auth_session = (
-        db.query(AuthSession)
-        .filter(
-            AuthSession.session_id == session_id,
-            AuthSession.expires_at > datetime.utcnow(),
-        )
-        .first()
-    )
-    if auth_session is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session expired or invalid")
-
-    user = db.get(User, auth_session.user_id)
-    if user is None or user.status != "active":
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
-
-    auth_session.last_seen_at = datetime.utcnow()
-    db.commit()
-
-    if user.must_change_password and request.url.path not in _PASSWORD_CHANGE_EXEMPT_PATHS:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "Password change required before continuing"
-        )
-
+    now = datetime.utcnow()
+    if user.last_login_at is None or now - user.last_login_at > _LAST_SEEN_RESOLUTION:
+        user.last_login_at = now
+        db.commit()
     return user
 
 
@@ -124,20 +170,20 @@ def require_admin(current_user: User = Depends(require_auth)) -> User:
 def require_ingest_auth(request: Request, db: DBSession = Depends(get_db)) -> User:
     """
     Bearer-token auth for the Apple Health Shortcut / Health Auto Export
-    pushes — a non-browser client that can't hold a cookie jar. Completely
-    separate from the cookie session mechanism above.
+    pushes — a non-browser client that can't run a Supabase sign-in.
+    Completely separate from the Supabase login above: the bearer value here
+    is the user's long-lived `ingest_token`, not an access token.
     """
-    auth_header = request.headers.get("authorization", "")
-    if not auth_header.lower().startswith("bearer "):
+    token = _bearer_token(request)
+    if token is None:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, "Missing bearer token",
-            headers={"WWW-Authenticate": "Bearer"},
+            headers=_BEARER_CHALLENGE,
         )
-    token = auth_header[7:].strip()
     user = db.query(User).filter(User.ingest_token == token).first()
     if user is None or user.status != "active":
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, "Invalid ingest token",
-            headers={"WWW-Authenticate": "Bearer"},
+            headers=_BEARER_CHALLENGE,
         )
     return user
