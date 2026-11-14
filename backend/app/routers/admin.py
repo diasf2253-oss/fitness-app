@@ -1,6 +1,6 @@
 """
 Admin endpoints (Phase 1-2 friends beta): pending-signup approval, user
-management, and password-reset links. User-management scope only — no
+management, password-reset links and invite codes. User-management scope only — no
 drill-down into any user's actual fitness data.
 """
 import secrets
@@ -16,6 +16,7 @@ from app.schemas import (
     AdminUserOut,
     InviteCodeCreate,
     InviteCodeOut,
+    InviteCodeUpdate,
     ResetLinkOut,
     UserStatusUpdate,
 )
@@ -130,6 +131,30 @@ def create_invite_code(
         max_uses=body.max_uses,
     )
     db.add(code)
+    db.commit()
+    db.refresh(code)
+    return code
+
+
+@router.get("/invite-codes", response_model=list[InviteCodeOut])
+def list_invite_codes(db: DBSession = Depends(get_db), _: User = Depends(require_admin)):
+    """Every invite code, newest first — active ones and switched-off ones."""
+    return db.query(InviteCode).order_by(InviteCode.created_at.desc(), InviteCode.id.desc()).all()
+
+
+@router.patch("/invite-codes/{code_id}", response_model=InviteCodeOut)
+def update_invite_code(
+    code_id: int,
+    body: InviteCodeUpdate,
+    db: DBSession = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Switch a code off (or back on). Codes are never deleted, so the record
+    of who joined with which code stays intact."""
+    code = db.get(InviteCode, code_id)
+    if code is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invite code not found")
+    code.active = body.active
     db.commit()
     db.refresh(code)
     return code

@@ -860,8 +860,12 @@ class ResetLinkOut(BaseModel):
 
 
 class InviteCodeCreate(BaseModel):
-    label: Optional[str] = None
-    max_uses: Optional[int] = None
+    label: Optional[str] = Field(default=None, max_length=60)   # e.g. "gym friends"
+    max_uses: Optional[int] = Field(default=None, ge=1)          # None = unlimited
+
+
+class InviteCodeUpdate(BaseModel):
+    active: bool
 
 
 class InviteCodeOut(OrmBase):

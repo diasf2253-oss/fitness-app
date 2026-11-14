@@ -1,5 +1,6 @@
 /**
- * Admin panel (Phase 1-2 friends beta) — user management only, no
+ * Admin panel (Phase 1-2 friends beta) — signups, invite codes and user
+ * management only, no
  * per-user fitness-data drill-down. Route-guarded to role === 'admin' in
  * App.jsx; every call below is also enforced server-side regardless.
  */
@@ -61,6 +62,158 @@ function PendingCard({ pending, onChange }) {
             </button>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+/** "2 of 5 used" / "2 used · no limit" — exported for tests. */
+export function usageText(code) {
+  return code.max_uses == null
+    ? `${code.uses} used · no limit`
+    : `${code.uses} of ${code.max_uses} used`
+}
+
+/** The sign-up link for a code — Join prefills the code from ?code=. */
+export function inviteLink(code, origin = window.location.origin) {
+  return `${origin}/join?code=${encodeURIComponent(code.code)}`
+}
+
+function InviteCodesCard({ codes, onChange }) {
+  const [label, setLabel] = useState('')
+  const [maxUses, setMaxUses] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [busyId, setBusyId] = useState(null)
+  const [copied, setCopied] = useState(null)   // `${id}:code` or `${id}:link`
+  const [error, setError] = useState(null)
+
+  async function create(e) {
+    e.preventDefault()
+    const limit = maxUses.trim() === '' ? null : Number(maxUses)
+    if (limit !== null && !(Number.isInteger(limit) && limit >= 1)) {
+      setError('Max uses must be a whole number, 1 or more — or leave it empty for no limit.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      await apiFetch('/api/admin/invite-codes', {
+        method: 'POST',
+        body: JSON.stringify({ label: label.trim() || null, max_uses: limit }),
+      })
+      setLabel('')
+      setMaxUses('')
+      onChange()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function setActive(code, active) {
+    if (!active && !(await confirmAction({
+      title: 'Switch this code off?',
+      message: `Nobody new can join with ${code.code}. People who already joined keep their accounts. You can switch it back on later.`,
+      confirmLabel: 'Switch off',
+    }))) return
+    setBusyId(code.id)
+    setError(null)
+    try {
+      await apiFetch(`/api/admin/invite-codes/${code.id}`, {
+        method: 'PATCH', body: JSON.stringify({ active }),
+      })
+      onChange()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function copy(code, what) {
+    try {
+      await navigator.clipboard.writeText(what === 'link' ? inviteLink(code) : code.code)
+      setCopied(`${code.id}:${what}`)
+    } catch { /* clipboard blocked — the code is selectable on screen */ }
+  }
+
+  return (
+    <div className="card">
+      <h2>Invite codes</h2>
+      <p className="muted" style={{ marginTop: 0 }}>
+        New people need a code to sign up. Send a friend the invite link — it
+        opens the sign-up screen with the code already filled in. Their account
+        then waits for your approval above.
+      </p>
+      {error && <p className="muted" style={{ color: 'var(--color-danger)' }}>{error}</p>}
+
+      <form onSubmit={create} className="row" style={{ gap: '0.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div className="col" style={{ flex: 2, minWidth: 160, gap: '0.25rem' }}>
+          <label htmlFor="invite-label">Label (optional)</label>
+          <input
+            id="invite-label"
+            value={label}
+            maxLength={60}
+            placeholder="e.g. gym friends"
+            onChange={e => setLabel(e.target.value)}
+          />
+        </div>
+        <div className="col" style={{ flex: 1, minWidth: 110, gap: '0.25rem' }}>
+          <label htmlFor="invite-max">Max uses</label>
+          <input
+            id="invite-max"
+            inputMode="numeric"
+            value={maxUses}
+            placeholder="no limit"
+            onChange={e => setMaxUses(e.target.value)}
+          />
+        </div>
+        <button type="submit" disabled={busy} style={{ minWidth: 120 }}>
+          {busy ? 'Creating…' : 'Create code'}
+        </button>
+      </form>
+
+      {codes.length === 0 && <p className="muted">No codes yet — create one to invite someone.</p>}
+      <div className="col" style={{ gap: '0.75rem', marginTop: '1rem' }}>
+        {codes.map(c => {
+          const usedUp = c.max_uses != null && c.uses >= c.max_uses
+          return (
+            <div key={c.id} className="row" style={{ alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', opacity: c.active ? 1 : 0.6 }}>
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <div>
+                  <code style={{ fontSize: '0.95rem', userSelect: 'all' }}>{c.code}</code>{' '}
+                  {!c.active && <span className="badge">off</span>}
+                  {c.active && usedUp && <span className="badge">used up</span>}
+                </div>
+                <div className="muted" style={{ fontSize: '0.8rem' }}>
+                  {c.label ? `${c.label} · ` : ''}{usageText(c)} · created {fmtTimestamp(c.created_at)}
+                </div>
+              </div>
+              {c.active && (
+                <>
+                  <button className="secondary" style={{ minWidth: 92 }} onClick={() => copy(c, 'link')}>
+                    {copied === `${c.id}:link` ? 'Copied' : 'Copy invite link'}
+                  </button>
+                  <button className="secondary" style={{ minWidth: 92 }} onClick={() => copy(c, 'code')}>
+                    {copied === `${c.id}:code` ? 'Copied' : 'Copy code'}
+                  </button>
+                </>
+              )}
+              {c.active ? (
+                <button className="danger" style={{ minWidth: 92 }} disabled={busyId === c.id}
+                  onClick={() => setActive(c, false)}>
+                  Switch off
+                </button>
+              ) : (
+                <button style={{ minWidth: 92 }} disabled={busyId === c.id}
+                  onClick={() => setActive(c, true)}>
+                  Switch on
+                </button>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -185,14 +338,16 @@ function UsersCard({ users, onChange }) {
 export default function Admin() {
   const [pending, setPending] = useState([])
   const [users, setUsers] = useState([])
+  const [codes, setCodes] = useState([])
   const [error, setError] = useState(null)
 
   const load = useCallback(() => {
     Promise.all([
       apiFetch('/api/admin/pending'),
       apiFetch('/api/admin/users'),
+      apiFetch('/api/admin/invite-codes'),
     ])
-      .then(([p, u]) => { setPending(p); setUsers(u) })
+      .then(([p, u, c]) => { setPending(p); setUsers(u); setCodes(c) })
       .catch(err => setError(err.message))
   }, [])
 
@@ -203,6 +358,7 @@ export default function Admin() {
       <h1>Admin</h1>
       <ErrorBox error={error} />
       <PendingCard pending={pending} onChange={load} />
+      <InviteCodesCard codes={codes} onChange={load} />
       <UsersCard users={users} onChange={load} />
     </div>
   )
