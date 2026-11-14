@@ -53,3 +53,6 @@ docs/APPLE_HEALTH_DIAGNOSIS.md
 !.claude/agents/
 !.claude/commands/
 memory/
+
+# Vite local overrides (dev auto-login credentials etc.)
+.env.*.local

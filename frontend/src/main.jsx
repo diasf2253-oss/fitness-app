@@ -41,11 +41,20 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 )
 
 // Register the service worker (versioned offline app shell) — makes the
-// installed PWA open and work with no server reachable.
+// installed PWA open and work with no server reachable. PRODUCTION BUILDS
+// ONLY: in `npm run dev` a service worker caches the source modules and keeps
+// serving stale code after edits, so dev unregisters any leftover one.
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {})
-  })
+  if (import.meta.env.PROD) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {})
+    })
+  } else {
+    navigator.serviceWorker.getRegistrations()
+      .then(regs => regs.forEach(r => r.unregister()))
+      .catch(() => {})
+    if (window.caches) caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(() => {})
+  }
 }
 
 // Audio cue layer. Fetch the clips now (best-effort, no AudioContext yet), arm

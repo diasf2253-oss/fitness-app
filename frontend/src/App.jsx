@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom'
 import { apiFetch } from './api'
 import { AuthProvider, useAuth } from './auth'
+import { ConfirmHost } from './components/ConfirmSheet'
+import { QuickLogHost } from './components/QuickLog'
 import Dashboard from './pages/Dashboard'
 import Workout from './pages/Workout'
 import Routines from './pages/Routines'
@@ -299,6 +301,10 @@ export default function App() {
   return (
     <AuthProvider>
       <AppShell />
+      {/* In-app "Are you sure?" sheet used instead of window.confirm() */}
+      <ConfirmHost />
+      {/* One-tap weight / steps / sleep logging (openQuickLog) */}
+      <QuickLogHost />
     </AuthProvider>
   )
 }

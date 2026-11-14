@@ -9,9 +9,9 @@ import WidgetLabel from './WidgetLabel'
 
 // Calm-palette mapping of the four RDA bands.
 const STATUS = {
-  low:          { legend: 'Low (under 70%)',        color: '#cf8772' },
-  slightly_low: { legend: 'Slightly low (70–99%)',  color: '#d9b06b' },
-  meets:        { legend: 'Meets RDA',              color: '#8fb573' },
+  low:          { legend: 'Low (under 70%)',        color: '#cf7d45' },
+  slightly_low: { legend: 'Slightly low (70–99%)',  color: '#f8d794' },
+  meets:        { legend: 'Meets RDA',              color: '#8fae74' },
   above:        { legend: 'Above RDA',              color: '#7aa6cf' },
 }
 
@@ -51,7 +51,7 @@ export default function NutrientBreakdown({ nutrients, days }) {
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Micronutrients</h3>
         <p className="muted" style={{ fontSize: '0.85rem' }}>
-          No micronutrient data yet — log a few days of food (Apple Health or the manual log)
+          No micronutrient data yet — log a few days of food in the manual log
           and the breakdown appears here.
         </p>
       </div>

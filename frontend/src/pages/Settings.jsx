@@ -1,119 +1,402 @@
 /**
- * Settings page.
- * - API token config
- * - Apple Health sync: the shared iOS Shortcut (install link, this account's
- *   URL + token, "Sync now"), per-metric freshness, the one-time export.zip
- *   history backfill, and the folded-away manual/HAE recipes
- * - Manual log link
+ * Settings page — iOS-style grouped lists.
+ *
+ * Every group is a small title ABOVE a rounded card; the card holds the rows
+ * (label left, control right, hairline dividers). Groups, top to bottom:
+ *   Account      name, email, password, log out
+ *   Profile      sex, age, height (scale the Ranks references + RDA targets)
+ *   Preferences  sound, default rest timer, streak rest days
+ *   Training     weekly volume targets
+ *   Trackers     the generic daily trackers
+ *   Data         manual log
+ *
+ * Simple fields save themselves when you leave them (blur / change) — there is
+ * no per-card Save button. Password change is the one explicit form.
+ *
+ * The Apple Health setup (Shortcut link, ingest token, export.zip backfill)
+ * used to live here; it was removed from this page on purpose. The backend
+ * ingest endpoints are untouched.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { apiFetch, apiUpload } from '../api'
+import { apiFetch } from '../api'
 import { useAuth } from '../auth'
 import { isMuted, setMuted, subscribeMuted, playTap } from '../audio'
-import { absoluteApiUrl, HEALTH_SHORTCUT_NAME, HEALTH_SHORTCUT_URL } from '../env'
-import {
-  freshnessLabel, hasShortcutLink, SyncNowButton, useSyncStatus,
-} from '../components/HealthSync'
+import { confirmAction } from '../components/ConfirmSheet'
 
-// Copy-paste starter body for the iOS Shortcut push (see the Apple Health
-// sync card + docs/HEALTH_INGEST_SHORTCUT.md). Swap the dates for today.
-const SHORTCUT_JSON_TEMPLATE = `{
-  "weight": [{ "date": "2026-07-18", "kg": 82.4 }],
-  "steps":  [{ "date": "2026-07-18", "count": 11205 }],
-  "sleep":  [{ "date": "2026-07-18", "asleep_minutes": 427, "in_bed_minutes": 465 }]
-}`
+/* ------------------------------------------------------------------ */
+/* Building blocks                                                     */
+/* ------------------------------------------------------------------ */
 
-/**
- * Sound on/off. The switch reads "Sound effects" (checked = audible), which is
- * friendlier than a "Mute" negative. State lives in the audio service (backed
- * by localStorage), so it persists across sessions and any other surface that
- * reads it stays in sync via subscribeMuted.
- */
-function SoundCard() {
+/** Title above, rounded card below, optional footnote under the card. */
+function Section({ title, footer, aside, children }) {
+  return (
+    <section className="set-section">
+      <div className="set-head">
+        <h2 className="set-title">{title}</h2>
+        {aside}
+      </div>
+      <div className="set-card">{children}</div>
+      {footer && <p className="set-footer">{footer}</p>}
+    </section>
+  )
+}
+
+/** One row: label (+ optional hint) on the left, control on the right. */
+function Row({ label, hint, children, htmlFor }) {
+  return (
+    <div className="set-row">
+      <div className="set-row-text">
+        <label htmlFor={htmlFor} className="set-row-label">{label}</label>
+        {hint && <span className="set-row-hint">{hint}</span>}
+      </div>
+      <div className="set-row-control">{children}</div>
+    </div>
+  )
+}
+
+const Chevron = () => (
+  <svg width="8" height="14" viewBox="0 0 8 14" aria-hidden="true" className="set-chevron">
+    <path d="M1 1l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+/** Small "Saved" confirmation that fades next to a section title. */
+function SavedTick({ show }) {
+  return <span className={`set-saved${show ? ' on' : ''}`} aria-live="polite">{show ? '✓ Saved' : ''}</span>
+}
+
+/** Load /api/settings once and save one field at a time. */
+function useSettings() {
+  const [s, setS] = useState(null)
+  const [error, setError] = useState(null)
+  const [savedAt, setSavedAt] = useState(0)
+
+  useEffect(() => {
+    apiFetch('/api/settings').then(setS).catch(e => setError(e.message))
+  }, [])
+
+  const save = useCallback(async (patch) => {
+    setError(null)
+    try {
+      const next = await apiFetch('/api/settings', { method: 'PUT', body: JSON.stringify(patch) })
+      setS(next)
+      setSavedAt(Date.now())
+      return true
+    } catch (e) {
+      setError(e.message)
+      return false
+    }
+  }, [])
+
+  return { s, save, error, savedAt }
+}
+
+/** True for ~1.8s after `stamp` changes — drives the "✓ Saved" tick. */
+function useFlash(stamp) {
+  const [on, setOn] = useState(false)
+  useEffect(() => {
+    if (!stamp) return
+    setOn(true)
+    const t = setTimeout(() => setOn(false), 1800)
+    return () => clearTimeout(t)
+  }, [stamp])
+  return on
+}
+
+/* ------------------------------------------------------------------ */
+/* Account                                                             */
+/* ------------------------------------------------------------------ */
+
+function PasswordRows() {
+  const [open, setOpen] = useState(false)
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const [done, setDone] = useState(false)
+
+  function reset() { setCurrent(''); setNext(''); setConfirmPw(''); setError(null) }
+
+  async function submit(e) {
+    e.preventDefault()
+    setError(null)
+    if (next.length < 8) return setError('New password must be at least 8 characters.')
+    if (next !== confirmPw) return setError('The new passwords do not match.')
+    setBusy(true)
+    try {
+      await apiFetch('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ current_password: current, new_password: next }),
+      })
+      reset(); setOpen(false); setDone(true)
+      setTimeout(() => setDone(false), 3000)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <button type="button" className="set-row set-row-button" aria-expanded={open}
+        onClick={() => { setOpen(o => !o); setDone(false) }}>
+        <span className="set-row-label">Password</span>
+        <span className="set-row-control muted">
+          {done ? '✓ Updated' : 'Change'}
+          <Chevron />
+        </span>
+      </button>
+      {open && (
+        <form onSubmit={submit} className="set-expand">
+          <Row label="Current" htmlFor="pw-current">
+            <input id="pw-current" className="set-input" type="password" autoComplete="current-password"
+              value={current} onChange={e => setCurrent(e.target.value)} required placeholder="Required" />
+          </Row>
+          <Row label="New" htmlFor="pw-new">
+            <input id="pw-new" className="set-input" type="password" autoComplete="new-password"
+              value={next} onChange={e => setNext(e.target.value)} required minLength={8} placeholder="8+ characters" />
+          </Row>
+          <Row label="Confirm" htmlFor="pw-confirm">
+            <input id="pw-confirm" className="set-input" type="password" autoComplete="new-password"
+              value={confirmPw} onChange={e => setConfirmPw(e.target.value)} required placeholder="Repeat it" />
+          </Row>
+          {error && <p className="set-error" role="alert">{error}</p>}
+          <div className="set-pad">
+            <button type="submit" disabled={busy || !current || !next || !confirmPw} style={{ width: '100%' }}>
+              {busy ? 'Updating…' : 'Update password'}
+            </button>
+            <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.6rem' }}>
+              Your other signed-in devices will be logged out.
+            </p>
+          </div>
+        </form>
+      )}
+    </>
+  )
+}
+
+function AccountSection() {
+  const { user, refresh, logout } = useAuth()
+  const [name, setName] = useState(user.name)
+  const [error, setError] = useState(null)
+  const [stamp, setStamp] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const flash = useFlash(stamp)
+
+  async function saveName() {
+    const trimmed = name.trim()
+    if (!trimmed) { setName(user.name); return }
+    if (trimmed === user.name) { setName(trimmed); return }
+    setError(null)
+    try {
+      await apiFetch('/api/auth/me', { method: 'PATCH', body: JSON.stringify({ name: trimmed }) })
+      await refresh()
+      setName(trimmed)
+      setStamp(Date.now())
+    } catch (e) {
+      setError(e.message)
+      setName(user.name)
+    }
+  }
+
+  return (
+    <Section title="Account" aside={<SavedTick show={flash} />}>
+      <Row label="Name" htmlFor="acc-name">
+        <input id="acc-name" className="set-input" value={name} maxLength={200}
+          autoComplete="name" onChange={e => setName(e.target.value)} onBlur={saveName}
+          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }} />
+      </Row>
+      <Row label="Email">
+        <span className="set-value">{user.email}</span>
+      </Row>
+      <PasswordRows />
+      {error && <p className="set-error" role="alert">{error}</p>}
+      <button type="button" className="set-row set-row-button set-row-danger" disabled={busy}
+        onClick={async () => { setBusy(true); await logout() }}>
+        <span className="set-row-label">{busy ? 'Logging out…' : 'Log out'}</span>
+      </button>
+    </Section>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Profile                                                             */
+/* ------------------------------------------------------------------ */
+
+function ProfileSection({ s, save, savedAt }) {
+  const [age, setAge] = useState(String(s.age ?? ''))
+  const [height, setHeight] = useState(s.height_cm == null ? '' : String(s.height_cm))
+  const flash = useFlash(savedAt)
+
+  const commitAge = () => {
+    const n = Number(age)
+    if (!Number.isFinite(n) || n < 10 || n > 100) { setAge(String(s.age ?? '')); return }
+    if (n !== s.age) save({ age: Math.round(n) })
+  }
+  const commitHeight = () => {
+    if (height.trim() === '') return
+    const n = Number(height.replace(',', '.'))
+    if (!Number.isFinite(n) || n < 100 || n > 250) { setHeight(s.height_cm == null ? '' : String(s.height_cm)); return }
+    if (n !== s.height_cm) save({ height_cm: n })
+  }
+
+  return (
+    <Section title="Profile" aside={<SavedTick show={flash} />}
+      footer="Used to scale the Ranks strength references and the micronutrient targets on the Diet tab.">
+      <Row label="Sex" htmlFor="pf-sex">
+        <select id="pf-sex" className="set-input set-select" value={s.sex || 'male'}
+          onChange={e => save({ sex: e.target.value })}>
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+        </select>
+      </Row>
+      <Row label="Age" htmlFor="pf-age">
+        <input id="pf-age" className="set-input set-narrow" type="number" inputMode="numeric"
+          min="10" max="100" value={age} onChange={e => setAge(e.target.value)} onBlur={commitAge} />
+      </Row>
+      <Row label="Height" htmlFor="pf-height">
+        <input id="pf-height" className="set-input set-narrow" type="text" inputMode="decimal"
+          placeholder="—" value={height} onChange={e => setHeight(e.target.value)} onBlur={commitHeight}
+          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }} />
+        <span className="set-unit">cm</span>
+      </Row>
+    </Section>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Preferences                                                         */
+/* ------------------------------------------------------------------ */
+
+/** Sound on/off. State lives in the audio service (localStorage-backed). */
+function SoundRow() {
   const [soundOn, setSoundOn] = useState(!isMuted())
-
-  // Reflect changes made elsewhere (defensive; today only this toggles it).
   useEffect(() => subscribeMuted(m => setSoundOn(!m)), [])
 
   function toggle() {
     const next = !soundOn
     setSoundOn(next)
     setMuted(!next)
-    if (next) playTap()  // brief confirmation that sound is back on
+    if (next) playTap() // brief confirmation that sound is back on
   }
 
   return (
-    <div className="card">
-      <div className="row" style={{ alignItems: 'center', gap: '0.75rem' }}>
-        <div style={{ flex: 1 }}>
-          <h2 style={{ margin: 0 }}>Sound effects</h2>
-          <p className="muted" style={{ margin: '0.35rem 0 0', fontSize: '0.85rem' }}>
-            Subtle cues on taps, finishing a workout, and ranking up.
-          </p>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={soundOn}
-          aria-label="Sound effects"
-          className="switch"
-          onClick={toggle}
-        />
-      </div>
-    </div>
+    <Row label="Sound effects" hint="Taps, finishing a workout, ranking up" htmlFor="pref-sound">
+      <button id="pref-sound" type="button" role="switch" aria-checked={soundOn}
+        className="switch" onClick={toggle} />
+    </Row>
   )
 }
 
-/**
- * A small "tap to copy" button. Shows a brief ✓ after copying.
- */
-function CopyButton({ text, label = 'Copy' }) {
-  const [done, setDone] = useState(false)
+function PreferencesSection({ s, save, savedAt }) {
+  const rest = s.default_rest_seconds ?? 120
+  const [mins, setMins] = useState(String(Math.floor(rest / 60)))
+  const [secs, setSecs] = useState(String(rest % 60))
+  const [gap, setGap] = useState(String(s.streak_rest_gap ?? 1))
+  const flash = useFlash(savedAt)
+
+  const commitRest = () => {
+    const total = Math.max(5, (Number(mins) || 0) * 60 + (Number(secs) || 0))
+    setMins(String(Math.floor(total / 60))); setSecs(String(total % 60))
+    if (total !== rest) save({ default_rest_seconds: total })
+  }
+  const commitGap = () => {
+    const n = Math.min(7, Math.max(0, Math.round(Number(gap) || 0)))
+    setGap(String(n))
+    if (n !== s.streak_rest_gap) save({ streak_rest_gap: n })
+  }
+
   return (
-    <button
-      type="button"
-      className="secondary"
-      style={{ minWidth: 70, padding: '0.3rem 0.7rem', minHeight: 36, fontSize: '0.78rem' }}
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text)
-          setDone(true)
-          setTimeout(() => setDone(false), 1500)
-        } catch (_) { /* clipboard blocked (insecure origin) — ignore */ }
-      }}
-    >
-      {done ? '✓ Copied' : label}
-    </button>
+    <Section title="Preferences" aside={<SavedTick show={flash} />}
+      footer="Routines with their own rest time use that instead of the default. The streak survives this many rest days between workouts.">
+      <SoundRow />
+      <Row label="Rest timer">
+        <input className="set-input set-narrow" type="number" inputMode="numeric" min="0" max="20"
+          aria-label="Minutes" value={mins} onChange={e => setMins(e.target.value)} onBlur={commitRest} />
+        <span className="set-unit">min</span>
+        <input className="set-input set-narrow" type="number" inputMode="numeric" min="0" max="59"
+          aria-label="Seconds" value={secs} onChange={e => setSecs(e.target.value)} onBlur={commitRest} />
+        <span className="set-unit">sec</span>
+      </Row>
+      <Row label="Allowed rest days" htmlFor="pref-gap">
+        <input id="pref-gap" className="set-input set-narrow" type="number" inputMode="numeric" min="0" max="7"
+          value={gap} onChange={e => setGap(e.target.value)} onBlur={commitGap} />
+      </Row>
+    </Section>
   )
 }
 
-/**
- * Account — who's logged in, and the log-out button. Each device now logs
- * in independently (that's what accounts are for), replacing the old
- * shared-token "Add a device" QR flow.
- */
-function AccountCard() {
-  const { user, logout } = useAuth()
+/* ------------------------------------------------------------------ */
+/* Training — weekly volume targets                                    */
+/* ------------------------------------------------------------------ */
+
+/** Weekly working-set target ranges per muscle group. The sets-per-week view
+ * and the workout generator both read this single table. */
+function VolumeTargetsSection() {
+  const [targets, setTargets] = useState(null)   // {muscle: {low, high}}
+  const [error, setError] = useState(null)
+  const [saved, setSaved] = useState(false)
   const [busy, setBusy] = useState(false)
 
+  const load = useCallback(() => {
+    apiFetch('/api/stats/volume-targets').then(setTargets).catch(e => setError(e.message))
+  }, [])
+  useEffect(load, [load])
+
+  function setField(m, key, value) {
+    setTargets(t => ({ ...t, [m]: { ...t[m], [key]: value } }))
+  }
+
+  async function save() {
+    setBusy(true); setError(null)
+    try {
+      const payload = {}
+      for (const [m, { low, high }] of Object.entries(targets)) payload[m] = [Number(low), Number(high)]
+      await apiFetch('/api/settings', { method: 'PUT', body: JSON.stringify({ volume_targets: payload }) })
+      setSaved(true); setTimeout(() => setSaved(false), 1800)
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  async function resetDefaults() {
+    setBusy(true); setError(null)
+    try {
+      await apiFetch('/api/settings', { method: 'PUT', body: JSON.stringify({ volume_targets: null }) })
+      load()
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  if (!targets) return null
   return (
-    <div className="card">
-      <h2>Account</h2>
-      <p className="muted" style={{ marginBottom: '0.85rem' }}>
-        {user.name} · {user.email}
-      </p>
-      <button
-        className="secondary"
-        style={{ width: '100%' }}
-        disabled={busy}
-        onClick={async () => { setBusy(true); await logout() }}
-      >
-        {busy ? 'Logging out…' : 'Log out'}
-      </button>
-    </div>
+    <Section title="Weekly volume targets"
+      footer="Working sets per muscle per week. The sets-per-week view and the workout generator both read these ranges.">
+      {Object.entries(targets).map(([m, { low, high }]) => (
+        <div key={m} className="set-row">
+          <span className="set-row-label" style={{ textTransform: 'capitalize' }}>{m}</span>
+          <div className="set-row-control">
+            <input className="set-input set-narrow" type="number" inputMode="numeric" min="0" value={low}
+              onChange={e => setField(m, 'low', e.target.value)} aria-label={`${m} minimum sets`} />
+            <span className="set-unit">–</span>
+            <input className="set-input set-narrow" type="number" inputMode="numeric" min="0" value={high}
+              onChange={e => setField(m, 'high', e.target.value)} aria-label={`${m} maximum sets`} />
+          </div>
+        </div>
+      ))}
+      {error && <p className="set-error" role="alert">{error}</p>}
+      <div className="set-pad row" style={{ gap: '0.5rem' }}>
+        <button onClick={save} disabled={busy} style={{ flex: 1 }}>{saved ? '✓ Saved' : 'Save targets'}</button>
+        <button className="secondary" onClick={resetDefaults} disabled={busy}>Reset</button>
+      </div>
+    </Section>
   )
 }
+
+/* ------------------------------------------------------------------ */
+/* Trackers                                                            */
+/* ------------------------------------------------------------------ */
 
 const TRACKER_KINDS = [
   { value: 'habit', label: 'Habit — done / not done, with streaks' },
@@ -127,7 +410,7 @@ const TRACKER_KINDS = [
  * Archive keeps history but removes the tracker from the check-in;
  * delete removes everything.
  */
-function TrackersCard() {
+function TrackersSection() {
   const [trackers, setTrackers] = useState([])
   const [name, setName] = useState('')
   const [kind, setKind] = useState('habit')
@@ -175,7 +458,10 @@ function TrackersCard() {
   }
 
   async function remove(t) {
-    if (!confirm(`Delete "${t.name}" and all of its history?`)) return
+    if (!(await confirmAction({
+      title: `Delete "${t.name}"?`, message: 'The tracker and all of its history will be removed.',
+      confirmLabel: 'Delete tracker', danger: true,
+    }))) return
     try {
       await apiFetch(`/api/trackers/${t.id}`, { method: 'DELETE' })
       load()
@@ -185,573 +471,81 @@ function TrackersCard() {
   }
 
   return (
-    <div className="card">
-      <h2>Trackers</h2>
-      <p className="muted" style={{ marginBottom: '0.75rem' }}>
-        Anything worth tracking gets a tracker — habits, a 1–5 mood, numbers
-        like reading minutes, or a daily journal line. They appear in the
-        dashboard check-in and on the calendar.
-      </p>
-
-      {error && <p className="muted" style={{ color: 'var(--color-danger)' }}>{error}</p>}
-
-      <div className="col" style={{ gap: '0.4rem', marginBottom: '0.9rem' }}>
-        {trackers.map(t => (
-          <div key={t.id} className="row" style={{ opacity: t.is_archived ? 0.5 : 1 }}>
-            <span style={{ flex: 1, fontSize: '0.9rem' }}>
-              {t.name}
-              {t.unit && <span className="muted" style={{ fontSize: '0.75rem' }}> · {t.unit}</span>}
-            </span>
+    <Section title="Trackers"
+      footer="Anything worth tracking gets a tracker — habits, a 1–5 mood, numbers like reading minutes, or a daily journal line. They appear in the dashboard check-in and on the calendar.">
+      {trackers.map(t => (
+        <div key={t.id} className="set-row" style={{ opacity: t.is_archived ? 0.5 : 1 }}>
+          <span className="set-row-label">
+            {t.name}
+            {t.unit && <span className="muted" style={{ fontSize: '0.75rem' }}> · {t.unit}</span>}
+          </span>
+          <div className="set-row-control" style={{ gap: '0.4rem' }}>
             <span className="badge">{t.kind}</span>
-            <button
-              className="secondary"
-              style={{ minWidth: 76, padding: '0.3rem 0.6rem', minHeight: 36, fontSize: '0.75rem' }}
-              onClick={() => toggleArchive(t)}
-            >
+            <button className="secondary" style={{ minWidth: 76, padding: '0.3rem 0.6rem', minHeight: 36, fontSize: '0.75rem' }}
+              onClick={() => toggleArchive(t)}>
               {t.is_archived ? 'Restore' : 'Archive'}
             </button>
-            <button
-              className="danger"
-              style={{ minWidth: 40, padding: '0.3rem 0.5rem', minHeight: 36 }}
-              onClick={() => remove(t)}
-              title="Delete tracker and history"
-            >
+            <button className="danger" style={{ minWidth: 40, padding: '0.3rem 0.5rem', minHeight: 36 }}
+              onClick={() => remove(t)} title="Delete tracker and history" aria-label={`Delete ${t.name}`}>
               ✕
             </button>
           </div>
-        ))}
-        {trackers.length === 0 && <p className="muted">No trackers yet.</p>}
-      </div>
+        </div>
+      ))}
+      {trackers.length === 0 && <p className="set-pad muted">No trackers yet.</p>}
+      {error && <p className="set-error" role="alert">{error}</p>}
 
-      <form onSubmit={add} className="col">
+      <form onSubmit={add} className="set-pad col">
         <div className="form-row">
           <div className="form-group" style={{ margin: 0 }}>
-            <label>Name</label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Meditate" />
+            <label htmlFor="tr-name">Name</label>
+            <input id="tr-name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Meditate" />
           </div>
           <div className="form-group" style={{ margin: 0 }}>
-            <label>Type</label>
-            <select value={kind} onChange={e => setKind(e.target.value)}>
+            <label htmlFor="tr-kind">Type</label>
+            <select id="tr-kind" value={kind} onChange={e => setKind(e.target.value)}>
               {TRACKER_KINDS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
             </select>
           </div>
         </div>
         {kind === 'number' && (
           <div className="form-group" style={{ margin: 0 }}>
-            <label>Unit (optional)</label>
-            <input value={unit} onChange={e => setUnit(e.target.value)} placeholder="e.g. min, pages, mg" />
+            <label htmlFor="tr-unit">Unit (optional)</label>
+            <input id="tr-unit" value={unit} onChange={e => setUnit(e.target.value)} placeholder="e.g. min, pages, mg" />
           </div>
         )}
         <button type="submit" disabled={!name.trim()}>Add tracker</button>
       </form>
-    </div>
+    </Section>
   )
 }
 
-/** Profile — sex + age drive the Ranks references and the RDA targets. */
-function ProfileCard() {
-  const [sex, setSex] = useState(null)
-  const [age, setAge] = useState(null)
-  const [saved, setSaved] = useState(false)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    apiFetch('/api/settings')
-      .then(s => { setSex(s.sex || 'male'); setAge(s.age ?? 19) })
-      .catch(e => setError(e.message))
-  }, [])
-
-  async function save() {
-    setError(null)
-    try {
-      await apiFetch('/api/settings', {
-        method: 'PUT', body: JSON.stringify({ sex, age: Number(age) }),
-      })
-      setSaved(true); setTimeout(() => setSaved(false), 1800)
-    } catch (e) { setError(e.message) }
-  }
-
-  if (sex == null) return null
-  return (
-    <div className="card">
-      <h2>Profile</h2>
-      <p className="muted" style={{ marginBottom: '0.75rem' }}>
-        Used to scale the Ranks strength references and the micronutrient targets on the Diet tab.
-      </p>
-      {error && <p className="muted" style={{ color: 'var(--color-danger)' }}>{error}</p>}
-      <div className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
-        <label style={{ flex: 1 }}>Sex</label>
-        <select value={sex} onChange={e => setSex(e.target.value)} style={{ width: 120 }}>
-          <option value="male">Male</option>
-          <option value="female">Female</option>
-        </select>
-      </div>
-      <div className="row" style={{ alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
-        <label style={{ flex: 1 }}>Age</label>
-        <input type="number" inputMode="numeric" min="10" max="100" value={age} onChange={e => setAge(e.target.value)} style={{ width: 80 }} />
-        <button onClick={save} style={{ minWidth: 90 }}>{saved ? '✓ Saved' : 'Save'}</button>
-      </div>
-    </div>
-  )
-}
-
-/** Default rest-timer countdown after each set. */
-function RestTimerSettingsCard() {
-  const [mins, setMins] = useState(null)
-  const [secs, setSecs] = useState(null)
-  const [saved, setSaved] = useState(false)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    apiFetch('/api/settings')
-      .then(s => { const t = s.default_rest_seconds ?? 120; setMins(Math.floor(t / 60)); setSecs(t % 60) })
-      .catch(e => setError(e.message))
-  }, [])
-
-  async function save() {
-    setError(null)
-    const total = Math.max(5, (Number(mins) || 0) * 60 + (Number(secs) || 0))
-    try {
-      await apiFetch('/api/settings', { method: 'PUT', body: JSON.stringify({ default_rest_seconds: total }) })
-      setSaved(true); setTimeout(() => setSaved(false), 1800)
-    } catch (e) { setError(e.message) }
-  }
-
-  if (mins == null) return null
-  return (
-    <div className="card">
-      <h2>Rest timer</h2>
-      <p className="muted" style={{ marginBottom: '0.75rem' }}>
-        Default countdown after each set. Routines with their own rest time use that instead;
-        during a set you can still adjust or pause it.
-      </p>
-      {error && <p className="muted" style={{ color: 'var(--color-danger)' }}>{error}</p>}
-      <div className="row" style={{ alignItems: 'center', gap: '0.4rem' }}>
-        <label style={{ flex: 1 }}>Default rest</label>
-        <input type="number" inputMode="numeric" min="0" max="20" value={mins} onChange={e => setMins(e.target.value)}
-          aria-label="Minutes" style={{ width: 64 }} />
-        <span className="muted">min</span>
-        <input type="number" inputMode="numeric" min="0" max="59" value={secs} onChange={e => setSecs(e.target.value)}
-          aria-label="Seconds" style={{ width: 64 }} />
-        <span className="muted">sec</span>
-        <button onClick={save} style={{ minWidth: 90 }}>{saved ? '✓ Saved' : 'Save'}</button>
-      </div>
-    </div>
-  )
-}
-
-/** Allowed rest days between workouts before the training streak breaks. */
-function StreakSettingsCard() {
-  const [gap, setGap] = useState(null)
-  const [saved, setSaved] = useState(false)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    apiFetch('/api/settings').then(s => setGap(s.streak_rest_gap)).catch(e => setError(e.message))
-  }, [])
-
-  async function save() {
-    setError(null)
-    try {
-      await apiFetch('/api/settings', { method: 'PUT', body: JSON.stringify({ streak_rest_gap: Number(gap) }) })
-      setSaved(true); setTimeout(() => setSaved(false), 1800)
-    } catch (e) { setError(e.message) }
-  }
-
-  if (gap == null) return null
-  return (
-    <div className="card">
-      <h2>Training streak</h2>
-      <p className="muted" style={{ marginBottom: '0.75rem' }}>
-        How many rest days are allowed between workouts before the streak breaks (default 1 — a normal rest day is fine).
-      </p>
-      {error && <p className="muted" style={{ color: 'var(--color-danger)' }}>{error}</p>}
-      <div className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
-        <label style={{ flex: 1 }}>Allowed rest days</label>
-        <input type="number" inputMode="numeric" min="0" max="7" value={gap} onChange={e => setGap(e.target.value)} style={{ width: 80 }} />
-        <button onClick={save} style={{ minWidth: 90 }}>{saved ? '✓ Saved' : 'Save'}</button>
-      </div>
-    </div>
-  )
-}
-
-/** Edit the weekly working-set target ranges per muscle group. Both the
- * sets-per-week view and the workout generator read this single table. */
-function VolumeTargetsCard() {
-  const [targets, setTargets] = useState(null)   // {muscle: {low, high}}
-  const [error, setError] = useState(null)
-  const [saved, setSaved] = useState(false)
-  const [busy, setBusy] = useState(false)
-
-  const load = useCallback(() => {
-    apiFetch('/api/stats/volume-targets').then(setTargets).catch(e => setError(e.message))
-  }, [])
-  useEffect(load, [load])
-
-  function setField(m, key, value) {
-    setTargets(t => ({ ...t, [m]: { ...t[m], [key]: value } }))
-  }
-
-  async function save() {
-    setBusy(true); setError(null)
-    try {
-      const payload = {}
-      for (const [m, { low, high }] of Object.entries(targets)) payload[m] = [Number(low), Number(high)]
-      await apiFetch('/api/settings', { method: 'PUT', body: JSON.stringify({ volume_targets: payload }) })
-      setSaved(true); setTimeout(() => setSaved(false), 1800)
-    } catch (e) { setError(e.message) } finally { setBusy(false) }
-  }
-
-  async function resetDefaults() {
-    setBusy(true); setError(null)
-    try {
-      await apiFetch('/api/settings', { method: 'PUT', body: JSON.stringify({ volume_targets: null }) })
-      load()
-    } catch (e) { setError(e.message) } finally { setBusy(false) }
-  }
-
-  if (!targets) return null
-  return (
-    <div className="card">
-      <h2>Weekly volume targets</h2>
-      <p className="muted" style={{ marginBottom: '0.75rem' }}>
-        Working sets per muscle per week. The sets-per-week view and the workout generator both read these ranges.
-      </p>
-      {error && <p className="muted" style={{ color: 'var(--color-danger)' }}>{error}</p>}
-      <div className="col" style={{ gap: '0.4rem' }}>
-        {Object.entries(targets).map(([m, { low, high }]) => (
-          <div key={m} className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ flex: 1, fontSize: '0.88rem' }}>{m}</span>
-            <input type="number" inputMode="numeric" min="0" value={low} onChange={e => setField(m, 'low', e.target.value)}
-              aria-label={`${m} minimum sets`} style={{ width: 66 }} />
-            <span className="muted">–</span>
-            <input type="number" inputMode="numeric" min="0" value={high} onChange={e => setField(m, 'high', e.target.value)}
-              aria-label={`${m} maximum sets`} style={{ width: 66 }} />
-          </div>
-        ))}
-      </div>
-      <div className="row" style={{ marginTop: '0.85rem', gap: '0.5rem' }}>
-        <button onClick={save} disabled={busy} style={{ flex: 1 }}>{saved ? '✓ Saved' : 'Save targets'}</button>
-        <button className="secondary" onClick={resetDefaults} disabled={busy}>Reset to defaults</button>
-      </div>
-    </div>
-  )
-}
-
-function fmtTimestamp(iso) {
-  if (!iso) return null
-  // Backend stores naive UTC — mark it so the browser converts to local
-  return new Date(iso + 'Z').toLocaleString(undefined, {
-    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-  })
-}
-
-/**
- * Apple Health sync — the card that decides whether this app has any data.
- *
- * iOS gives web apps no HealthKit access, so nothing here can read the
- * phone's health data directly. Everything below is about getting the phone
- * to *push*: install the shared Shortcut, give it this account's URL + token,
- * let a daily automation run it (or tap Sync now). The manual recipes are
- * kept, but folded away — leading with a wall of JSON is why nobody set this
- * up.
- */
-function AppleHealthCard({
-  ingestToken, importFile, setImportFile,
-  importBusy, importMsg, runImport, fileRef,
-}) {
-  const { refresh: refreshUser } = useAuth()
-  const { status, refresh: refreshStatus } = useSyncStatus()
-  const [rotating, setRotating] = useState(false)
-  const [rotateMsg, setRotateMsg] = useState(null)
-
-  const shortcutUrl = absoluteApiUrl('/api/ingest/health/shortcut')
-  const haeUrl = absoluteApiUrl('/api/ingest/health')
-  const apiOrigin = absoluteApiUrl('')
-
-  async function rotateToken() {
-    if (!window.confirm(
-      'Issue a new token? Any Shortcut or automation still using the old one '
-      + 'will stop working until you paste the new token into it.'
-    )) return
-    setRotating(true)
-    setRotateMsg(null)
-    try {
-      await apiFetch('/api/auth/ingest-token/rotate', { method: 'POST' })
-      await refreshUser()
-      setRotateMsg('New token issued — paste it into your Shortcut.')
-    } catch (err) {
-      setRotateMsg(`Error: ${err.message}`)
-    } finally {
-      setRotating(false)
-    }
-  }
-
-  const badge = !status ? null
-    : !status.has_any_data ? { cls: '', text: 'never synced' }
-    : status.stalest_days <= 1 ? { cls: ' success', text: `synced ${freshnessLabel(status.stalest_days)}` }
-    : { cls: ' warning', text: `${status.stalest_days} days behind` }
-
-  return (
-    <div className="card">
-      <div className="row" style={{ marginBottom: '0.5rem' }}>
-        <h2 style={{ margin: 0, flex: 1 }}>Apple Health sync</h2>
-        {badge && <span className={`badge${badge.cls}`}>{badge.text}</span>}
-      </div>
-      <p className="muted">
-        Weight, steps, sleep and nutrition all live in Apple Health. This app
-        runs in the browser, which iOS never lets read Health directly — so a
-        small Shortcut on your phone posts the numbers here instead.
-      </p>
-
-      {/* --- 1. Install --- */}
-      <h3>1. Install the Shortcut</h3>
-      {hasShortcutLink() ? (
-        <a href={HEALTH_SHORTCUT_URL} target="_blank" rel="noreferrer">
-          <button style={{ width: '100%' }}>Get “{HEALTH_SHORTCUT_NAME}”</button>
-        </a>
-      ) : (
-        <p className="muted" style={{ fontSize: '0.85rem' }}>
-          No shared Shortcut link is configured for this deployment. Build it
-          once from the recipe in <code style={{ fontSize: '0.72rem' }}>docs/HEALTH_INGEST_SHORTCUT.md</code>.
-        </p>
-      )}
-
-      {/* --- 2. Two values it asks for --- */}
-      <h3 style={{ marginTop: '1rem' }}>2. Paste these when it asks</h3>
-      <div className="row" style={{ gap: '0.5rem', marginBottom: '0.4rem' }}>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          Server: <code style={{ fontSize: '0.72rem' }}>{apiOrigin}</code>
-        </span>
-        <CopyButton text={apiOrigin} />
-      </div>
-      <div className="row" style={{ gap: '0.5rem' }}>
-        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          Token: <code style={{ fontSize: '0.72rem' }}>{ingestToken}</code>
-        </span>
-        <CopyButton text={ingestToken} />
-      </div>
-      <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.5rem' }}>
-        This token is yours alone and never expires — treat it like a password.
-        Regenerate it if it leaks; your Shortcut then needs the new one.
-      </p>
-      <button
-        className="secondary"
-        onClick={rotateToken}
-        disabled={rotating}
-        style={{ width: '100%', marginTop: '0.35rem' }}
-      >
-        {rotating ? 'Regenerating…' : 'Regenerate token'}
-      </button>
-      {rotateMsg && (
-        <p className="muted" style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>{rotateMsg}</p>
-      )}
-
-      {/* --- 3. Automate + run --- */}
-      <h3 style={{ marginTop: '1rem' }}>3. Let it run daily</h3>
-      <p className="muted" style={{ fontSize: '0.85rem', marginBottom: '0.6rem' }}>
-        Shortcuts app → Automation → new <strong>Time of Day</strong> automation
-        at 08:00, run the Shortcut, and turn <strong>off</strong> “Ask Before
-        Running”. Each run posts the last 7 days, so a missed morning repairs
-        itself the next time.
-      </p>
-      <SyncNowButton style={{ width: '100%' }} />
-
-      {/* --- Freshness --- */}
-      {status && (
-        <>
-          <hr />
-          <h3>Latest data</h3>
-          <div className="col" style={{ gap: '0.3rem' }}>
-            {[['Weight', 'weight'], ['Steps', 'steps'], ['Sleep', 'sleep'], ['Nutrition', 'nutrition']]
-              .map(([label, key]) => (
-                <div key={key} className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ flex: 1, fontSize: '0.88rem' }}>{label}</span>
-                  <span className="muted" style={{ fontSize: '0.82rem' }}>
-                    {freshnessLabel(status[key].days_stale)}
-                  </span>
-                </div>
-              ))}
-          </div>
-          {/* Server-mode only: health_last_ingest is excluded from the sync
-              payload, so the installed local-first PWA never has it. The
-              freshness rows above are the signal that always works. */}
-          {status.last_ingest && (
-            <p className="muted" style={{ marginTop: '0.5rem', fontSize: '0.78rem' }}>
-              Last push received {fmtTimestamp(status.last_ingest)}.
-            </p>
-          )}
-        </>
-      )}
-
-      {/* --- History backfill --- */}
-      <hr />
-      <h3>History backfill</h3>
-      <p className="muted" style={{ marginBottom: '0.6rem' }}>
-        Import your full history once: Health app → profile picture →
-        “Export All Health Data”, then upload the <code>export.zip</code> here.
-        Days you corrected manually are never overwritten.
-      </p>
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".zip,.xml"
-        style={{ display: 'none' }}
-        onChange={e => setImportFile(e.target.files?.[0] || null)}
-      />
-      <div className="row">
-        <button className="secondary" style={{ flex: 1 }} onClick={() => fileRef.current?.click()}>
-          {importFile ? importFile.name : 'Choose export.zip'}
-        </button>
-        <button
-          onClick={() => runImport().then(refreshStatus)}
-          disabled={!importFile || importBusy}
-          style={{ minWidth: 110 }}
-        >
-          {importBusy ? 'Importing…' : 'Import'}
-        </button>
-      </div>
-      {importBusy && (
-        <p className="muted" style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
-          Large exports can take a minute — leave this page open.
-        </p>
-      )}
-      {importMsg && (
-        <p className="muted" style={{ marginTop: '0.6rem', fontSize: '0.8rem' }}>{importMsg}</p>
-      )}
-
-      {/* --- Manual / alternative setups, folded away --- */}
-      <hr />
-      <details>
-        <summary style={{ cursor: 'pointer', fontSize: '0.88rem' }}>
-          Manual setup (build your own Shortcut, or use Health Auto Export)
-        </summary>
-
-        <h3 style={{ marginTop: '0.8rem' }}>Build the Shortcut yourself</h3>
-        <p className="muted" style={{ fontSize: '0.82rem', marginBottom: '0.5rem' }}>
-          Full recipe in <code style={{ fontSize: '0.72rem' }}>docs/HEALTH_INGEST_SHORTCUT.md</code>.
-          POST this body to the URL below with the bearer header.
-        </p>
-        <div className="row" style={{ gap: '0.5rem', marginBottom: '0.4rem' }}>
-          <span style={{ flex: 1, minWidth: 0 }}>POST: <code style={{ fontSize: '0.72rem' }}>{shortcutUrl}</code></span>
-          <CopyButton text={shortcutUrl} />
-        </div>
-        <div className="row" style={{ gap: '0.5rem', marginBottom: '0.4rem' }}>
-          <span style={{ flex: 1, minWidth: 0 }}>Header: <code style={{ fontSize: '0.72rem' }}>Authorization: Bearer …</code></span>
-          <CopyButton text={`Bearer ${ingestToken}`} />
-        </div>
-        <div className="row" style={{ gap: '0.5rem', alignItems: 'flex-start' }}>
-          <pre style={{
-            flex: 1, margin: 0, padding: '0.5rem', borderRadius: 6,
-            background: 'var(--surface-2, rgba(127,127,127,0.12))',
-            fontSize: '0.68rem', overflowX: 'auto', whiteSpace: 'pre',
-          }}>{SHORTCUT_JSON_TEMPLATE}</pre>
-          <CopyButton text={SHORTCUT_JSON_TEMPLATE} label="Copy JSON" />
-        </div>
-
-        <h3 style={{ marginTop: '1rem' }}>Health Auto Export</h3>
-        <p className="muted" style={{ fontSize: '0.82rem' }}>
-          The paid HAE app can push nutrition and micronutrients too, which the
-          Shortcut doesn’t cover. Its background pushes are unreliable on their
-          own — use it alongside the Shortcut, not instead of it.
-        </p>
-        <ol className="muted" style={{ fontSize: '0.85rem', paddingLeft: '1.25rem', margin: '0.6rem 0' }}>
-          <li>Automations → new automation, format <strong>JSON</strong></li>
-          <li style={{ marginTop: '0.4rem' }}>
-            <div className="row" style={{ gap: '0.5rem' }}>
-              <span style={{ flex: 1, minWidth: 0 }}>URL: <code style={{ fontSize: '0.72rem' }}>{haeUrl}</code></span>
-              <CopyButton text={haeUrl} />
-            </div>
-          </li>
-          <li style={{ marginTop: '0.4rem' }}>
-            <div className="row" style={{ gap: '0.5rem' }}>
-              <span style={{ flex: 1, minWidth: 0 }}>Header: <code style={{ fontSize: '0.72rem' }}>Authorization: Bearer …</code></span>
-              <CopyButton text={`Bearer ${ingestToken}`} />
-            </div>
-          </li>
-          <li style={{ marginTop: '0.4rem' }}>Select metrics: steps, weight, sleep, plus the dietary ones</li>
-          <li>Date range <strong>last 7 days</strong>, aggregation <strong>Daily</strong>, scheduled daily</li>
-        </ol>
-      </details>
-    </div>
-  )
-}
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
 
 export default function Settings() {
-  const { user } = useAuth()
-  const ingestToken = user.ingest_token
-
-  const [importFile, setImportFile] = useState(null)
-  const [importBusy, setImportBusy] = useState(false)
-  const [importMsg, setImportMsg] = useState(null)
-  const fileRef = useRef(null)
-
-  async function runImport() {
-    if (!importFile) return
-    setImportBusy(true)
-    setImportMsg(null)
-    try {
-      const form = new FormData()
-      form.append('file', importFile)
-      const r = await apiUpload('/api/ingest/health-export', form,
-        { Authorization: `Bearer ${ingestToken}` })
-      if (r.status === 'ok') {
-        const d = r.days
-        setImportMsg(
-          `Imported ${r.date_range.from ?? '—'} → ${r.date_range.to ?? '—'}: ` +
-          `${d.weight} weight, ${d.steps} step, ${d.sleep} sleep, ${d.nutrition} nutrition days ` +
-          `(${r.rows_created} new rows).`
-        )
-      } else {
-        setImportMsg(`Error: ${r.detail || 'import failed'}`)
-      }
-      setImportFile(null)
-      if (fileRef.current) fileRef.current.value = ''
-    } catch (err) {
-      setImportMsg(`Error: ${err.message}`)
-    } finally {
-      setImportBusy(false)
-    }
-  }
+  const { s, save, error, savedAt } = useSettings()
 
   return (
     <div className="page">
       <h1>Settings</h1>
 
-      <AccountCard />
+      <AccountSection />
 
-      <SoundCard />
+      {error && <p className="set-error" role="alert">{error}</p>}
+      {s && <ProfileSection s={s} save={save} savedAt={savedAt} />}
+      {s && <PreferencesSection s={s} save={save} savedAt={savedAt} />}
 
-      <AppleHealthCard
-        ingestToken={ingestToken}
-        importFile={importFile}
-        setImportFile={setImportFile}
-        importBusy={importBusy}
-        importMsg={importMsg}
-        runImport={runImport}
-        fileRef={fileRef}
-      />
+      <VolumeTargetsSection />
+      <TrackersSection />
 
-      <ProfileCard />
-      <RestTimerSettingsCard />
-      <StreakSettingsCard />
-      <VolumeTargetsCard />
-
-      <TrackersCard />
-
-      <div className="card">
-        <h2>Manual log</h2>
-        <p className="muted">
-          Add or correct individual days by hand — manual entries always win
-          over synced data.
-        </p>
-        <Link to="/log">
-          <button className="secondary" style={{ width: '100%', marginTop: '0.75rem' }}>
-            Open manual log
-          </button>
+      <Section title="Data" footer="Add or correct individual days by hand — manual entries always win over synced data.">
+        <Link to="/log" className="set-row set-row-button">
+          <span className="set-row-label">Manual log</span>
+          <span className="set-row-control muted"><Chevron /></span>
         </Link>
-      </div>
-
+      </Section>
     </div>
   )
 }

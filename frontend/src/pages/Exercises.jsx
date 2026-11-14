@@ -10,6 +10,7 @@ import { apiFetch } from '../api'
 import Modal from '../components/Modal'
 import { Loading, ErrorBox } from '../components/States'
 import { RankBadge, rankAccent, useExerciseRanks } from '../components/RankBadge'
+import { confirmAction } from '../components/ConfirmSheet'
 
 const MUSCLE_OPTIONS = [
   'chest', 'back', 'shoulders', 'biceps', 'triceps',
@@ -74,7 +75,7 @@ export default function Exercises() {
   }, [exercises, search, muscleFilter])
 
   async function handleDelete(id) {
-    if (!confirm('Delete this custom exercise?')) return
+    if (!(await confirmAction({ title: 'Delete this custom exercise?', confirmLabel: 'Delete', danger: true }))) return
     try {
       await apiFetch(`/api/exercises/${id}`, { method: 'DELETE' })
       load()

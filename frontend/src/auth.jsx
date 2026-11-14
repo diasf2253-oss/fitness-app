@@ -8,6 +8,14 @@ import { apiFetch } from './api'
 
 const AuthContext = createContext(null)
 
+const NO_AUTOLOGIN_KEY = 'dev_no_autologin'
+
+function devAutoLoginAllowed() {
+  if (!import.meta.env.DEV) return false
+  if (!import.meta.env.VITE_DEV_AUTOLOGIN_EMAIL || !import.meta.env.VITE_DEV_AUTOLOGIN_PASSWORD) return false
+  try { return !sessionStorage.getItem(NO_AUTOLOGIN_KEY) } catch { return true }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   // 'loading' | 'authed' | 'anon'
@@ -15,7 +23,25 @@ export function AuthProvider({ children }) {
 
   const refresh = useCallback(async () => {
     try {
-      const me = await apiFetch('/api/auth/me')
+      let me
+      try {
+        me = await apiFetch('/api/auth/me')
+      } catch (err) {
+        // Dev-only shortcut: skip the login screen while the UI is being designed.
+        // `import.meta.env.DEV` is false in every production build, so this whole
+        // branch is stripped out of what ships. Logging out sets a flag so you can
+        // still reach /login on purpose. Details: docs/DEV_HANDBOOK.md.
+        if (!devAutoLoginAllowed()) throw err
+        await apiFetch('/api/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({
+            email: import.meta.env.VITE_DEV_AUTOLOGIN_EMAIL,
+            password: import.meta.env.VITE_DEV_AUTOLOGIN_PASSWORD,
+            remember: true,
+          }),
+        })
+        me = await apiFetch('/api/auth/me')
+      }
       setUser(me)
       setStatus('authed')
       return me
@@ -34,6 +60,8 @@ export function AuthProvider({ children }) {
     } catch {
       // Even if the request fails, treat the local session as gone.
     }
+    // After an explicit log-out, don't auto-sign-in again this browser session.
+    try { sessionStorage.setItem(NO_AUTOLOGIN_KEY, '1') } catch { /* private mode */ }
     setUser(null)
     setStatus('anon')
   }, [])

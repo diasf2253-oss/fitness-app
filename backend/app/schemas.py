@@ -344,6 +344,7 @@ class AppSettingsUpdate(BaseModel):
     rank_config: Optional[dict] = None
     # Profile / onboarding
     age: Optional[int] = None
+    height_cm: Optional[float] = Field(None, ge=100, le=250)
     onboarded: Optional[bool] = None
     # Adaptive calorie engine — goal is the signed slider: − cut · 0 maintain · + bulk
     goal_kg_per_week: Optional[float] = Field(None, ge=-0.5, le=0.5)
@@ -370,6 +371,7 @@ class AppSettingsOut(OrmBase):
     health_last_ingest: Optional[datetime] = None
     # Profile / onboarding
     age: int = 19
+    height_cm: Optional[float] = None
     onboarded: bool = False
     # Adaptive calorie engine (goal is signed: − cut · 0 maintain · + bulk)
     goal_kg_per_week: float = -0.5
@@ -827,6 +829,13 @@ class LoginRequest(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     new_password: str = Field(min_length=8)
+    # Required unless the account is on an admin-issued temp password
+    # (must_change_password) — see routers/auth.py.
+    current_password: Optional[str] = None
+
+
+class UpdateMeRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
 
 
 class UserMeOut(OrmBase):

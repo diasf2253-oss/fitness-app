@@ -3,47 +3,20 @@
  * One call to GET /api/dashboard renders every widget: nutrition vs
  * targets, weight trend with 7-day moving average, steps, sleep, and
  * training (week volume + recent PRs).
- * Every widget renders a quiet empty state until data exists — real
- * health data arrives with the Apple Health sync in Phase 3, or via
- * the manual Log page.
+ * Every widget renders a quiet empty state until data exists. Health data is
+ * logged by hand for now (quick-log sheet, or the full Log page) — Apple
+ * Health sync is paused until a native app exists.
  */
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from 'recharts'
 import { apiFetch } from '../api'
 import { Loading, ErrorBox, EmptyNote, NoHealthDataNote } from '../components/States'
 import MonthCalendar from '../components/MonthCalendar'
 import WidgetLabel from '../components/WidgetLabel'
+import WeightCard from '../components/WeightCard'
+import GoalBarCard from '../components/GoalBarCard'
+import { HEALTH_DATA_CHANGED, openQuickLog } from '../components/QuickLog'
 import CheckIn from '../components/CheckIn'
-
-// Chart palette — mirrors the "Quiet Tracker" CSS tokens
-const GRID = 'rgba(236,233,224,0.07)'
-const AXIS = '#9aa69b'
-const SAGE = '#a8bfa1'
-const MOSS = '#7f9b78'
-const BONE = '#ece9e0'
-const TOOLTIP_STYLE = {
-  background: '#1d2521',
-  border: '1px solid rgba(236,233,224,0.12)',
-  borderRadius: 12,
-  color: '#ece9e0',
-}
-
-function fmtDay(iso) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-// Weight dots: solid for a real weigh-in, hollow ring for an interpolated
-// estimate on a day that wasn't tracked.
-function weightDot(props) {
-  const { cx, cy, payload, index } = props
-  if (cx == null || cy == null) return null
-  return payload.estimated
-    ? <circle key={index} cx={cx} cy={cy} r={2.2} fill="none" stroke={SAGE} strokeWidth={1} strokeOpacity={0.55} />
-    : <circle key={index} cx={cx} cy={cy} r={2} fill={SAGE} />
-}
 
 function MacroBar({ label, value, target, over }) {
   const pct = target > 0 ? Math.min(100, (value / target) * 100) : 0
@@ -61,6 +34,12 @@ function MacroBar({ label, value, target, over }) {
     </div>
   )
 }
+
+// Daily goals the Steps / Sleep bars fill toward.
+const STEP_GOAL = 9000
+const SLEEP_GOAL_H = 8
+/** 7.4 → "7h 24m" */
+const fmtHours = h => { const m = Math.round(h * 60); return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` }
 
 const PR_LABEL = { heaviest: 'Heaviest', best_1rm: 'Est. 1RM', best_volume: 'Set volume' }
 
@@ -250,25 +229,20 @@ export default function Dashboard() {
   useEffect(() => {
     // In local-first mode apiFetch serves this from the on-device DB,
     // so the dashboard works with no server reachable.
-    apiFetch('/api/dashboard')
+    const load = () => apiFetch('/api/dashboard')
       .then(setData)
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
+    load()
+    // Re-fetch after a quick-log save so the cards update in place
+    window.addEventListener(HEALTH_DATA_CHANGED, load)
+    return () => window.removeEventListener(HEALTH_DATA_CHANGED, load)
   }, [])
 
   const now = new Date()
   const dateLabel = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
   const hour = now.getHours()
   const greeting = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening'
-
-  // Merge the weight series with its moving average for a two-line chart
-  const weightData = data
-    ? data.weight.series.map(p => {
-        const avg = data.weight.moving_avg_7d.find(a => a.date === p.date)
-        return { date: p.date, weight_kg: p.weight_kg, avg_kg: avg ? avg.avg_kg : null, estimated: p.estimated }
-      })
-    : []
-  const hasWeightEstimates = weightData.some(p => p.estimated)
 
   const nut = data?.nutrition_today
   const targets = data?.targets
@@ -333,7 +307,7 @@ export default function Dashboard() {
               {data.streak && (
                 <div>
                   <div className="stat-num" style={{ fontSize: '1.8rem', color: data.streak.at_risk ? 'var(--color-warning)' : undefined }}>
-                    {data.streak.current}{data.streak.current > 0 ? '🔥' : ''}
+                    {data.streak.current}
                   </div>
                   <WidgetLabel>streak{data.streak.at_risk ? ' · at risk' : ''}</WidgetLabel>
                 </div>
@@ -360,81 +334,33 @@ export default function Dashboard() {
           </div>
 
           {/* ---- Weight trend ---- */}
-          <div className="card span-2">
-            <div className="row" style={{ marginBottom: '0.5rem' }}>
-              <h3 style={{ margin: 0, flex: 1 }}>Weight</h3>
-              <WidgetLabel>90 days · 7-day avg</WidgetLabel>
-            </div>
-            {weightData.length > 0 ? (
-              <>
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={weightData} margin={{ top: 8, right: 8, left: -14, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
-                  <XAxis dataKey="date" stroke={AXIS} fontSize={10} tickLine={false} axisLine={false} tickFormatter={fmtDay} minTickGap={28} />
-                  <YAxis stroke={AXIS} fontSize={10} domain={['auto', 'auto']} tickLine={false} axisLine={false} />
-                  <Tooltip
-                    contentStyle={TOOLTIP_STYLE}
-                    labelFormatter={fmtDay}
-                    formatter={(value, name, item) =>
-                      name === 'kg' && item?.payload?.estimated ? [`${value} (est.)`, name] : [value, name]
-                    }
-                  />
-                  <Line type="monotone" dataKey="weight_kg" name="kg" stroke={SAGE} strokeWidth={1.5} dot={weightDot} />
-                  <Line type="monotone" dataKey="avg_kg" name="7d avg" stroke={BONE} strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls />
-                </LineChart>
-              </ResponsiveContainer>
-              {hasWeightEstimates && (
-                <p className="muted" style={{ fontSize: '0.72rem', marginTop: 2, textAlign: 'center' }}>
-                  Hollow points are interpolated estimates for days you didn't weigh in.
-                </p>
-              )}
-              </>
-            ) : (
-              <NoHealthDataNote metric="weight readings" />
-            )}
-          </div>
+          <WeightCard weight={data.weight} onLog={() => openQuickLog('weight')} />
 
-          {/* ---- Steps ---- */}
-          <div className="card">
-            <div className="row" style={{ marginBottom: '0.5rem' }}>
-              <h3 style={{ margin: 0, flex: 1 }}>Steps</h3>
-              <WidgetLabel>14 days</WidgetLabel>
-            </div>
-            {data.steps.length > 0 ? (
-              <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={data.steps} margin={{ top: 8, right: 8, left: -14, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
-                  <XAxis dataKey="date" stroke={AXIS} fontSize={10} tickLine={false} axisLine={false} tickFormatter={fmtDay} minTickGap={20} />
-                  <YAxis stroke={AXIS} fontSize={10} tickLine={false} axisLine={false} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={fmtDay} cursor={{ fill: 'rgba(236,233,224,0.05)' }} />
-                  <Bar dataKey="steps" name="steps" fill={MOSS} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <NoHealthDataNote metric="step data" />
-            )}
-          </div>
+          {/* ---- Steps: fill a 9k bar each day ---- */}
+          <GoalBarCard
+            label="👟 Steps"
+            points={data.steps.map(p => ({ date: p.date, value: p.steps }))}
+            goal={STEP_GOAL}
+            goalLabel="9k"
+            unit="steps"
+            formatValue={v => Math.round(v).toLocaleString()}
+            storageKey="steps_range_days"
+            empty={<NoHealthDataNote metric="step data" log="steps" />}
+            onLog={() => openQuickLog('steps')}
+          />
 
-          {/* ---- Sleep ---- */}
-          <div className="card">
-            <div className="row" style={{ marginBottom: '0.5rem' }}>
-              <h3 style={{ margin: 0, flex: 1 }}>Sleep</h3>
-              <WidgetLabel>hours · 14 nights</WidgetLabel>
-            </div>
-            {data.sleep.length > 0 ? (
-              <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={data.sleep} margin={{ top: 8, right: 8, left: -14, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
-                  <XAxis dataKey="date" stroke={AXIS} fontSize={10} tickLine={false} axisLine={false} tickFormatter={fmtDay} minTickGap={20} />
-                  <YAxis stroke={AXIS} fontSize={10} tickLine={false} axisLine={false} domain={[0, 'auto']} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={fmtDay} cursor={{ fill: 'rgba(236,233,224,0.05)' }} />
-                  <Bar dataKey="asleep_hours" name="h asleep" fill={SAGE} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <NoHealthDataNote metric="sleep data" />
-            )}
-          </div>
+          {/* ---- Sleep: fill an 8h bar each night ---- */}
+          <GoalBarCard
+            label="☾ Sleep"
+            points={data.sleep.map(p => ({ date: p.date, value: p.asleep_hours }))}
+            goal={SLEEP_GOAL_H}
+            goalLabel="8h"
+            unit="asleep"
+            formatValue={fmtHours}
+            storageKey="sleep_range_days"
+            empty={<NoHealthDataNote metric="sleep data" log="sleep" />}
+            onLog={() => openQuickLog('sleep')}
+          />
 
           </div>
 

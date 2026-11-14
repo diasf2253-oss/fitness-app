@@ -2,8 +2,8 @@
  * Log — manual entry/correction for a day's health data (Phase 2).
  * Pick a date, then save weight, steps, sleep, or nutrition. Saves are
  * date-keyed upserts with source='manual', so correcting a day is just
- * re-saving it (last write wins). From Phase 3 the same tables fill
- * automatically from Apple Health.
+ * re-saving it (last write wins). The quick-log sheet (components/QuickLog)
+ * is the fast lane for weight/steps/sleep; this page is the full form.
  */
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'

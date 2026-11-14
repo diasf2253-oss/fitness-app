@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../api'
 import { ErrorBox } from '../components/States'
+import { confirmAction } from '../components/ConfirmSheet'
 
 function fmtTimestamp(iso) {
   if (!iso) return '—'
@@ -106,7 +107,11 @@ function UsersCard({ users, onChange }) {
   }
 
   async function issueTempPassword(u) {
-    if (!confirm(`Issue a temporary password for ${u.email}? Their other sessions will be signed out.`)) return
+    if (!(await confirmAction({
+      title: 'Issue a temporary password?',
+      message: `For ${u.email}. Their other sessions will be signed out.`,
+      confirmLabel: 'Issue password',
+    }))) return
     setBusyId(u.id)
     setError(null)
     try {

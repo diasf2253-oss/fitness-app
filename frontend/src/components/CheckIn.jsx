@@ -24,9 +24,9 @@ function HabitPill({ tracker, onToggle }) {
     <button
       onClick={() => onToggle(done)}
       style={{
-        background: done ? 'var(--tint-success)' : 'rgba(236,233,224,0.06)',
+        background: done ? 'var(--tint-success)' : 'rgba(241, 234, 217,0.06)',
         color: done ? 'var(--color-success)' : 'var(--color-text)',
-        border: `1px solid ${done ? 'rgba(143,181,115,0.35)' : 'var(--color-border)'}`,
+        border: `1px solid ${done ? 'rgba(143, 174, 116,0.35)' : 'var(--color-border)'}`,
         boxShadow: 'none',
         padding: '0.45rem 0.95rem',
         minHeight: 40,

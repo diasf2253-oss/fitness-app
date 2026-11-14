@@ -1,8 +1,9 @@
 /* =========================================================
    Design system — "Quiet Tracker"
-   Calm, editorial, premium. Deep green-charcoal base with a
-   soft sage mist, bone ink, serif display type with italic
-   accents, pill-shaped actions, hairline borders.
+   Palette (Nov 2026):  Noir de Vigne #111A19 (base) · Emerald
+   #284139 (raised) · Wasabi #809076 (accent) · Creased Khaki
+   #F8D794 (primary action) · Egyptian Earth #B86830 (destructive).
+   Rounded Comfortaa type, pill-shaped actions, hairline borders.
    The opposite of a loud gym app: it speaks softly.
    Mobile-first, no UI kit.
    ========================================================= */
@@ -14,36 +15,36 @@
 }
 
 :root {
-  /* ---- Surfaces (deep green-charcoal, never pure black) ---- */
-  --color-bg:       #151b18;
-  --color-surface:  #1d2521;   /* cards */
-  --color-surface2: #273029;   /* inputs, wells */
-  --color-elevated: #2f3a33;   /* hover / raised */
+  /* ---- Surfaces: Noir de Vigne base rising toward Emerald ---- */
+  --color-bg:       #111a19;
+  --color-surface:  #172320;   /* cards */
+  --color-surface2: #1f2e29;   /* inputs, wells */
+  --color-elevated: #284139;   /* hover / raised */
 
   /* ---- Hairlines + ink ---- */
-  --color-border:     rgba(236, 233, 224, 0.08);
-  --color-border-str: rgba(236, 233, 224, 0.16);
-  --color-text:       #ece9e0;   /* bone */
-  --color-muted:      #9aa69b;   /* sage gray */
+  --color-border:     rgba(241, 234, 217, 0.08);
+  --color-border-str: rgba(241, 234, 217, 0.16);
+  --color-text:       #f1ead9;   /* warm off-white */
+  --color-muted:      #93a08c;   /* wasabi gray */
 
   /* ---- Action + accent ----
-     The primary action is a bone/cream pill with dark ink —
-     calm and editorial — rather than a saturated brand color.
-     Sage is the quiet accent for links and active states. */
-  --color-primary:    #ece9e0;
-  --color-primary-dk: #dcd7c9;
-  --color-on-primary: #1b211d;
-  --color-accent:     #a8bfa1;
-  --color-success:    #8fb573;
-  --color-danger:     #cf8772;
-  --color-warning:    #d9b06b;
+     The primary action is a Creased Khaki pill with Noir ink.
+     Wasabi (lightened for text legibility) is the quiet accent for
+     links and active states; Egyptian Earth marks destructive actions. */
+  --color-primary:    #f8d794;
+  --color-primary-dk: #e9c77f;
+  --color-on-primary: #111a19;
+  --color-accent:     #9db08f;
+  --color-success:    #8fae74;
+  --color-danger:     #cf7d45;
+  --color-warning:    #f8d794;
 
   /* ---- Tinted fills (badges, completed rows, alerts) ---- */
-  --tint-primary: rgba(236, 233, 224, 0.10);
-  --tint-accent:  rgba(168, 191, 161, 0.16);
-  --tint-success: rgba(143, 181, 115, 0.16);
-  --tint-warning: rgba(217, 176, 107, 0.15);
-  --tint-danger:  rgba(207, 135, 114, 0.14);
+  --tint-primary: rgba(248, 215, 148, 0.12);
+  --tint-accent:  rgba(128, 144, 118, 0.16);
+  --tint-success: rgba(143, 174, 116, 0.16);
+  --tint-warning: rgba(248, 215, 148, 0.15);
+  --tint-danger:  rgba(184, 104, 48, 0.14);
 
   /* ---- Radii (soft, pill-forward) ---- */
   --radius-sm: 12px;
@@ -62,11 +63,14 @@
   /* Tap targets must be at least 44px for comfortable gym use */
   --tap-min: 44px;
 
-  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
-  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* One rounded geometric face everywhere (Comfortaa). It has no italic, so
+     accents use colour + weight instead of slanted type. */
+  --font-display: 'Comfortaa', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Comfortaa', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 
   font-family: var(--font-body);
   font-size: 16px;
+  font-weight: 500;
   line-height: 1.55;
   color: var(--color-text);
   background: var(--color-bg);
@@ -78,10 +82,10 @@
 body {
   min-height: 100dvh;
   overflow-x: hidden;
-  /* Soft sage "mist" so the base reads atmospheric, never flat */
+  /* Soft emerald "mist" so the Noir base reads atmospheric, never flat */
   background:
-    radial-gradient(1100px 520px at 50% -8%, rgba(168, 191, 161, 0.10), transparent 60%),
-    radial-gradient(900px 480px at 92% 112%, rgba(168, 191, 161, 0.05), transparent 55%),
+    radial-gradient(1100px 520px at 50% -8%, rgba(40, 65, 57, 0.55), transparent 60%),
+    radial-gradient(900px 480px at 92% 112%, rgba(40, 65, 57, 0.30), transparent 55%),
     var(--color-bg);
   background-attachment: fixed;
 }
@@ -93,7 +97,7 @@ body {
 @media (min-width: 1024px) {
   body {
     background:
-      radial-gradient(1100px 520px at 50% -8%, rgba(168, 191, 161, 0.12), transparent 60%),
+      radial-gradient(1100px 520px at 50% -8%, rgba(128, 144, 118, 0.12), transparent 60%),
       url("/bg-valley.jpg") center top / cover no-repeat,
       var(--color-bg);
     background-attachment: fixed;
@@ -127,17 +131,24 @@ button {
 }
 
 button:hover { background: var(--color-primary-dk); }
-button:active { transform: scale(0.98); }
+button:active { transform: scale(0.97); transition-duration: 0.06s; }
+
+/* No 300ms double-tap-zoom wait on anything tappable (skill §1) */
+button, a, summary, [role="button"], [role="switch"], label, select, input { touch-action: manipulation; }
+
+/* Press feedback lands on touch-down, instantly, everywhere — not just on <button> */
+a:active { opacity: 0.7; transition-duration: 0.06s; }
+.nav a:active { transform: scale(0.94); background: rgba(241, 234, 217, 0.12); }
 button:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
 
 button.secondary {
-  background: rgba(236, 233, 224, 0.06);
+  background: rgba(241, 234, 217, 0.06);
   color: var(--color-text);
   border: 1px solid var(--color-border);
   box-shadow: none;
 }
 button.secondary:hover {
-  background: rgba(236, 233, 224, 0.10);
+  background: rgba(241, 234, 217, 0.10);
   border-color: var(--color-border-str);
 }
 
@@ -145,10 +156,10 @@ button.secondary:hover {
 button.danger {
   background: var(--tint-danger);
   color: var(--color-danger);
-  border: 1px solid rgba(207, 135, 114, 0.35);
+  border: 1px solid rgba(184, 104, 48, 0.35);
   box-shadow: none;
 }
-button.danger:hover { background: rgba(207, 135, 114, 0.22); }
+button.danger:hover { background: rgba(184, 104, 48, 0.22); }
 
 /* ---- Inputs ---- */
 
@@ -165,14 +176,14 @@ input, select, textarea {
   outline: none;
   transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
 }
-input::placeholder, textarea::placeholder { color: #66726a; }
+input::placeholder, textarea::placeholder { color: #66756a; }
 
 input:focus, select:focus, textarea:focus {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 3px var(--tint-accent);
 }
 
-::selection { background: rgba(168, 191, 161, 0.35); }
+::selection { background: rgba(128, 144, 118, 0.35); }
 
 /* ---- Keyboard focus (visible, sage, never removed) ---- */
 
@@ -203,43 +214,165 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   box-shadow: var(--shadow-sm);
 }
 
-/* Toggle switch — role="switch" button styled as a pill (Settings > Sound) */
-.switch {
+/* Toggle switch — iOS proportions (51×31). Written as `button.switch` so it
+   out-ranks the global `button` rules (min-height 44px, shadow, hover colour,
+   press-scale) that used to distort it into a tall oval. */
+button.switch {
   position: relative;
   flex: 0 0 auto;
-  width: 46px;
-  height: 28px;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface2);
-  border: 1px solid var(--color-border-str);
+  width: 51px;
+  height: 31px;
+  min-height: 0;
   padding: 0;
+  border-radius: var(--radius-pill);
+  background: rgba(241, 234, 217, 0.16);
+  border: none;
+  box-shadow: none;
   cursor: pointer;
-  transition: background 0.18s var(--ease), border-color 0.18s var(--ease);
+  transition: background 0.25s var(--ease);
 }
-.switch::after {
+button.switch:hover { background: rgba(241, 234, 217, 0.2); }
+button.switch::after {
   content: '';
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 22px;
-  height: 22px;
+  width: 27px;
+  height: 27px;
   border-radius: 50%;
-  background: var(--color-primary);
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.18s var(--ease);
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: transform 0.3s var(--ease), width 0.15s var(--ease);
 }
-.switch[aria-checked="true"] {
-  background: var(--tint-success);
-  border-color: rgba(143, 181, 115, 0.5);
-}
-.switch[aria-checked="true"]::after {
-  transform: translateX(18px);
-  background: var(--color-success);
-}
-.switch:focus-visible {
+/* The thumb stretches a little under your finger, like iOS */
+button.switch:active { transform: none; }
+button.switch:active::after { width: 33px; }
+button.switch[aria-checked="true"],
+button.switch[aria-checked="true"]:hover { background: var(--color-success); }
+button.switch[aria-checked="true"]::after { transform: translateX(20px); }
+button.switch[aria-checked="true"]:active::after { transform: translateX(14px); }
+button.switch:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
+
+/* ---- Settings: titled groups (title above, rows inside the card) ---- */
+
+.set-section { margin-bottom: 1.6rem; }
+.set-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 0.35rem;
+  margin-bottom: 0.45rem;
+}
+.set-title {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin: 0;
+}
+.set-saved {
+  font-size: 0.78rem;
+  color: var(--color-success);
+  opacity: 0;
+  transition: opacity 0.25s var(--ease);
+}
+.set-saved.on { opacity: 1; }
+.set-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.set-footer {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--color-muted);
+  padding: 0.5rem 0.5rem 0;
+}
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 52px;
+  padding: 0.35rem 1rem;
+  width: 100%;
+}
+.set-row + .set-row,
+.set-row + .set-expand,
+.set-expand + .set-row,
+.set-card > .set-error + .set-row,
+.set-row + .set-pad,
+.set-row + .set-error { border-top: 1px solid var(--color-border); }
+.set-row-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.set-row-label { font-size: 0.96rem; color: var(--color-text); }
+.set-row-hint { font-size: 0.76rem; color: var(--color-muted); }
+.set-row-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.set-value { color: var(--color-muted); font-size: 0.92rem; overflow-wrap: anywhere; text-align: right; }
+.set-unit { color: var(--color-muted); font-size: 0.88rem; }
+.set-pad { padding: 0.85rem 1rem; }
+.set-pad + .set-pad, .set-row-button + .set-pad { border-top: 1px solid var(--color-border); }
+.set-error { color: var(--color-danger); font-size: 0.84rem; padding: 0.55rem 1rem; }
+.set-expand { background: rgba(0, 0, 0, 0.12); border-top: 1px solid var(--color-border); }
+.set-expand .set-row + .set-row { border-top: 1px solid var(--color-border); }
+.set-expand .set-pad { border-top: 1px solid var(--color-border); }
+
+/* Rows that are a tap target (Password, Log out, Manual log) — reset the
+   global pill-button look so they read as list rows. */
+button.set-row-button, a.set-row-button {
+  background: transparent;
+  color: var(--color-text);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 500;
+  font-size: 0.96rem;
+  letter-spacing: 0;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.1s var(--ease);
+}
+button.set-row-button:hover, a.set-row-button:hover { background: rgba(241, 234, 217, 0.04); color: var(--color-text); }
+button.set-row-button:active, a.set-row-button:active { background: rgba(241, 234, 217, 0.1); transform: none; opacity: 1; }
+button.set-row-danger .set-row-label { color: var(--color-danger); }
+.set-chevron { color: var(--color-muted); opacity: 0.7; margin-left: 0.15rem; }
+.set-row-button[aria-expanded="true"] .set-chevron { transform: rotate(90deg); }
+.set-chevron { transition: transform 0.25s var(--ease); }
+
+/* Inline fields: bare, right-aligned, no box — the row is the field */
+.set-input {
+  width: auto;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.5rem;
+  text-align: right;
+  color: var(--color-text);
+  min-height: 40px;
+  box-shadow: none;
+  -moz-appearance: textfield;
+}
+.set-input::-webkit-outer-spin-button, .set-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.set-input:focus { background: var(--color-surface2); box-shadow: none; border-color: transparent; }
+.set-input::placeholder { color: var(--color-muted); opacity: 0.6; }
+.set-narrow { width: 4.2rem; }
+.set-select { text-align-last: right; padding-right: 0.25rem; cursor: pointer; }
+input#acc-name { width: 14rem; max-width: 100%; }
 
 /* Clickable cards (History sessions, library rows) get real states */
 .card-interactive {
@@ -251,7 +384,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   background: color-mix(in srgb, var(--color-surface) 86%, var(--color-elevated));
 }
 .card-interactive.selected {
-  border-color: rgba(168, 191, 161, 0.4);
+  border-color: rgba(128, 144, 118, 0.4);
 }
 
 /* Rotating disclosure chevron (replaces ▲/▼ text glyphs) */
@@ -290,7 +423,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  background: rgba(236, 233, 224, 0.07);
+  background: rgba(241, 234, 217, 0.07);
   border: 1px solid var(--color-border);
   color: var(--color-muted);
 }
@@ -305,9 +438,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   flex-shrink: 0;
 }
 
-.badge.success { background: var(--tint-success); color: var(--color-success); border-color: rgba(143, 181, 115, 0.3); }
-.badge.warning { background: var(--tint-warning); color: var(--color-warning); border-color: rgba(217, 176, 107, 0.3); }
-.badge.primary { background: var(--tint-accent);  color: var(--color-accent);  border-color: rgba(168, 191, 161, 0.3); }
+.badge.success { background: var(--tint-success); color: var(--color-success); border-color: rgba(143, 174, 116, 0.3); }
+.badge.warning { background: var(--tint-warning); color: var(--color-warning); border-color: rgba(248, 215, 148, 0.3); }
+.badge.primary { background: var(--tint-accent);  color: var(--color-accent);  border-color: rgba(128, 144, 118, 0.3); }
 
 /* ---- Progress bar ---- */
 
@@ -356,7 +489,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   gap: 3px;
   padding: 0.5rem 0.55rem 0.45rem;
   min-width: 56px;
-  font-size: 0.62rem;
+  font-size: 0.68rem;
   font-weight: 500;
   letter-spacing: 0.05em;
   color: var(--color-muted);
@@ -366,7 +499,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 
 .nav a.active {
   color: var(--color-text);
-  background: rgba(236, 233, 224, 0.08);
+  background: rgba(241, 234, 217, 0.08);
 }
 
 .nav-icon {
@@ -458,10 +591,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 
   .wordmark {
     font-family: var(--font-display);
-    font-style: italic;
-    font-weight: 400;
-    font-size: 1.5rem;
-    letter-spacing: 0.01em;
+    font-weight: 700;
+    font-size: 1.4rem;
+    letter-spacing: -0.02em;
     padding: 0 0.6rem 1.1rem;
   }
 
@@ -486,8 +618,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
     font-weight: 500;
     transition: color 0.15s var(--ease), background 0.15s var(--ease);
   }
-  .sidebar a:hover { color: var(--color-text); background: rgba(236, 233, 224, 0.05); }
-  .sidebar a.active { color: var(--color-text); background: rgba(236, 233, 224, 0.08); }
+  .sidebar a:hover { color: var(--color-text); background: rgba(241, 234, 217, 0.05); }
+  .sidebar a.active { color: var(--color-text); background: rgba(241, 234, 217, 0.08); }
   .sidebar a svg { width: 17px; height: 17px; flex-shrink: 0; }
 
   /* Quiet sync status pinned to the sidebar foot */
@@ -605,7 +737,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   box-shadow: none;
   font-size: 0.9rem;
 }
-.cal-nav-btn:hover { background: rgba(236, 233, 224, 0.07); color: var(--color-text); }
+.cal-nav-btn:hover { background: rgba(241, 234, 217, 0.07); color: var(--color-text); }
 
 .cal-grid {
   display: grid;
@@ -639,8 +771,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   font-variant-numeric: tabular-nums;
   transition: background 0.15s var(--ease), color 0.15s var(--ease);
 }
-.cal-cell:hover { background: rgba(236, 233, 224, 0.07); color: var(--color-text); }
-.cal-cell.has-data { color: var(--color-text); background: rgba(236, 233, 224, 0.04); }
+.cal-cell:hover { background: rgba(241, 234, 217, 0.07); color: var(--color-text); }
+.cal-cell.has-data { color: var(--color-text); background: rgba(241, 234, 217, 0.04); }
 .cal-cell.today { box-shadow: inset 0 0 0 1px var(--color-border-str); }
 .cal-cell.selected { background: var(--color-primary); color: var(--color-on-primary); }
 .cal-cell.selected:hover { background: var(--color-primary-dk); }
@@ -664,14 +796,13 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   color: var(--color-muted);
   padding: 2rem;
   font-family: var(--font-display);
-  font-style: italic;
-  font-size: 1.05rem;
+  font-size: 1rem;
 }
 
 .error-msg {
   background: var(--tint-danger);
   color: #e0a791;
-  border: 1px solid rgba(207, 135, 114, 0.35);
+  border: 1px solid rgba(184, 104, 48, 0.35);
   border-radius: var(--radius-sm);
   padding: 0.75rem 1rem;
   margin: 0.5rem 0;
@@ -702,30 +833,32 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 }
 
 /* ---- Typography ----
-   Serif display headings, light weight, with italic <em>
-   accents — calm and editorial rather than shouty. */
+   Comfortaa throughout. Headings sit at a solid weight (the face is thin
+   below ~600); an <em> accent is coloured sage rather than slanted. */
 
 h1, h2, h3 {
   font-family: var(--font-display);
-  font-weight: 380;
-  letter-spacing: -0.01em;
+  font-weight: 650;
   line-height: 1.12;
+  font-optical-sizing: auto;
 }
-h1 { font-size: 2.1rem;  margin-bottom: 0.5rem; }
-h2 { font-size: 1.35rem; margin-bottom: 0.4rem; }
-h3 { font-size: 1.08rem; margin-bottom: 0.3rem; font-weight: 450; }
+/* Tracking is size-specific: the bigger the type, the tighter it sits. */
+h1 { font-size: 2rem;    margin-bottom: 0.5rem; letter-spacing: -0.035em; line-height: 1.1; font-weight: 700; }
+h2 { font-size: 1.3rem;  margin-bottom: 0.4rem; letter-spacing: -0.02em; }
+h3 { font-size: 1.05rem; margin-bottom: 0.3rem; font-weight: 650; letter-spacing: -0.01em; line-height: 1.25; }
 
 h1 em, h2 em, h3 em, .serif-italic {
   font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 400;
+  font-style: normal;
+  font-weight: inherit;
+  color: var(--color-accent);
 }
 
-/* Numeric stats: light, airy, tabular (weights, reps, timers) */
+/* Numeric stats: solid, tabular (weights, reps, timers) */
 .stat-num, .tnum { font-variant-numeric: tabular-nums; }
 .stat-num {
-  font-weight: 300;
-  letter-spacing: -0.02em;
+  font-weight: 650;
+  letter-spacing: -0.03em;
   color: var(--color-text);
 }
 
@@ -772,11 +905,72 @@ hr {
   margin: 0.75rem 0;
 }
 
+/* ---- Bottom sheet (components/Modal.jsx) ---- */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 12, 11, 0.6);       /* dim to focus a modal task */
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 200;
+  overscroll-behavior: contain;
+}
+.sheet {
+  background: var(--color-surface);
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  border: 1px solid var(--color-border-str);
+  border-bottom: none;
+  width: 100%;
+  max-width: 680px;
+  max-height: 85dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.4rem 1.1rem calc(1.1rem + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow-lg);
+  will-change: transform;
+}
+.sheet-grip { touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.sheet-grip:active { cursor: grabbing; }
+.sheet-handle {
+  width: 36px;
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border-str);
+  margin: 0.25rem auto 0.7rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+  button:active, .nav a:active { transform: none; }
+}
+
+/* Frostier, not see-through, for people who ask for less transparency */
+@media (prefers-reduced-transparency: reduce) {
+  .nav, .workout-header, .sidebar, .sheet-backdrop {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .nav, .sidebar { background: var(--color-surface); }
+  .workout-header { background: var(--color-bg); }
+  .sheet-backdrop { background: rgba(8, 12, 11, 0.85); }
+}
+
+/* Higher contrast: defined edges, quieter muted text */
+@media (prefers-contrast: more) {
+  :root {
+    --color-border: rgba(241, 234, 217, 0.28);
+    --color-border-str: rgba(241, 234, 217, 0.5);
+    --color-muted: #c3ccc4;
+  }
+  .nav, .sidebar { background: var(--color-surface); }
 }
 
 /* ---- STAGING badge ----
@@ -799,3 +993,181 @@ hr {
   font-weight: 700;
   letter-spacing: 0.18em;
 }
+
+/* ---- Weight card (components/WeightCard.jsx) ----
+   Health-app "heart rate" layout: label + range chip, a big current number,
+   then a gridless line ending in a glowing "now" point. */
+.weight-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+button.range-chip {
+  min-height: 32px;
+  min-width: 52px;
+  padding: 0.2rem 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--color-text);
+  background: rgba(241, 234, 217, 0.08);
+  border: 1px solid var(--color-border-str);
+  box-shadow: none;
+  position: relative;
+}
+/* Bigger invisible hit area than the visible pill (44px target) */
+button.range-chip::before { content: ''; position: absolute; inset: -6px -4px; }
+button.range-chip:hover { background: rgba(241, 234, 217, 0.12); }
+.weight-card-figure { display: flex; align-items: baseline; gap: 0.45rem; flex-wrap: wrap; }
+.weight-card-num { font-size: 2.6rem; line-height: 1; font-weight: 700; }
+.weight-card-unit {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.weight-card-change { font-size: 0.82rem; font-weight: 600; color: var(--color-text); margin-top: 0.35rem; }
+.weight-card-chart { margin: 0.4rem -0.4rem 0; }
+
+/* ---- Ranks: overall hero, emblem legend, Workout-tab rank button ---- */
+.rank-hero {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background:
+    radial-gradient(240px 160px at 18% 50%, color-mix(in srgb, var(--rank-color, transparent) 18%, transparent), transparent 70%),
+    var(--color-surface);
+}
+.rank-hero-title { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; margin: 0.15rem 0 0.2rem; }
+.rank-legend {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);   /* 3×3 on a phone — no orphan */
+  gap: 0.6rem 0.25rem;
+  margin-top: 0.6rem;
+}
+@media (min-width: 700px) { .rank-legend { grid-template-columns: repeat(9, 1fr); } }
+.rank-legend-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 0.68rem; color: var(--color-muted); }
+a.rank-button {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.6rem 1rem 0.6rem 0.7rem;
+  margin-bottom: 1rem;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text);
+  transition: background 0.12s var(--ease), transform 0.1s var(--ease);
+}
+a.rank-button:hover { background: color-mix(in srgb, var(--color-surface) 86%, var(--color-elevated)); color: var(--color-text); }
+a.rank-button:active { transform: scale(0.98); opacity: 1; }
+.rank-button-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.rank-button-tier { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.02em; }
+.rank-button-cta { color: var(--color-muted); font-size: 0.85rem; font-weight: 600; }
+.rank-button-skeleton { height: 70px; margin-bottom: 1rem; border-radius: var(--radius-lg); background: var(--color-surface); opacity: 0.6; }
+
+/* Destructive confirm in the confirmation sheet: solid, unmistakable */
+button.danger.confirm-danger {
+  background: var(--color-danger);
+  color: #111a19;
+  border-color: transparent;
+}
+button.danger.confirm-danger:hover { background: #d98f5a; }
+
+/* ---- Goal-bar cards: Steps / Sleep (components/GoalBarCard.jsx) ---- */
+.goal-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 0.7rem;
+  touch-action: pan-y;        /* scrubbing sideways reads bars; vertical still scrolls */
+  cursor: crosshair;
+}
+.goal-bar-grow {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: goal-bar-grow 0.55s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@keyframes goal-bar-grow { from { transform: scaleY(0); } }
+.goal-legend {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  color: var(--color-muted);
+}
+.goal-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.35rem; vertical-align: 1px; }
+
+/* ---- Quick-log sheet (components/QuickLog.jsx) ---- */
+.card-head-actions { display: inline-flex; gap: 0.4rem; align-items: center; }
+button.range-chip.log-chip { color: var(--color-on-primary); background: var(--color-primary); border-color: transparent; }
+button.range-chip.log-chip:hover { background: var(--color-primary-dk); }
+button.range-chip.on { background: var(--tint-primary); border-color: var(--color-primary); color: var(--color-primary); }
+.ql-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface2);
+  border: 1px solid var(--color-border);
+}
+button.ql-tab {
+  min-height: 38px;
+  padding: 0.3rem;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-muted);
+  box-shadow: none;
+  font-size: 0.86rem;
+}
+button.ql-tab:hover { background: rgba(241, 234, 217, 0.05); }
+button.ql-tab.on { background: var(--color-elevated); color: var(--color-text); }
+.ql-date { width: auto; min-height: 32px; padding: 0.2rem 0.6rem; font-size: 0.8rem; margin-left: auto; }
+.ql-stepper { display: flex; align-items: center; gap: 0.6rem; }
+button.ql-step {
+  flex: 0 0 auto;
+  width: 52px;
+  height: 52px;
+  min-height: 52px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 1.5rem;
+  font-weight: 500;
+  background: var(--color-surface2);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-str);
+  box-shadow: none;
+}
+button.ql-step:hover { background: var(--color-elevated); }
+.ql-big { flex: 1; display: flex; align-items: baseline; justify-content: center; gap: 0.3rem; }
+input.ql-input {
+  width: 6.5ch;
+  min-width: 0;
+  text-align: center;
+  font-size: 2.2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--color-border-str);
+  border-radius: 0;
+  padding: 0.1rem 0;
+  min-height: 56px;
+  box-shadow: none;
+  -moz-appearance: textfield;
+}
+input.ql-input::-webkit-outer-spin-button, input.ql-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input.ql-input:focus { border-bottom-color: var(--color-primary); box-shadow: none; }
+input.ql-input.ql-input-sm { width: 2.6ch; }
+.ql-unit { color: var(--color-muted); font-size: 0.95rem; font-weight: 600; }
+.ql-hint { font-size: 0.76rem; text-align: center; margin-top: 0.4rem; }
+.ql-more { text-align: center; font-size: 0.82rem; }
+button.link-button {
+  background: none; border: none; box-shadow: none; padding: 0; min-height: 0;
+  color: var(--color-accent); font: inherit; font-weight: 600; cursor: pointer;
+}
+button.link-button:hover { background: none; color: var(--color-text); }
