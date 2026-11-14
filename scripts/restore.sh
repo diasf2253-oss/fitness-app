@@ -1,6 +1,7 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-# Restore a pg_dump archive into a LOCAL or STAGING Postgres. NEVER production.
+# Restore a pg_dump archive (from backup.sh) into a LOCAL Postgres. NEVER production.
+# (Staging is refreshed with ./scripts/seed_staging.sh instead.)
 #
 #   ./scripts/restore.sh [path/to/dump]     # defaults to the newest backups/*.dump
 #
@@ -24,9 +25,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."   # repo root
 
-if [ -f scripts/.env.backup ]; then
-  set -a; . scripts/.env.backup; set +a
-fi
+. scripts/lib.sh
 
 LOCAL_DATABASE_URL="${LOCAL_DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/fitness_local}"
 

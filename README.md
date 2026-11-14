@@ -138,7 +138,7 @@ flowchart LR
 | PWA | Web app manifest + a versioned service worker precaching the app shell |
 | AI (optional) | Anthropic Claude API |
 | Tests & CI | pytest, Vitest + Testing Library, GitHub Actions |
-| Hosting | Docker → Railway (app + Postgres); optional Vercel frontends for staging |
+| Hosting | Vercel (frontend + API in one project) · Supabase (sign-in + Postgres) |
 
 ## Getting started
 
@@ -229,36 +229,45 @@ import. [CI](.github/workflows/ci.yml) runs both suites on every pull request.
 
 ## Deployment
 
-- **`notes/runbooks/DEPLOY.md`**: Railway + Postgres (production), any
-  Docker host, or your own Mac behind a Cloudflare Tunnel. The single
-  `Dockerfile` runs migrations and seeding on every boot.
-- **`notes/runbooks/STAGING.md`**: a fully separate staging stack,
-  Vercel previews per branch, and the feature → staging → `main` promotion flow.
+- **`notes/runbooks/VERCEL.md`**: production and per-branch previews on one
+  Vercel project (frontend + API); **`notes/runbooks/SUPABASE.md`**: sign-in
+  and the database, one Supabase project per environment.
+- **`notes/runbooks/STAGING.md`**: the staging environment and the
+  feature → staging → `main` promotion flow.
 
-### Database backups
+### Database security
 
-Two scripts back up the production Postgres and restore it locally.
-Credentials are never hardcoded — they come from the environment or a
-git-ignored `scripts/.env.backup` (copy
-[`scripts/.env.backup.example`](scripts/.env.backup.example)).
+The app's tables live in a Supabase Postgres, but the browser never talks to
+them: every read and write goes through the API, which checks who you are and
+returns only your own rows. Supabase's built-in Data API (reachable with the
+public key the frontend uses for sign-in) is shut out of every table by
+migration `e1f3a5c7b9d2`: Row Level Security on, no grants to the public
+roles — and tables added later start with no grants either.
+
+### Database scripts
+
+Connection strings are never hardcoded — they come from a git-ignored
+`scripts/.env.backup` (copy [`scripts/.env.backup.example`](scripts/.env.backup.example)).
 
 ```bash
-./scripts/backup.sh     # pg_dump prod → backups/fitness_prod_<timestamp>.dump
-./scripts/restore.sh    # load the newest dump into a LOCAL Postgres
+./scripts/backup.sh         # pg_dump production → backups/fitness_prod_<timestamp>.dump
+./scripts/restore.sh        # load the newest dump into a LOCAL Postgres
+./scripts/seed_staging.sh   # refresh staging with an anonymised copy of production
 ```
 
 | Variable | Used by | Meaning |
 | --- | --- | --- |
-| `PROD_DATABASE_URL` | backup | Railway's **public** connection string (`*.proxy.rlwy.net:PORT`), with `?sslmode=require` |
-| `LOCAL_DATABASE_URL` | restore | Target DB. Default `postgresql://postgres:postgres@localhost:5432/fitness_local`; created if missing |
-| `STAGING_HOSTS` | restore | Extra hosts allowed as restore targets |
-| `BACKUP_DIR` | both | Where dumps live. Default `backups/` (git-ignored — dumps hold real personal data) |
+| `PROD_DATABASE_URL` | backup, seed_staging | Production Supabase, **Session pooler** string (port 5432) |
+| `STAGING_DATABASE_URL` | seed_staging | Staging Supabase, Session pooler string |
+| `LOCAL_DATABASE_URL` | restore | Target DB. Default `postgresql://postgres:postgres@localhost:5432/fitness_local` |
+| `BACKUP_DIR` | backup, restore | Where dumps live. Default `backups/` (git-ignored — dumps hold real personal data) |
 
-**`restore.sh` can never hit production.** It refuses any target host that
-isn't `localhost`, `127.0.0.1` or a `*staging*` host, refuses a target sharing
-`PROD_DATABASE_URL`'s host, and then makes you type the database name. There
-is no flag to bypass it. You need the Postgres client tools (`pg_dump`,
-`pg_restore`, `psql`) at a major version ≥ the server's.
+**Nothing here can overwrite production.** `restore.sh` only writes to a
+local database (it refuses any other host and makes you type the database
+name). `seed_staging.sh` (`app/cli/copy_database.py`) refuses the production
+project, refuses anything that isn't Supabase, and scrubs personal data from
+the copy. You need the Postgres client tools (`pg_dump`, `pg_restore`, `psql`)
+at a major version ≥ the server's for backup/restore.
 
 ## Project structure
 
@@ -283,7 +292,7 @@ frontend/
   src/local/           offline-first twin of the API + sync client
   public/              PWA manifest, icons, service worker
   dev/                 dev-only helpers (iPhone-frame preview)
-scripts/               backup / restore / staging seed
+scripts/               backup / restore / staging refresh / one-time move to Supabase
 ```
 
 The one architectural rule: **routers call services; routers never import

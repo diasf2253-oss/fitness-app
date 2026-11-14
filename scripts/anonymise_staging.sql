@@ -1,5 +1,6 @@
--- Anonymise a production copy for staging (run by scripts/seed_staging.sh).
--- Destructive by design — never point this at production.
+-- Anonymise a production copy for staging. Run by app.cli.copy_database
+-- (--to staging), i.e. ./scripts/move_to_supabase.sh staging or
+-- ./scripts/seed_staging.sh. Destructive by design — never point this at production.
 --
 -- Keeps the dataset realistic — exercise/routine/session names, dates, sets,
 -- reps, streaks and volumes all survive, so ranks, insights and the adaptive
@@ -12,46 +13,32 @@
 --   * profile age — reset to a generic value;
 --   * every production credential and every friend's identity:
 --       - users: non-admin email -> user<id>@example.test, name -> User <id>;
---         EVERY password_hash (admin included) -> one staging-only argon2
---         hash; must_change_password -> false; ingest_token -> fresh random;
---       - auth_session: all rows deleted (no prod session id works here);
+--         supabase_uid -> NULL (staging has its own Supabase logins; people
+--         re-link by email on first staging sign-in); the unused legacy
+--         password_hash -> NULL; ingest_token -> fresh random;
+--       - auth_session (legacy, unused): all rows deleted;
 --       - invite_codes: code -> fresh random, active -> false,
 --         label -> Invite <id>.
---     The admin row keeps its email and name, so the operator logs in with
---     their usual email + the staging password. Ids, roles and statuses stay.
---
--- The staging password arrives as the psql variable `staging_pw_hash` — an
--- argon2 hash, never plaintext. seed_staging.sh computes it from
--- STAGING_USER_PASSWORD with the same hasher as app/auth.py.
+--     The admin row keeps its email and name, so the operator signs in to
+--     staging with their usual email (as a staging Supabase login).
+--     Ids, roles and statuses stay.
 --
 -- All-or-nothing: one transaction that checks its own work before COMMIT;
--- any failure rolls every change back.
+-- any failure rolls every change back. Plain SQL — no psql meta-commands —
+-- so it runs through psql or a driver alike.
 --
 -- Plain SQL UPDATEs deliberately bypass the ORM's onupdate, so updated_at
 -- keeps its production values and sync/merge behaviour stays realistic.
--- Needs Postgres 13+ (gen_random_uuid() is built in from 13).
-
-\if :{?staging_pw_hash}
-\else
-  DO $$ BEGIN RAISE EXCEPTION 'psql variable staging_pw_hash is not set — run this via scripts/seed_staging.sh'; END $$;
-\endif
+-- Needs Postgres 13+ (gen_random_uuid() is built in from 13) and the schema
+-- at migration d3f5a7b9c1e2 or later (supabase_uid, nullable password_hash) —
+-- copy_database runs `alembic upgrade head` first.
 
 BEGIN;
 
 -- One offset for the whole run: the weight *trend* (what the calorie engine
 -- and charts read) is preserved; the absolute values are masked.
 CREATE TEMP TABLE _anon AS
-SELECT (random() * 6 - 3)       AS weight_offset_kg,
-       :'staging_pw_hash'::text AS pw_hash;
-
--- Refuse a plaintext password passed by mistake.
-DO $chk$
-BEGIN
-  IF (SELECT pw_hash FROM _anon) NOT LIKE '$argon2%' THEN
-    RAISE EXCEPTION 'staging_pw_hash is not an argon2 hash — pass the hash, never the password';
-  END IF;
-END
-$chk$;
+SELECT (random() * 6 - 3) AS weight_offset_kg;
 
 UPDATE weight_log
 SET weight_kg = round(
@@ -92,32 +79,20 @@ SET email = 'user' || id || '@example.test',
     name  = 'User ' || id
 WHERE role <> 'admin';
 
--- Credentials, admin included. One known staging-only hash; no forced change
--- (a pending prod temp-password reset means nothing once the hash is gone);
--- a fresh ingest token so the prod tokens on friends' phones can't push here.
--- Two gen_random_uuid() (Postgres's strong RNG, volatile → per row) give 64
--- hex chars — exactly the varchar(64) column, and never the 43-char
--- token_urlsafe format prod issues.
+-- Credentials, admin included. Staging signs in through its OWN Supabase
+-- project, so production's login ids mean nothing here — and while they're
+-- set, no staging login can link to these accounts (linking only fills an
+-- empty supabase_uid). The legacy password hash is unused since the switch
+-- to Supabase Auth; clear it anyway. A fresh ingest token so the prod tokens
+-- on friends' phones can't push here. Two gen_random_uuid() (Postgres's
+-- strong RNG, volatile → per row) give 64 hex chars — exactly the
+-- varchar(64) column, and never the 43-char token_urlsafe format prod issues.
 UPDATE users
-SET password_hash        = (SELECT pw_hash FROM _anon),
+SET supabase_uid         = NULL,
+    password_hash        = NULL,
     must_change_password = false,
     ingest_token         = replace(gen_random_uuid()::text, '-', '')
                         || replace(gen_random_uuid()::text, '-', '');
-
--- Supabase login links: staging signs in through its OWN Supabase project,
--- so production's login ids mean nothing here — and while they're set, no
--- staging login can link to these accounts (linking only fills an empty
--- supabase_uid). Clear them; testers create staging logins and link by
--- email. Conditional because a dump taken before the Supabase migration
--- (d3f5a7b9c1e2) has no such column yet — then there's nothing to clear.
-DO $uid$
-BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.columns
-             WHERE table_name = 'users' AND column_name = 'supabase_uid') THEN
-    UPDATE users SET supabase_uid = NULL;
-  END IF;
-END
-$uid$;
 
 -- Live prod session ids would otherwise log you in on staging.
 DELETE FROM auth_session;
@@ -132,8 +107,6 @@ SET code   = replace(gen_random_uuid()::text, '-', ''),
 -- Self-check before committing: if any credential or identity slipped
 -- through, abort and roll everything back.
 DO $chk$
-DECLARE
-  staging_hash text := (SELECT pw_hash FROM _anon);
 BEGIN
   IF EXISTS (SELECT 1 FROM auth_session) THEN
     RAISE EXCEPTION 'scrub check failed: auth_session still has rows';
@@ -144,8 +117,9 @@ BEGIN
                     OR name <> 'User ' || id)) THEN
     RAISE EXCEPTION 'scrub check failed: a non-admin user kept a real email/name';
   END IF;
-  IF EXISTS (SELECT 1 FROM users WHERE password_hash IS DISTINCT FROM staging_hash) THEN
-    RAISE EXCEPTION 'scrub check failed: a user kept a production password hash';
+  IF EXISTS (SELECT 1 FROM users
+             WHERE password_hash IS NOT NULL OR supabase_uid IS NOT NULL) THEN
+    RAISE EXCEPTION 'scrub check failed: a user kept a production login id or password hash';
   END IF;
   IF EXISTS (SELECT 1 FROM users WHERE ingest_token !~ '^[0-9a-f]{64}$') THEN
     RAISE EXCEPTION 'scrub check failed: a user kept a production ingest token';

@@ -47,8 +47,8 @@ class Settings(BaseSettings):
     # Never hardcode it — env vars only.
     admin_email: str = ""
 
-    # SQLAlchemy connection string. SQLite by default; Postgres in production
-    # (Railway). A bare postgres URL is normalized to the psycopg (v3) driver
+    # SQLAlchemy connection string. SQLite by default (local dev, tests);
+    # Supabase Postgres on Vercel (the transaction pooler). A bare postgres URL is normalized to the psycopg (v3) driver
     # below — see _use_psycopg_driver.
     database_url: str = "sqlite:///./fitness.sqlite3"
 
@@ -58,8 +58,8 @@ class Settings(BaseSettings):
         """
         Route bare Postgres URLs to psycopg 3 (the driver in requirements.txt).
 
-        Railway injects DATABASE_URL as `postgresql://...` (and some providers
-        use the legacy `postgres://`). With no explicit driver, SQLAlchemy
+        Supabase hands out `postgresql://...` strings (and some providers use
+        the legacy `postgres://`). With no explicit driver, SQLAlchemy
         reaches for psycopg2, which we don't ship — so every DB call (and the
         boot-time `alembic upgrade head`) fails with ModuleNotFoundError and
         the app 500s. Rewriting the scheme to `postgresql+psycopg://` makes it
@@ -73,7 +73,7 @@ class Settings(BaseSettings):
         return v
 
     # Which deployment this is: 'production' (default — the laptop and the
-    # Railway prod service) or 'staging'. Exposed on /api/ping so the frontend
+    # production deployment) or 'staging' (set APP_ENV=staging on previews). Exposed on /api/ping so the frontend
     # can show its STAGING badge no matter which build is talking to us.
     app_env: str = "production"
 
@@ -83,12 +83,12 @@ class Settings(BaseSettings):
     # is off unless explicitly switched on (ENABLE_DEV_SEED=true in a local .env).
     # Note we deliberately do NOT key this off app_env: that defaults to
     # 'production' on the laptop too, so it cannot tell "my machine" from "the
-    # Railway prod service". The matching DELETE stays available everywhere so
+    # production deployment". The matching DELETE stays available everywhere so
     # leftover sample rows can always be cleaned up.
     enable_dev_seed: bool = False
 
-    # Cross-origin frontends (the Vercel staging/preview deployments call the
-    # Railway API from another origin). Comma-separated exact origins:
+    # Cross-origin frontends — only needed if a frontend is ever served from a
+    # different domain than the API (today both share one Vercel domain). Comma-separated exact origins:
     #   CORS_ORIGINS=https://fitness-staging.vercel.app
     # plus an optional regex for the per-branch preview URLs:
     #   CORS_ALLOW_ORIGIN_REGEX=https://.*\.vercel\.app
