@@ -8,7 +8,6 @@ Phase 6 tests — generic trackers:
 from datetime import date, timedelta
 
 from app.models import TrackerLog
-
 from tests.conftest import TestingSession
 
 

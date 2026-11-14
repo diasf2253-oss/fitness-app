@@ -17,10 +17,15 @@ import jwt
 from cryptography.hazmat.primitives.asymmetric import ec
 from jwt.algorithms import ECAlgorithm
 
-from app.config import settings
+from app.core.config import settings
 from app.models import InviteCode, User
 from tests.conftest import (
-    PUBLIC_JWK, TestingSession, _make_user, make_token, sign_in, uid_for,
+    PUBLIC_JWK,
+    TestingSession,
+    _make_user,
+    make_token,
+    sign_in,
+    uid_for,
 )
 
 
@@ -141,7 +146,7 @@ class TestTokenVerification:
         assert _bearer(client, token).get("/api/settings").status_code == 200
 
     def test_supabase_unreachable_on_a_cold_cache_is_503(self, client, monkeypatch):
-        from app import supabase_auth
+        from app.core import supabase_auth
 
         def down():
             raise httpx.ConnectError("no route to host")

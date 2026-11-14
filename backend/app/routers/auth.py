@@ -16,7 +16,7 @@ gets in:
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session as DBSession
 
-from app.auth import (
+from app.core.auth import (
     SignedIn,
     email_confirmed,
     get_account,
@@ -24,8 +24,8 @@ from app.auth import (
     require_auth,
     require_signed_in,
 )
-from app.db import get_db
-from app.ratelimit import rate_limit
+from app.core.db import get_db
+from app.core.ratelimit import rate_limit
 from app.models import InviteCode, User, _new_ingest_token
 from app.schemas import JoinRequest, UpdateMeRequest, UserMeOut
 

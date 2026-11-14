@@ -6,10 +6,14 @@ and an LP readout (0–100) of where strength sits within the current division.
 LP is a direct position readout, not earned through games.
 
 All thresholds, the recent window, and the female multiplier are configurable
-(see app.routers.ranks, which merges AppSettings overrides) — nothing here is
+(see routers/ranks.py, which merges AppSettings overrides) — nothing here is
 immutable.
 """
 from __future__ import annotations
+
+# One Epley implementation for the whole app, so ranks and PRs never disagree
+# on a 1RM (re-exported here: `ranks.epley_1rm` keeps working).
+from app.services.training.stats import epley_1rm  # noqa: F401
 
 TIERS = ["Wood", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Champion", "Titan", "Olympian"]
 DIVISIONS = ["III", "II", "I"]            # III = entry (lowest) → I = top
@@ -110,15 +114,6 @@ def is_unilateral(name: str) -> bool:
 
 DEFAULT_FEMALE_MULTIPLIER = 0.65
 DEFAULT_WINDOW_WEEKS = 10
-
-
-def epley_1rm(weight_kg: float, reps: int) -> float:
-    """1RM = weight × (1 + reps/30), reps capped at 12 — the same convention as
-    the PR system (app.stats), so ranks and PRs never disagree on a 1RM."""
-    capped = min(reps, 12)
-    if capped <= 1:
-        return weight_kg
-    return weight_kg * (1 + capped / 30.0)
 
 
 def tier_lowers(anchors: list[float]) -> list[float]:

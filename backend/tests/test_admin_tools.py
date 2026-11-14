@@ -5,11 +5,10 @@ Docker boot) and the admin's "password reset link" button.
 import httpx
 import pytest
 
-from app import auth_bootstrap
-from app.config import settings
+from app.core import auth_bootstrap
+from app.core.config import settings
 from app.models import User
 from tests.conftest import ADMIN_USER_EMAIL, TestingSession, _make_user
-
 
 # ---------------------------------------------------------------------------
 # Bootstrap

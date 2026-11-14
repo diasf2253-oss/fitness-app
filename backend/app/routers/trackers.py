@@ -18,12 +18,16 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session as DBSession
 
-from app.auth import require_auth
-from app.db import get_db
+from app.core.auth import require_auth
+from app.core.db import get_db
 from app.models import Tracker, TrackerLog, User
 from app.schemas import (
-    TRACKER_KINDS, TrackerCreate, TrackerLogOut, TrackerLogValue,
-    TrackerOut, TrackerUpdate,
+    TRACKER_KINDS,
+    TrackerCreate,
+    TrackerLogOut,
+    TrackerLogValue,
+    TrackerOut,
+    TrackerUpdate,
 )
 
 router = APIRouter(prefix="/api/trackers", tags=["trackers"])

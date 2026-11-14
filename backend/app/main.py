@@ -19,12 +19,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.config import settings
-from app.routers import calendar, coach, dashboard, dev, exercises, health, insights, nutrition, plan, ranks, routines, sessions
-from app.routers import settings as settings_router
-from app.routers import stats, sync, trackers, splits
-from app.routers import streak, routine_notes, generator, report, diet, activities  # restored features
-from app.routers import admin, auth as auth_router  # Phase 1-2 friends beta
+from app.core.config import settings
+from app.routers import (
+    activities, admin, auth, calendar, coach, dashboard, dev, diet, exercises,
+    generator, health, insights, nutrition, plan, ranks, report, routine_notes,
+    routines, sessions, settings as settings_router, splits, stats, streak,
+    sync, trackers,
+)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -72,31 +73,17 @@ def ping():
 # Include routers
 # ---------------------------------------------------------------------------
 
-app.include_router(exercises.router)
-app.include_router(routines.router)
-app.include_router(splits.router)
-app.include_router(sessions.router)
-app.include_router(stats.router)
-app.include_router(health.router)
-app.include_router(nutrition.router)
-app.include_router(dashboard.router)
-app.include_router(calendar.router)
-app.include_router(trackers.router)
-app.include_router(insights.router)
-app.include_router(plan.router)
-app.include_router(coach.router)
-app.include_router(dev.router)
-app.include_router(settings_router.router)
-app.include_router(sync.router)
-app.include_router(ranks.router)
-app.include_router(streak.router)
-app.include_router(routine_notes.router)
-app.include_router(generator.router)
-app.include_router(report.router)
-app.include_router(diet.router)
-app.include_router(activities.router)
-app.include_router(auth_router.router)
-app.include_router(admin.router)
+# Order is the original mounting order — keep it (FastAPI matches routes in
+# the order they were added). A new feature = a new module in routers/ + one
+# entry here.
+ROUTERS = (
+    exercises, routines, splits, sessions, stats, health, nutrition, dashboard,
+    calendar, trackers, insights, plan, coach, dev, settings_router, sync,
+    ranks, streak, routine_notes, generator, report, diet, activities, auth,
+    admin,
+)
+for module in ROUTERS:
+    app.include_router(module.router)
 
 
 # ---------------------------------------------------------------------------

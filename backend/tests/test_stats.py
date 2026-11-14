@@ -3,7 +3,8 @@ Tests for 1RM / PR calculations.
 No database or network calls needed — pure unit tests.
 """
 import pytest
-from app.routers.stats import epley_1rm
+
+from app.services.training.stats import epley_1rm
 
 
 class TestEpley1RM:

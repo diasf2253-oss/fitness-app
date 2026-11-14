@@ -214,8 +214,8 @@ class HealthAggregator:
         canonical import report shared by every ingest path.
         """
         # Lazy import: routers.health imports this module.
-        from app.health_metrics import upsert_nutrition_partial
-        from app.routers.health import upsert_sleep, upsert_steps, upsert_weight
+        from app.services.health.metrics import upsert_nutrition_partial
+        from app.services.health.store import upsert_sleep, upsert_steps, upsert_weight
 
         created = 0
 

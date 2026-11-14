@@ -1,7 +1,7 @@
 """
 Shared "create the admin account" logic, used by both the one-off migration
 backfill (backfill_owner.py — attaches all pre-multi-user data to this
-account) and the idempotent `python -m app.seed_admin` CLI.
+account) and the idempotent `python -m app.cli.seed_admin` CLI.
 
 There's no admin password: sign-in runs through Supabase Auth. The admin
 account is created here from ADMIN_EMAIL alone, and the first time someone
@@ -10,7 +10,7 @@ two — that's the moment the admin can actually log in.
 """
 from sqlalchemy.orm import Session as DBSession
 
-from app.config import settings
+from app.core.config import settings
 from app.models import User
 
 # The placeholder from backend/.env.example — nobody can sign in as it.

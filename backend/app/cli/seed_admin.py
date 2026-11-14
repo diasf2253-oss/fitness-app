@@ -2,7 +2,7 @@
 Idempotent CLI: creates the admin account (from ADMIN_EMAIL) and one
 active invite code, if either doesn't exist yet. Safe to run
 repeatedly — running it again just reports what's already there. Run this
-before app.seed on a fresh database (app.seed needs the admin account to
+before app.cli.seed on a fresh database (app.cli.seed needs the admin account to
 scope its sample routines/trackers to).
 
 The admin then signs in through Supabase Auth with that same email (create
@@ -12,17 +12,17 @@ sign-in links the two. There is no admin password in this app.
 Run with:
     cd backend
     source .venv/bin/activate
-    ADMIN_EMAIL=you@example.com python -m app.seed_admin
+    ADMIN_EMAIL=you@example.com python -m app.cli.seed_admin
 """
-import sys
 import os
 import secrets
+import sys
 
 # Allow running as a standalone script
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from app.auth_bootstrap import get_or_create_admin_user
-from app.db import SessionLocal
+from app.core.auth_bootstrap import get_or_create_admin_user
+from app.core.db import SessionLocal
 from app.models import InviteCode
 
 

@@ -13,7 +13,7 @@ session cookie authenticated the request:
     (one row per user, matched on `user_id`).
   - Merge is last-write-wins by `updated_at`, except health tables also
     respect source precedence (a manual correction is never buried by a
-    synced value) via routers.health._write_blocked.
+    synced value) via routers.health.write_blocked.
   - Incoming `updated_at` is preserved verbatim, so applying a sync does
     not make rows look newly-edited and echo back on the next exchange.
   - `user_id` never travels in the sync payload (excluded on read, ignored
@@ -39,13 +39,30 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import inspect as sa_inspect, or_
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import or_
 from sqlalchemy.orm import Session as DBSession
 
 from app.models import (
-    Activity, AppSettings, Exercise, NutritionDay, PlanItem, Routine,
-    RoutineExercise, RoutineNote, Session, SessionExercise, Set as SetModel, Split,
-    SleepLog, StepsLog, Tracker, TrackerLog, WeightLog,
+    Activity,
+    AppSettings,
+    Exercise,
+    NutritionDay,
+    PlanItem,
+    Routine,
+    RoutineExercise,
+    RoutineNote,
+    Session,
+    SessionExercise,
+    SleepLog,
+    Split,
+    StepsLog,
+    Tracker,
+    TrackerLog,
+    WeightLog,
+)
+from app.models import (
+    Set as SetModel,
 )
 
 _MAX_WARNINGS = 20
@@ -237,7 +254,7 @@ def apply_push(db: DBSession, tables: dict[str, list[dict]], user_id: int) -> di
     per-table report: {table: {received, inserted, updated, skipped_older,
     skipped_blocked, skipped_missing_parent}}, plus capped warnings.
     """
-    from app.routers.health import _write_blocked
+    from app.services.health.store import write_blocked
 
     counts: dict[str, dict[str, int]] = {}
     warnings: list[str] = []
@@ -293,7 +310,7 @@ def apply_push(db: DBSession, tables: dict[str, list[dict]], user_id: int) -> di
             incoming_ts = _parse_updated_at(data)
 
             # ---- Source precedence for health rows (manual is sacred) ----
-            if isinstance(existing, _SOURCE_PRECEDENCE_MODELS) and _write_blocked(
+            if isinstance(existing, _SOURCE_PRECEDENCE_MODELS) and write_blocked(
                 existing, data.get("source", "")
             ):
                 c["skipped_blocked"] += 1

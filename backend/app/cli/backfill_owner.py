@@ -10,18 +10,18 @@ Never run this against PROD_DATABASE_URL.
 Usage:
     cd backend
     source .venv/bin/activate
-    ADMIN_EMAIL=you@example.com python -m app.backfill_owner
+    ADMIN_EMAIL=you@example.com python -m app.cli.backfill_owner
 """
-import sys
 import os
+import sys
 
 # Allow running as a standalone script
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from sqlalchemy import text
 
-from app.auth_bootstrap import get_or_create_admin_user
-from app.db import SessionLocal
+from app.core.auth_bootstrap import get_or_create_admin_user
+from app.core.db import SessionLocal
 from app.models import Exercise
 
 # Every table that gets a NOT NULL user_id after this backfill (mirrors

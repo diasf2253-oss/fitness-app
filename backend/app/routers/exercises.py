@@ -12,11 +12,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.auth import require_auth
-from app.db import get_db
+from app.core.auth import require_auth
+from app.core.db import get_db
 from app.models import Exercise, User
-from app.muscles import suggest_muscle_group
 from app.schemas import ExerciseCreate, ExerciseOut, ExerciseUpdate
+from app.services.training.muscles import suggest_muscle_group
 
 router = APIRouter(prefix="/api/exercises", tags=["exercises"])
 

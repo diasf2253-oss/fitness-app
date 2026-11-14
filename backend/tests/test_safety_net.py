@@ -21,7 +21,6 @@ import os
 from datetime import date, datetime
 
 from app.models import WeightLog
-
 from tests.conftest import TestingSession, _make_user, make_token, sign_in, uid_for
 
 SAMPLE_PAYLOAD_PATH = os.path.join(os.path.dirname(__file__), "sample_health_payload.json")

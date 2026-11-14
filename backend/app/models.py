@@ -20,18 +20,27 @@ and `StreakState` used to be hardcoded `id=1` singleton rows; `user_id` is
 now their actual primary key, so "one row per user" is structurally
 enforced rather than a convention.
 """
-from datetime import datetime, date
+import secrets
+from datetime import date, datetime
 from typing import Optional
 from uuid import uuid4
-import secrets
 
 from sqlalchemy import (
-    Boolean, Date, DateTime, Float, ForeignKey,
-    Integer, JSON, String, Text, UniqueConstraint, Index,
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db import Base
+from app.core.db import Base
 
 
 def _new_uuid() -> str:
@@ -521,7 +530,7 @@ class AppSettings(UpdatedAtMixin, Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True, nullable=False
     )
     # The adaptive calorie anchor — nudged ±a step each completed week by the
-    # weight trend (see app.calorie_adapt). Never recomputed from scratch.
+    # weight trend (see app.services.diet.calorie_adapt). Never recomputed from scratch.
     calorie_target: Mapped[int] = mapped_column(Integer, default=2300)
     protein_target_g: Mapped[int] = mapped_column(Integer, default=180)
     fat_max_g: Mapped[int] = mapped_column(Integer, default=100)
@@ -558,7 +567,7 @@ class AppSettings(UpdatedAtMixin, Base):
 
     # ---- Training ----
     # {muscle: [low, high]} weekly volume-target overrides; null ⇒ defaults in
-    # app.muscles. Read by the sets-per-week analytics and the generator.
+    # app.services.training.muscles. Read by the sets-per-week analytics and the generator.
     volume_targets: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     # {exercise_uuid: "Hammer Strength"} — which brand of machine/cable/smith
     # this user trains on. Lives here, not on Exercise, because seeded exercises

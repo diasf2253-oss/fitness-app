@@ -25,18 +25,32 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session as DBSession
 
-from sqlalchemy import or_
-
-from app.auth import require_auth
-from app.db import get_db
-from app.models import Exercise, Routine, RoutineExercise, Session, SessionExercise, Set, User
-from app.routers.routine_notes import consume_pending_notes
-from app.schemas import (
-    SessionCreate, SessionExerciseCreate, SessionExerciseOut, SessionOut,
-    SessionSummary, SessionUpdate, SetCreate, SetOut, SetUpdate,
+from app.core.auth import require_auth
+from app.core.db import get_db
+from app.models import (
+    Exercise,
+    Routine,
+    RoutineExercise,
+    Session,
+    SessionExercise,
+    Set,
+    User,
 )
+from app.schemas import (
+    SessionCreate,
+    SessionExerciseCreate,
+    SessionExerciseOut,
+    SessionOut,
+    SessionSummary,
+    SessionUpdate,
+    SetCreate,
+    SetOut,
+    SetUpdate,
+)
+from app.services.training.routine_notes import consume_pending_notes
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 

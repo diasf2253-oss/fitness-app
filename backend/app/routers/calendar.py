@@ -12,17 +12,35 @@ from datetime import date, datetime, time, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session as DBSession
 
-from app.auth import require_auth
-from app.db import get_db
+from app.core.auth import require_auth
+from app.core.db import get_db
 from app.models import (
-    NutritionDay, PlanItem, Session as WorkoutSession, SleepLog, StepsLog,
-    Tracker, TrackerLog, User, WeightLog,
+    NutritionDay,
+    PlanItem,
+    SleepLog,
+    StepsLog,
+    Tracker,
+    TrackerLog,
+    User,
+    WeightLog,
 )
-from app.routers.health import DERIVED_SOURCES, real_weight_points, resolved_weight_for
-from app.routers.stats import session_summary
+from app.models import (
+    Session as WorkoutSession,
+)
 from app.schemas import (
-    CalendarDay, DayDetailOut, DaySession, DayTracker, MonthCalendarOut, PlanItemOut,
+    CalendarDay,
+    DayDetailOut,
+    DaySession,
+    DayTracker,
+    MonthCalendarOut,
+    PlanItemOut,
 )
+from app.services.health.store import (
+    DERIVED_SOURCES,
+    real_weight_points,
+    resolved_weight_for,
+)
+from app.services.training.stats import session_summary
 
 router = APIRouter(tags=["calendar"])
 
@@ -110,7 +128,7 @@ def day_detail(
     user_id = current_user.id
     sessions = []
     for ws in _sessions_on(db, day, user_id):
-        summary = session_summary(ws.id, db=db, current_user=current_user)
+        summary = session_summary(db, ws, current_user.id)
         sessions.append(DaySession(
             id=ws.id,
             name=ws.name,

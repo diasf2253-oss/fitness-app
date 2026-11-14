@@ -13,15 +13,21 @@ from datetime import date, datetime, time, timedelta
 
 from sqlalchemy.orm import Session as DBSession
 
-from app.config import settings as app_config
+from app.core.config import settings as app_config
 from app.models import (
-    Exercise, NutritionDay, Session, SessionExercise, Set, SleepLog, WeightLog,
+    Exercise,
+    NutritionDay,
+    Session,
+    SessionExercise,
+    Set,
+    SleepLog,
+    WeightLog,
 )
-from app.muscles import MUSCLE_GROUPS, resolved_volume_targets
-from app.routers.settings import get_or_create_settings
-from app.routers.stats import epley_1rm
-from app.routers.streak import streak_snapshot
-from app.weight_trend import iso_week_start, weekly_averages
+from app.services.diet.weight_trend import iso_week_start, weekly_averages
+from app.services.training.muscles import MUSCLE_GROUPS, resolved_volume_targets
+from app.services.training.stats import epley_1rm
+from app.services.training.streak import streak_snapshot
+from app.services.user_settings import get_or_create_settings
 
 PERIOD_DAYS = {"weekly": 7, "biweekly": 14}
 

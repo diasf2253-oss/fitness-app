@@ -8,9 +8,9 @@ import secrets
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session as DBSession
 
-from app import supabase_auth
-from app.auth import require_admin
-from app.db import get_db
+from app.core import supabase_auth
+from app.core.auth import require_admin
+from app.core.db import get_db
 from app.models import InviteCode, User
 from app.schemas import (
     AdminUserOut,

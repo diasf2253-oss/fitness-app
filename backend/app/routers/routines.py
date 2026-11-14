@@ -7,12 +7,11 @@ PUT    /api/routines/{id}     — replace routine (name + exercise list)
 DELETE /api/routines/{id}     — delete routine
 """
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from sqlalchemy import or_
-
-from app.auth import require_auth
-from app.db import get_db
+from app.core.auth import require_auth
+from app.core.db import get_db
 from app.models import Exercise, Routine, RoutineExercise, User
 from app.schemas import RoutineCreate, RoutineOut, RoutineUpdate
 

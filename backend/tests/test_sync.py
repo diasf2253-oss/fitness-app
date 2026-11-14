@@ -14,7 +14,6 @@ never sends user_id, so the push payloads below carry none.
 from datetime import date, datetime, timedelta
 
 from app.models import Exercise, Session, Set, Tracker, WeightLog
-
 from tests.conftest import TestingSession
 
 

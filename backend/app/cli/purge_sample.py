@@ -15,9 +15,9 @@ Usage:
     cd backend
     source .venv/bin/activate
 
-    python -m app.purge_sample              # dry run: report what would go
-    python -m app.purge_sample --yes        # actually delete
-    python -m app.purge_sample --yes --user 3   # limit to one account
+    python -m app.cli.purge_sample              # dry run: report what would go
+    python -m app.cli.purge_sample --yes        # actually delete
+    python -m app.cli.purge_sample --yes --user 3   # limit to one account
 
 Run it against staging first, and take a fresh `./scripts/backup.sh` before
 pointing it at production — see CLAUDE.md's backup runbook.
@@ -27,9 +27,9 @@ import os
 import sys
 
 # Allow running as a standalone script
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from app.db import SessionLocal
+from app.core.db import SessionLocal
 from app.models import Activity, NutritionDay, SleepLog, StepsLog, WeightLog
 
 SAMPLE_SOURCE = "sample"

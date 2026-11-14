@@ -14,9 +14,7 @@ The Coach is disabled in tests via ANTHROPIC_API_KEY="" (set in conftest.py
 before the app imports), so chat/planner endpoints 503.
 """
 from app.models import PlanItem, Routine
-
 from tests.conftest import TestingSession
-
 
 # ---------------------------------------------------------------------------
 # Plan items

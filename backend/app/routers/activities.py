@@ -9,11 +9,11 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session as DBSession
 
-from app.auth import require_auth
-from app.db import get_db
+from app.core.auth import require_auth
+from app.core.db import get_db
 from app.models import Activity, User, WeightLog
 from app.schemas import ActivityCreate, ActivityOut
-from app.activity_burn import activity_kcal
+from app.services.diet.activity_burn import activity_kcal
 
 router = APIRouter(prefix="/api/activities", tags=["activities"])
 

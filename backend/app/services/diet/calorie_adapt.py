@@ -28,7 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from app.weight_trend import iso_week_start, weekly_averages
+from app.services.diet.weight_trend import iso_week_start, weekly_averages
 
 KCAL_PER_KG = 7700.0          # energy density of body-weight change
 MIN_ENTRIES_FOR_ADAPT = 3     # weigh-ins required in the completed week

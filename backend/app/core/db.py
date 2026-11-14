@@ -6,9 +6,10 @@ regular request handlers share the same setup. Switching to Postgres later
 only requires changing DATABASE_URL in .env.
 """
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-from app.config import settings
+from app.core.config import settings
+
 
 def _connect_args(url: str) -> dict:
     """

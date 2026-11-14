@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-from app.muscles import MUSCLE_GROUPS
+from app.services.training.muscles import MUSCLE_GROUPS
 
 # Which primary muscle groups each split's day-type trains.
 SPLITS: dict[str, list[tuple[str, list[str]]]] = {

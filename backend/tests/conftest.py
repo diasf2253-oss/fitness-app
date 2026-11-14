@@ -67,9 +67,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app import supabase_auth
-from app.config import settings
-from app.db import Base, get_db
+from app.core import supabase_auth
+from app.core.config import settings
+from app.core.db import Base, get_db
 from app.main import app
 from app.models import User
 

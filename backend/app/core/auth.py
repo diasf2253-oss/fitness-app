@@ -32,10 +32,10 @@ from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session as DBSession
 
-from app import supabase_auth
-from app.db import get_db
+from app.core import supabase_auth
+from app.core.db import get_db
+from app.core.supabase_auth import Identity
 from app.models import User
-from app.supabase_auth import Identity
 
 # How stale users.last_login_at may get before a request refreshes it. It's
 # the Admin page's "last seen" column — hourly precision is plenty, and it

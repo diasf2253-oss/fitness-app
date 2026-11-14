@@ -9,14 +9,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session as DBSession
 
-from app import generator
-from app.auth import require_auth
-from app.db import get_db
-from app.generator import SPLIT_LABELS, SPLITS
+from app.core.auth import require_auth
+from app.core.db import get_db
 from app.models import Exercise, Routine, RoutineExercise, User
-from app.muscles import MUSCLE_GROUPS, resolved_volume_targets
-from app.routers.settings import get_or_create_settings
 from app.schemas import GeneratorRequest, RoutineOut
+from app.services.training import generator
+from app.services.training.generator import SPLIT_LABELS, SPLITS
+from app.services.training.muscles import MUSCLE_GROUPS, resolved_volume_targets
+from app.services.user_settings import get_or_create_settings
 
 router = APIRouter(prefix="/api/generator", tags=["generator"])
 

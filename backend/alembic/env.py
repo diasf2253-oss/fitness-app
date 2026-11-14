@@ -1,6 +1,6 @@
 """
 Alembic env.py — wired to use the same engine/models as the FastAPI app.
-DATABASE_URL is read from .env via app.config.settings.
+DATABASE_URL is read from .env via app.core.config.settings.
 """
 import sys
 import os
@@ -12,8 +12,8 @@ from sqlalchemy import engine_from_config, pool
 # Make the app package importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.config import settings
-from app.db import Base
+from app.core.config import settings
+from app.core.db import Base
 import app.models  # noqa: F401 — must import so Alembic sees all table defs
 
 config = context.config

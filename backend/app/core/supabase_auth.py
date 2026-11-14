@@ -17,7 +17,7 @@ so a rotated or revoked key stops working here quickly.
 
 Only asymmetric keys (ES256 / RS256) are accepted. Supabase projects still on
 the legacy shared JWT secret (HS256) must switch to signing keys first
-(Supabase dashboard → Project Settings → JWT Keys) — see docs/SUPABASE.md.
+(Supabase dashboard → Project Settings → JWT Keys) — see notes/runbooks/SUPABASE.md.
 
 Two things a token can't tell us need a call to Supabase itself:
   - email_is_confirmed(): whether the address has been verified (there is no
@@ -39,7 +39,7 @@ from dataclasses import dataclass
 import httpx
 import jwt
 
-from app.config import settings
+from app.core.config import settings
 
 log = logging.getLogger(__name__)
 

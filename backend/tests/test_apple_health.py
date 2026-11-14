@@ -17,7 +17,6 @@ from datetime import date
 import pytest
 
 from app.models import NutritionDay, SleepLog, StepsLog, WeightLog
-
 from tests.conftest import TestingSession
 
 

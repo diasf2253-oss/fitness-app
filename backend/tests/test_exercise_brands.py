@@ -7,7 +7,6 @@ be visible to every other user in the friends beta. These tests pin both halves:
 the uuid is exposed, and one user's brands never leak to another.
 """
 from app.models import Exercise
-
 from tests.conftest import TestingSession, _make_user, sign_in
 
 

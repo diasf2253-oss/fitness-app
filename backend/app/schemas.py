@@ -7,7 +7,6 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ---------------------------------------------------------------------------
 # Shared config: enable from_attributes so we can build schemas from ORM rows
 # ---------------------------------------------------------------------------

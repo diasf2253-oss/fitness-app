@@ -8,8 +8,8 @@ settings.auth_rate_limit_enabled back on and reset the shared counter, so they
 exercise the real 429 behaviour in isolation. monkeypatch restores the flag
 after each test.
 """
-from app import ratelimit
-from app.config import settings
+from app.core import ratelimit
+from app.core.config import settings
 from tests.conftest import sign_in
 
 BAD_CODE = {"code": "bad-code", "name": "A"}

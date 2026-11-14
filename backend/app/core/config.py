@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # back on to exercise it.
     auth_rate_limit_enabled: bool = True
 
-    # The first admin account (python -m app.seed_admin) and the migration
+    # The first admin account (python -m app.cli.seed_admin) and the migration
     # backfill that attaches all pre-multi-user data to it. There is no admin
     # password here any more: the admin signs in through Supabase with this
     # email, and app/auth.py links the two on first sign-in.

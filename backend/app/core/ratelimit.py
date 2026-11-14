@@ -14,7 +14,7 @@ from collections import defaultdict
 
 from fastapi import HTTPException, Request, status
 
-from app.config import settings
+from app.core.config import settings
 
 # "scope:ip" -> monotonic timestamps of recent hits (pruned on each request)
 _hits: dict[str, list[float]] = defaultdict(list)

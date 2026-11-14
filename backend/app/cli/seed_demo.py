@@ -3,8 +3,8 @@ Demo-data seeder — fills a SEPARATE demo account so every screen has something
 to look at while the app is being designed.
 
     cd backend
-    ENABLE_DEV_SEED=true python -m app.seed_demo           # (re)create + fill
-    ENABLE_DEV_SEED=true python -m app.seed_demo --reset   # delete the demo account only
+    ENABLE_DEV_SEED=true python -m app.cli.seed_demo           # (re)create + fill
+    ENABLE_DEV_SEED=true python -m app.cli.seed_demo --reset   # delete the demo account only
 
 Signing in as the demo account goes through Supabase Auth like any other
 account, so create its login once in your dev Supabase project: Dashboard →
@@ -30,19 +30,32 @@ from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
 
 # Allow running as a standalone script
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from sqlalchemy import delete
 
-from app.config import settings
-from app.db import SessionLocal
+from app.cli.seed import EXERCISES, ROUTINES
+from app.core.config import settings
+from app.core.db import SessionLocal
 from app.models import (
-    Activity, AppSettings, Base, Exercise, NutritionDay, Routine, RoutineExercise,
-    Session, SessionExercise, Set, SleepLog, StepsLog, Tracker, TrackerLog, User,
+    Activity,
+    AppSettings,
+    Base,
+    Exercise,
+    NutritionDay,
+    Routine,
+    RoutineExercise,
+    Session,
+    SessionExercise,
+    Set,
+    SleepLog,
+    StepsLog,
+    Tracker,
+    TrackerLog,
+    User,
     WeightLog,
 )
-from app.muscles import suggest_muscle_group
-from app.seed import EXERCISES, ROUTINES
+from app.services.training.muscles import suggest_muscle_group
 
 DEMO_EMAIL = "demo@example.com"
 DEMO_PASSWORD = "demo-password-123"   # the Supabase login you create for it (see above)
@@ -92,7 +105,7 @@ def _wipe_demo_user(db) -> bool:
 
 
 def _ensure_library(db) -> dict:
-    """Shared exercise library (user_id NULL) — same rows app.seed creates."""
+    """Shared exercise library (user_id NULL) — same rows app.cli.seed creates."""
     have = {e.name for e in db.query(Exercise.name).all()}
     for data in EXERCISES:
         if data["name"] not in have:
@@ -125,7 +138,7 @@ def seed_demo() -> None:
             onboarded=True, goal_kg_per_week=-0.25,
         ))
 
-        # ---- Routines (same templates as app.seed) ----
+        # ---- Routines (same templates as app.cli.seed) ----
         ex_id = _ensure_library(db)
         routines = []
         for rname, slots in ROUTINES:

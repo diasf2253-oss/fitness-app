@@ -7,20 +7,19 @@ Seed script — run once after `alembic upgrade head` to populate:
 Run with:
     cd backend
     source .venv/bin/activate
-    python -m app.seed
+    python -m app.cli.seed
 """
-import sys
 import os
+import sys
 from datetime import datetime
 
 # Allow running as a standalone script
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from app.auth_bootstrap import get_or_create_admin_user
-from app.db import SessionLocal
+from app.core.auth_bootstrap import get_or_create_admin_user
+from app.core.db import SessionLocal
 from app.models import AppSettings, Exercise, Routine, RoutineExercise
-from app.muscles import suggest_muscle_group
-
+from app.services.training.muscles import suggest_muscle_group
 
 # ---------------------------------------------------------------------------
 # Exercise definitions

@@ -136,7 +136,7 @@ def upsert_nutrition_partial(
 
     Source precedence: a day the user corrected by hand (source='manual')
     is only overwritten by another manual write — same rule as the other
-    upsert helpers in routers/health.py.
+    upsert helpers in services/health/store.py.
 
     Returns True if a row was created.
     """

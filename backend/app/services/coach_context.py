@@ -11,11 +11,25 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session as DBSession
 
 from app.models import (
-    Exercise, NutritionDay, PlanItem, Routine, Session as WorkoutSession,
-    SessionExercise, Set as SetModel, SleepLog, StepsLog, Tracker, TrackerLog, WeightLog,
+    Exercise,
+    NutritionDay,
+    PlanItem,
+    Routine,
+    SessionExercise,
+    SleepLog,
+    StepsLog,
+    Tracker,
+    TrackerLog,
+    WeightLog,
 )
-from app.routers.insights import period_metrics
-from app.routers.settings import get_or_create_settings
+from app.models import (
+    Session as WorkoutSession,
+)
+from app.models import (
+    Set as SetModel,
+)
+from app.services.insights import period_metrics
+from app.services.user_settings import get_or_create_settings
 
 
 def _recent_training(db: DBSession, today: date, user_id: int, days: int = 14) -> list[str]:

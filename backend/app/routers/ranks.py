@@ -8,12 +8,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import or_
 from sqlalchemy.orm import Session as DBSession
 
-from app import ranks as R
-from app.auth import require_auth
-from app.db import get_db
+from app.core.auth import require_auth
+from app.core.db import get_db
 from app.models import Exercise, Session, SessionExercise, Set, User, WeightLog
-from app.muscles import MUSCLE_GROUPS
-from app.routers.settings import get_or_create_settings
+from app.services.training import ranks as R
+from app.services.training.muscles import MUSCLE_GROUPS
+from app.services.user_settings import get_or_create_settings
 
 router = APIRouter(prefix="/api/ranks", tags=["ranks"])
 
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/ranks", tags=["ranks"])
 def _latest_bodyweight(db: DBSession, user_id: int) -> float | None:
     """Latest REAL reading only — a leftover demo ('sample') or interpolated
     ('estimated') row must never set the bodyweight every rank divides by."""
-    from app.routers.health import DERIVED_SOURCES
+    from app.services.health.store import DERIVED_SOURCES
     row = (
         db.query(WeightLog)
         .filter(WeightLog.user_id == user_id, WeightLog.source.notin_(DERIVED_SOURCES))

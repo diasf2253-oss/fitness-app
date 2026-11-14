@@ -1,5 +1,5 @@
 """Micronutrient RDA classification — pure-function unit tests."""
-from app import nutrition_rda as rda
+from app.services.diet import nutrition_rda as rda
 
 
 def test_classify_bands():

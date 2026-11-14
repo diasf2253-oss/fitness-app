@@ -2,10 +2,8 @@
 from datetime import date, datetime, time, timedelta
 
 from app.models import Activity, Exercise, Session, SessionExercise, Set, StepsLog
-from app.streak import compute_streak
-
+from app.services.training.streak import compute_streak
 from tests.conftest import TestingSession
-
 
 # ---------------------------------------------------------------------------
 # Pure function

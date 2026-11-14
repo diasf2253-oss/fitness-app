@@ -4,10 +4,16 @@ and fully removable.
 """
 import pytest
 
-from app import seed_demo
-from app.config import settings
+from app.cli import seed_demo
+from app.core.config import settings
 from app.models import (
-    NutritionDay, Session, Set, Tracker, TrackerLog, User, WeightLog,
+    NutritionDay,
+    Session,
+    Set,
+    Tracker,
+    TrackerLog,
+    User,
+    WeightLog,
 )
 from tests.conftest import TestingSession, _make_user
 

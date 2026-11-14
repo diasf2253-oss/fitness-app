@@ -3,12 +3,12 @@ Seeding: a fresh database must come out ranked-ready.
 
 primary_muscle_group (what Ranks and per-muscle volume group by) used to be
 filled only by the phase-10 migration's backfill. On a fresh database that
-migration runs *before* `python -m app.seed` inserts the library, so every
+migration runs *before* `python -m app.cli.seed` inserts the library, so every
 seeded exercise stayed untagged and Ranks stayed empty forever.
 """
 from datetime import date
 
-from app import seed as seed_module
+from app.cli import seed as seed_module
 from app.models import Exercise, Session, SessionExercise, Set, WeightLog
 from tests.conftest import TestingSession, _make_user
 

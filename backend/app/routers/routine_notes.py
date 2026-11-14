@@ -13,31 +13,12 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session as DBSession
 
-from app.auth import require_auth
-from app.db import get_db
+from app.core.auth import require_auth
+from app.core.db import get_db
 from app.models import Routine, RoutineNote, User
 from app.schemas import RoutineNoteCreate, RoutineNoteOut, RoutineNoteUpdate
 
 router = APIRouter(tags=["routine-notes"])
-
-
-def consume_pending_notes(db: DBSession, routine_id: int, session_id: int, user_id: int) -> list[RoutineNote]:
-    """Surface and archive a routine's pending next-session notes onto the
-    session that's starting, so they show once and never resurface."""
-    pending = (
-        db.query(RoutineNote)
-        .filter(
-            RoutineNote.user_id == user_id,
-            RoutineNote.routine_id == routine_id,
-            RoutineNote.archived_at.is_(None),
-        )
-        .all()
-    )
-    now = datetime.utcnow()
-    for note in pending:
-        note.surfaced_in_session_id = session_id
-        note.archived_at = now
-    return pending
 
 
 @router.post("/api/routines/{routine_id}/notes", response_model=RoutineNoteOut, status_code=201)

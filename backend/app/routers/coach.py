@@ -26,13 +26,13 @@ from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.orm import Session as DBSession
 
-from app.auth import require_auth
-from app.coach_context import build_context
-from app.config import settings
-from app.db import get_db
+from app.core.auth import require_auth
+from app.core.config import settings
+from app.core.db import get_db
 from app.models import Exercise, Routine, RoutineExercise, User
-from app.routers.plan import add_plan_item
 from app.schemas import PLAN_CATEGORIES, PlanItemCreate, PlanItemOut
+from app.services.coach_context import build_context
+from app.services.plan import add_plan_item
 
 logger = logging.getLogger(__name__)
 

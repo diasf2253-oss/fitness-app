@@ -44,12 +44,12 @@ fi
 
 echo "Updating the database…"
 ./.venv/bin/alembic upgrade head >/dev/null
-if ! ADMIN_INFO="$(./.venv/bin/python -m app.seed_admin 2>&1)"; then
+if ! ADMIN_INFO="$(./.venv/bin/python -m app.cli.seed_admin 2>&1)"; then
   echo "$ADMIN_INFO"
   echo "Set ADMIN_EMAIL in backend/.env, then re-run ./start.sh"
   exit 1
 fi
-./.venv/bin/python -m app.seed >/dev/null 2>&1 || true
+./.venv/bin/python -m app.cli.seed >/dev/null 2>&1 || true
 
 # 3. Friendly banner with the URLs and login you actually need
 LAN_IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)"
@@ -62,7 +62,7 @@ printf '   This laptop:  http://localhost:8000\n'
 printf '   This phone:   %s\n' "$PHONE"
 printf '\n'
 printf '%s\n' "$ADMIN_INFO" | sed 's/^/   /'
-printf '   Sign in through Supabase with ADMIN_EMAIL (docs/SUPABASE.md).\n'
+printf '   Sign in through Supabase with ADMIN_EMAIL (notes/runbooks/SUPABASE.md).\n'
 printf '   Friends sign up at /join with the invite code; approve them at /admin.\n'
 printf '  ════════════════════════════════════════════════════\n'
 printf '   Ctrl-C to stop\n\n'

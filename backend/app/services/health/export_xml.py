@@ -3,7 +3,7 @@ Apple Health export.xml history backfill.
 
 The Health app's "Export All Health Data" produces export.zip containing
 export.xml — every Record ever written (often hundreds of MB). This module
-stream-parses it and feeds the shared :class:`~app.health_ingest.HealthAggregator`,
+stream-parses it and feeds the shared :class:`~app.services.health.ingest.HealthAggregator`,
 so a one-time history import lands through the exact same validated pipeline
 (units, timezone/night attribution, multi-source dedup, manual-precedence)
 as the live daily syncs — see ``health_ingest`` for the rules.
@@ -15,8 +15,8 @@ from xml.etree import ElementTree as ET
 
 from sqlalchemy.orm import Session as DBSession
 
-from app.health_ingest import HealthAggregator, parse_when
-from app.health_metrics import XML_DIETARY, convert_amount
+from app.services.health.ingest import HealthAggregator, parse_when
+from app.services.health.metrics import XML_DIETARY, convert_amount
 
 logger = logging.getLogger(__name__)
 

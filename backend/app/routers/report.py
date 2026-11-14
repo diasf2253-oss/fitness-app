@@ -11,11 +11,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session as DBSession
 
-from app.auth import require_auth
-from app.config import settings as app_settings
-from app.db import get_db
+from app.core.auth import require_auth
+from app.core.config import settings as app_settings
+from app.core.db import get_db
 from app.models import User
-from app.report import PERIOD_DAYS, build_report, report_markdown
+from app.services.report import PERIOD_DAYS, build_report, report_markdown
 
 logger = logging.getLogger(__name__)
 
