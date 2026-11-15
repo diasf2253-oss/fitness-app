@@ -21,7 +21,15 @@ case "${1:-}" in
 esac
 [ -x backend/.venv/bin/python ] || { echo "backend/.venv missing — run ./start.sh once first." >&2; exit 1; }
 
-if [ "$1" = production ] && [ "${SKIP_BACKUP:-}" != 1 ]; then
+if [ "$1" = production ] && [ "${SKIP_BACKUP:-}" != 1 ] && [[ "${OLD_DATABASE_URL:-}" == sqlite:///* ]]; then
+  # The old database is a SQLite file (e.g. the laptop's backend/fitness.sqlite3):
+  # a backup is simply a timestamped copy of that file.
+  OLD_FILE="${OLD_DATABASE_URL#sqlite:///}"
+  [ -f "$OLD_FILE" ] || { echo "OLD_DATABASE_URL points at a missing file: $OLD_FILE" >&2; exit 1; }
+  mkdir -p "${BACKUP_DIR:-backups}"
+  cp "$OLD_FILE" "${BACKUP_DIR:-backups}/fitness_old_$(date +%Y%m%d_%H%M%S).sqlite3"
+  echo "Backed up $OLD_FILE into ${BACKUP_DIR:-backups}/"
+elif [ "$1" = production ] && [ "${SKIP_BACKUP:-}" != 1 ]; then
   ./scripts/backup.sh old || {
     echo "Backup of the old database failed — stopping before the move." >&2
     echo "(The old database is never modified by the move; SKIP_BACKUP=1 skips this step.)" >&2
