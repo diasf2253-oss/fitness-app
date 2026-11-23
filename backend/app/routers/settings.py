@@ -7,23 +7,13 @@ PUT  /api/settings    — update (partial: only send fields you want to change)
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session as DBSession
 
-from app.auth import require_auth
-from app.db import get_db
-from app.models import AppSettings, User
+from app.core.auth import require_auth
+from app.core.db import get_db
+from app.models import User
 from app.schemas import AppSettingsOut, AppSettingsUpdate
+from app.services.user_settings import get_or_create_settings
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
-
-
-def get_or_create_settings(db: DBSession, user_id: int) -> AppSettings:
-    """Fetch this user's settings row, creating it with defaults if absent."""
-    row = db.query(AppSettings).filter(AppSettings.user_id == user_id).first()
-    if not row:
-        row = AppSettings(user_id=user_id)
-        db.add(row)
-        db.commit()
-        db.refresh(row)
-    return row
 
 
 @router.get("", response_model=AppSettingsOut)

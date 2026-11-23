@@ -20,7 +20,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-from app.muscles import suggest_muscle_group
+from app.services.training.muscles import suggest_muscle_group
 
 
 # revision identifiers, used by Alembic.

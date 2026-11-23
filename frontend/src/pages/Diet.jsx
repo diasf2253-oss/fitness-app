@@ -5,11 +5,11 @@
  * through /api/activities.
  */
 import React, { useEffect, useState } from 'react'
-import { apiFetch } from '../api'
-import { Loading, ErrorBox, EmptyNote } from '../components/States'
-import PageHero from '../components/PageHero'
-import WidgetLabel from '../components/WidgetLabel'
-import NutrientBreakdown from '../components/NutrientBreakdown'
+import { apiFetch } from '../lib/api'
+import { Loading, ErrorBox, EmptyNote } from '../components/ui/States'
+import PageHero from '../components/ui/PageHero'
+import WidgetLabel from '../components/ui/WidgetLabel'
+import NutrientBreakdown from '../components/health/NutrientBreakdown'
 
 function todayIso() {
   const d = new Date()

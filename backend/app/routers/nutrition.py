@@ -11,41 +11,13 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session as DBSession
 
-from app.auth import require_auth
-from app.db import get_db
+from app.core.auth import require_auth
+from app.core.db import get_db
 from app.models import NutritionDay, User
 from app.schemas import NutritionDayCreate, NutritionDayOut
+from app.services.health.store import upsert_nutrition
 
 router = APIRouter(prefix="/api/nutrition", tags=["nutrition"])
-
-
-def upsert_nutrition(db: DBSession, body: NutritionDayCreate, user_id: int) -> NutritionDay:
-    """
-    Insert or overwrite a day's nutrition data (idempotent).
-    `micros` only replaces when provided — a manual macro correction must
-    not wipe the micronutrients Apple Health synced for that day.
-    """
-    row = db.query(NutritionDay).filter(
-        NutritionDay.user_id == user_id, NutritionDay.date == body.date
-    ).first()
-    # Manual corrections are only replaced by other manual writes (same
-    # precedence rule as the upsert helpers in routers/health.py)
-    if row and row.source == "manual" and body.source != "manual":
-        return row
-    if row:
-        row.calories = body.calories
-        row.protein_g = body.protein_g
-        row.carbs_g = body.carbs_g
-        row.fat_g = body.fat_g
-        if body.micros is not None:
-            row.micros = body.micros
-        row.source = body.source
-    else:
-        row = NutritionDay(user_id=user_id, **body.model_dump())
-        db.add(row)
-    db.commit()
-    db.refresh(row)
-    return row
 
 
 @router.get("", response_model=list[NutritionDayOut])

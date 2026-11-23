@@ -11,7 +11,6 @@ from datetime import date, timedelta
 import pytest
 
 from app.models import WeightLog
-
 from tests.conftest import TestingSession
 
 

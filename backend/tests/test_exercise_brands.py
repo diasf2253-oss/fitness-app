@@ -6,10 +6,8 @@ exercises are the SHARED library (user_id IS NULL) — a brand written there wou
 be visible to every other user in the friends beta. These tests pin both halves:
 the uuid is exposed, and one user's brands never leak to another.
 """
-from app.auth import hash_password
-from app.models import Exercise, User
-
-from tests.conftest import TestingSession
+from app.models import Exercise
+from tests.conftest import TestingSession, _make_user, sign_in
 
 
 def test_exercise_out_exposes_uuid(auth_client):
@@ -50,12 +48,8 @@ def test_brands_are_private_to_each_user(auth_client, client):
     ex = {"uuid": shared_uuid}
     auth_client.put("/api/settings", json={"exercise_brands": {ex["uuid"]: "Technogym"}})
 
-    db = TestingSession()
-    db.add(User(email="other@example.com", password_hash=hash_password("password123"),
-                name="Other", role="user", status="active"))
-    db.commit(); db.close()
-    assert client.post("/api/auth/login",
-                       json={"email": "other@example.com", "password": "password123"}).status_code == 200
+    _make_user("other@example.com", name="Other")
+    sign_in(client, "other@example.com")
 
     # The other user sees the same exercise, but none of the first user's brands.
     assert any(e["uuid"] == ex["uuid"] for e in client.get("/api/exercises").json())

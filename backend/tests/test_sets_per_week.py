@@ -3,8 +3,7 @@ ISO-week grouping, and the volume-target table."""
 from datetime import date, datetime, time, timedelta
 
 from app.models import Exercise, Session, SessionExercise, Set
-from app.weight_trend import iso_week_start
-
+from app.services.diet.weight_trend import iso_week_start
 from tests.conftest import TestingSession
 
 

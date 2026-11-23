@@ -9,14 +9,14 @@
  */
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { apiFetch } from '../api'
-import { Loading, ErrorBox, EmptyNote, NoHealthDataNote } from '../components/States'
-import MonthCalendar from '../components/MonthCalendar'
-import WidgetLabel from '../components/WidgetLabel'
-import WeightCard from '../components/WeightCard'
-import GoalBarCard from '../components/GoalBarCard'
-import { HEALTH_DATA_CHANGED, openQuickLog } from '../components/QuickLog'
-import CheckIn from '../components/CheckIn'
+import { apiFetch } from '../lib/api'
+import { Loading, ErrorBox, EmptyNote, NoHealthDataNote } from '../components/ui/States'
+import MonthCalendar from '../components/ui/MonthCalendar'
+import WidgetLabel from '../components/ui/WidgetLabel'
+import WeightCard from '../components/health/WeightCard'
+import GoalBarCard from '../components/health/GoalBarCard'
+import { HEALTH_DATA_CHANGED, openQuickLog } from '../components/training/QuickLog'
+import CheckIn from '../components/health/CheckIn'
 
 function MacroBar({ label, value, target, over }) {
   const pct = target > 0 ? Math.min(100, (value / target) * 100) : 0

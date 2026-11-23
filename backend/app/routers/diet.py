@@ -5,7 +5,7 @@ POST /api/diet/recalc  — re-run the weekly adaptation now (ignores the
                          once-per-week guard; handy after correcting weights)
 
 The calorie target is an anchored, weekly-trend step model (see
-``app.calorie_adapt``): it starts at a user-set anchor (2,300 kcal) and moves
+``app.services.diet.calorie_adapt``): it starts at a user-set anchor (2,300 kcal) and moves
 ±one step once per completed ISO week toward the signed weekly goal. It is
 never recomputed from scratch. Protein and fat targets are manual; carbs flex.
 """
@@ -14,16 +14,16 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session as DBSession
 
-from app import calorie_adapt
-from app.activity_burn import activity_kcal
-from app.auth import require_auth
-from app.calorie_adapt import carbs_from_target
-from app.db import get_db
+from app.core.auth import require_auth
+from app.core.db import get_db
 from app.models import Activity, NutritionDay, User, WeightLog
-from app.nutrition_rda import build_breakdown
-from app.routers.settings import get_or_create_settings
 from app.schemas import ActivityOut, DietOut, EnergySummary, NutrientStatus
-from app.weight_trend import iso_week_start, weekly_averages
+from app.services.diet import calorie_adapt
+from app.services.diet.activity_burn import activity_kcal
+from app.services.diet.calorie_adapt import carbs_from_target
+from app.services.diet.nutrition_rda import build_breakdown
+from app.services.diet.weight_trend import iso_week_start, weekly_averages
+from app.services.user_settings import get_or_create_settings
 
 router = APIRouter(prefix="/api/diet", tags=["diet"])
 

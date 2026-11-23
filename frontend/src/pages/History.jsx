@@ -8,9 +8,9 @@
  */
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { apiFetch } from '../api'
-import { Loading, ErrorBox, EmptyState } from '../components/States'
-import { confirmAction } from '../components/ConfirmSheet'
+import { apiFetch } from '../lib/api'
+import { Loading, ErrorBox, EmptyState } from '../components/ui/States'
+import { confirmAction } from '../components/ui/ConfirmSheet'
 
 // Format an ISO datetime (stored UTC, naive) into a friendly local string
 function fmtDate(iso) {

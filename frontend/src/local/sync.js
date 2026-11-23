@@ -4,10 +4,10 @@
  * on app open, so being online and logged in is all it takes to stay in
  * sync.
  *
- * Auth: same-origin httpOnly session cookie (credentials: 'include'),
- * exactly like the rest of the app — see src/api.js and src/auth.js. The
- * probe step doubles as the reachability check AND the "who am I" check
- * (GET /api/auth/me), since sync can't proceed without an active session.
+ * Auth: the signed-in user's Supabase access token as a bearer header,
+ * exactly like the rest of the app — see src/lib/api.js and src/lib/supabase.js.
+ * The probe step doubles as the reachability check AND the "who am I" check
+ * (GET /api/auth/me), since sync can't proceed without an active account.
  *
  * Multi-user local-first: this device's IndexedDB is wiped whenever the
  * logged-in user differs from whoever it last synced as (see
@@ -15,7 +15,7 @@
  * any local unsynced changes for the previous account. Acceptable because
  * each person installs the PWA on their own device.
  *
- * Protocol (see backend/app/routers/sync.py + app/sync.py):
+ * Protocol (see backend/app/routers/sync.py + app/services/sync.py):
  *   1. GET  /api/auth/me — reachability + identity probe (short timeout)
  *   2. POST /api/sync/push     — send locally-dirty rows; server merges
  *      last-write-wins with health source precedence
@@ -23,13 +23,14 @@
  *      server-side; merge into IndexedDB with the same rules
  *   4. Remember the server_time for the next incremental pull
  *
- * Tables mirror app/sync.py SYNC_TABLES: parents before children so the
+ * Tables mirror app/services/sync.py SYNC_TABLES: parents before children so the
  * server can resolve FK uuids on push, and rows land locally in an order
  * that keeps references intact.
  */
 import { db, getMeta, setMeta } from './db'
 import { writeBlocked } from './weights'
-import { apiUrl } from '../env'
+import { apiUrl } from '../lib/env'
+import { getAccessToken } from '../lib/supabase'
 
 const PROBE_TIMEOUT_MS = 3000
 
@@ -63,15 +64,25 @@ const SYNC_TABLES = {
   settings: { key: 'singleton' },
 }
 
+/** The signed-in user's bearer header ({} when signed out). */
+async function authHeaders() {
+  const token = await getAccessToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 /** Reachability + identity probe. Returns the current user (from
- * /api/auth/me) or null when offline/unreachable/not logged in. */
+ * /api/auth/me) or null when offline/unreachable/not signed in, or when the
+ * account isn't active yet (pending approval has nothing to sync). */
 async function probeUser() {
+  const headers = await authHeaders()
+  if (!headers.Authorization) return null
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
   try {
-    const r = await fetch(apiUrl('/api/auth/me'), { credentials: 'include', signal: controller.signal })
+    const r = await fetch(apiUrl('/api/auth/me'), { headers, signal: controller.signal })
     if (!r.ok) return null
-    return await r.json()
+    const me = await r.json()
+    return me.status === 'active' ? me : null
   } catch {
     return null
   } finally {
@@ -103,8 +114,7 @@ async function pushDirty() {
 
   const r = await fetch(apiUrl('/api/sync/push'), {
     method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
     body: JSON.stringify({ tables }),
   })
   if (!r.ok) throw new Error(`push failed: HTTP ${r.status}`)
@@ -137,7 +147,7 @@ async function applyTable(name, rows) {
 
 async function pullSince(since) {
   const qs = since ? `?since=${encodeURIComponent(since)}` : ''
-  const r = await fetch(apiUrl(`/api/sync/pull${qs}`), { credentials: 'include' })
+  const r = await fetch(apiUrl(`/api/sync/pull${qs}`), { headers: await authHeaders() })
   if (!r.ok) throw new Error(`pull failed: HTTP ${r.status}`)
   const body = await r.json()
 
@@ -150,8 +160,8 @@ async function pullSince(since) {
 
 /**
  * Full sync pass. Returns a small result object for the UI, or
- * { reachable: false } when the API isn't reachable or no session is
- * active — never throws for that, only for real protocol errors.
+ * { reachable: false } when the API isn't reachable or nobody active is
+ * signed in — never throws for that, only for real protocol errors.
  */
 export async function syncNow() {
   const user = await probeUser()

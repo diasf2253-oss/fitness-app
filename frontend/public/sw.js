@@ -13,7 +13,7 @@
  * on the next online open, precaches, drops old caches on activate, and takes
  * over.
  */
-const VERSION = 'tracker-1.0.8'
+const VERSION = 'tracker-1.0.9'
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {

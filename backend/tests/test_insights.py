@@ -10,8 +10,7 @@ from datetime import date, datetime, time, timedelta
 import pytest
 
 from app.models import Session as WorkoutSession
-from app.routers.insights import pearson
-
+from app.services.insights import pearson
 from tests.conftest import TestingSession
 
 

@@ -11,7 +11,7 @@ import { LocalApiError, notFound } from './util'
 
 const stamp = (row) => ({ ...row, updated_at: nowIso(), _dirty: 1 })
 
-// Mirrors SPLIT_TEMPLATES in backend/app/split_templates.py — keep in step.
+// Mirrors SPLIT_TEMPLATES in backend/app/services/training/split_templates.py — keep in step.
 // [exerciseName, sets]; a name the library doesn't have is skipped.
 export const SPLIT_TEMPLATES = {
   ppl: {

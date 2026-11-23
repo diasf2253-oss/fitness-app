@@ -19,10 +19,11 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { apiFetch } from '../api'
-import { useAuth } from '../auth'
-import { isMuted, setMuted, subscribeMuted, playTap } from '../audio'
-import { confirmAction } from '../components/ConfirmSheet'
+import { apiFetch } from '../lib/api'
+import { friendlyAuthError, useAuth } from '../auth/auth'
+import { supabase } from '../lib/supabase'
+import { isMuted, setMuted, subscribeMuted, playTap } from '../lib/audio'
+import { confirmAction } from '../components/ui/ConfirmSheet'
 
 /* ------------------------------------------------------------------ */
 /* Building blocks                                                     */
@@ -109,16 +110,18 @@ function useFlash(stamp) {
 /* Account                                                             */
 /* ------------------------------------------------------------------ */
 
+/* Password changes go straight to Supabase (the login service) — there's
+   no app endpoint. Works for Google sign-ins too: it adds a password they
+   can use alongside the Google button. */
 function PasswordRows() {
   const [open, setOpen] = useState(false)
-  const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [confirmPw, setConfirmPw] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [done, setDone] = useState(false)
 
-  function reset() { setCurrent(''); setNext(''); setConfirmPw(''); setError(null) }
+  function reset() { setNext(''); setConfirmPw(''); setError(null) }
 
   async function submit(e) {
     e.preventDefault()
@@ -127,14 +130,12 @@ function PasswordRows() {
     if (next !== confirmPw) return setError('The new passwords do not match.')
     setBusy(true)
     try {
-      await apiFetch('/api/auth/change-password', {
-        method: 'POST',
-        body: JSON.stringify({ current_password: current, new_password: next }),
-      })
+      const { error: err } = await supabase.auth.updateUser({ password: next })
+      if (err) return setError(friendlyAuthError(err))
+      // Like before: changing the password signs out your other devices.
+      await supabase.auth.signOut({ scope: 'others' }).catch(() => {})
       reset(); setOpen(false); setDone(true)
       setTimeout(() => setDone(false), 3000)
-    } catch (err) {
-      setError(err.message)
     } finally {
       setBusy(false)
     }
@@ -152,10 +153,6 @@ function PasswordRows() {
       </button>
       {open && (
         <form onSubmit={submit} className="set-expand">
-          <Row label="Current" htmlFor="pw-current">
-            <input id="pw-current" className="set-input" type="password" autoComplete="current-password"
-              value={current} onChange={e => setCurrent(e.target.value)} required placeholder="Required" />
-          </Row>
           <Row label="New" htmlFor="pw-new">
             <input id="pw-new" className="set-input" type="password" autoComplete="new-password"
               value={next} onChange={e => setNext(e.target.value)} required minLength={8} placeholder="8+ characters" />
@@ -166,7 +163,7 @@ function PasswordRows() {
           </Row>
           {error && <p className="set-error" role="alert">{error}</p>}
           <div className="set-pad">
-            <button type="submit" disabled={busy || !current || !next || !confirmPw} style={{ width: '100%' }}>
+            <button type="submit" disabled={busy || !next || !confirmPw} style={{ width: '100%' }}>
               {busy ? 'Updating…' : 'Update password'}
             </button>
             <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.6rem' }}>

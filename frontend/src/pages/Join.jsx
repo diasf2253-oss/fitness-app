@@ -1,95 +1,88 @@
 /**
- * Signup — reads the invite code from ?code= in the URL. Without a valid
- * code the backend rejects account creation outright (see
- * backend/app/routers/auth.py's /join), so this screen also fails closed:
- * no app-revealing content, just a generic message.
+ * Create an account — step 1 of 2. This creates the *login* (at Supabase:
+ * email + password, or Google). Step 2, FinishJoin, redeems the invite code
+ * with the app's backend, which is what actually creates the account
+ * (pending until an admin approves it).
+ *
+ * The invite code and name typed here are remembered on the device, so they
+ * survive the "confirm your email" or Google round trip and FinishJoin can
+ * prefill them. Someone who had an account before the login update skips the
+ * code: signing in with the same email reconnects their existing account.
  */
 import React, { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { apiFetch } from '../api'
-import { ErrorBox } from '../components/States'
+import { friendlyAuthError, stashPendingJoin } from '../auth/auth'
+import AuthScreen, { GoogleButton, OrDivider } from '../auth/AuthScreen'
+import { ErrorBox } from '../components/ui/States'
+import { appRedirectUrl, supabase } from '../lib/supabase'
 
 export default function Join() {
   const [params] = useSearchParams()
-  const code = params.get('code') || ''
-
+  const [code, setCode] = useState(params.get('code') || '')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-  const [done, setDone] = useState(false)
+  const [checkEmail, setCheckEmail] = useState(false)
 
-  const wrap = (children) => (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 300, overflowY: 'auto',
-      background: 'var(--color-bg)', padding: '2rem 1rem calc(2rem + env(safe-area-inset-bottom))',
-    }}>
-      <div style={{ maxWidth: 380, margin: '3rem auto 0' }}>{children}</div>
-    </div>
-  )
-
-  if (!code) {
-    return wrap(
-      <div className="card">
-        <p className="muted">This link is invalid or missing an invite code.</p>
-      </div>
-    )
-  }
-
-  if (done) {
-    return wrap(
-      <div className="card">
-        <h2 style={{ marginTop: 0 }}>Waiting for approval</h2>
-        <p className="muted">
-          Your account is created. You'll be let in personally once it's
-          approved — check back soon, or just try logging in later.
-        </p>
-        <Link to="/login"><button className="secondary" style={{ width: '100%', marginTop: '0.75rem' }}>Go to login</button></Link>
-      </div>
-    )
-  }
+  const remember = () => stashPendingJoin({ code: code.trim(), name: name.trim() })
 
   async function submit(e) {
     e.preventDefault()
     setError(null)
-    if (password !== confirm) {
-      setError('Passwords do not match.')
-      return
-    }
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.')
-      return
-    }
+    if (password !== confirm) return setError('Passwords do not match.')
+    if (password.length < 8) return setError('Password must be at least 8 characters.')
     setBusy(true)
-    try {
-      await apiFetch('/api/auth/join', {
-        method: 'POST',
-        body: JSON.stringify({ code, name: name.trim(), email: email.trim().toLowerCase(), password }),
-      })
-      setDone(true)
-    } catch (err) {
-      setError(err.message === 'An account with that email already exists'
-        ? err.message
-        : 'This invite link is no longer valid.')
-    } finally {
-      setBusy(false)
-    }
+    remember()
+    const { data, error: err } = await supabase.auth.signUp({
+      email: email.trim().toLowerCase(),
+      password,
+      options: { emailRedirectTo: appRedirectUrl(), data: { name: name.trim() } },
+    })
+    setBusy(false)
+    if (err) return setError(friendlyAuthError(err))
+    // No session means Supabase wants the email confirmed first. With one,
+    // AuthProvider hears SIGNED_IN and moves on to FinishJoin.
+    if (!data?.session) setCheckEmail(true)
   }
 
-  return wrap(
-    <>
-      <h1 style={{ marginBottom: '0.25rem' }}>Create your account</h1>
-      <p className="muted" style={{ marginBottom: '1.25rem' }}>You've been invited.</p>
+  if (checkEmail) {
+    return (
+      <AuthScreen title="Check your email">
+        <div className="card">
+          <p className="muted" style={{ marginTop: 0 }}>
+            We sent a confirmation link to <strong>{email.trim()}</strong>. Open it on this
+            device — it brings you back here, signed in, for the last step.
+          </p>
+          <p className="muted" style={{ marginBottom: 0, fontSize: '0.85rem' }}>
+            Nothing after a few minutes? Check spam, or <Link to="/login">try logging in</Link>.
+          </p>
+        </div>
+      </AuthScreen>
+    )
+  }
 
+  return (
+    <AuthScreen title="Create your account" subtitle="Step 1 of 2 — your login.">
+      <ErrorBox error={error} />
       <form onSubmit={submit} className="col" style={{ gap: '0.9rem' }}>
-        <ErrorBox error={error} />
+        <div className="form-group">
+          <label htmlFor="join-code">Invite code</label>
+          <input id="join-code" autoCapitalize="none" autoCorrect="off" spellCheck={false}
+            value={code} onChange={e => setCode(e.target.value)}
+            placeholder="Skip if you had an account before" />
+        </div>
         <div className="form-group">
           <label htmlFor="join-name">Name</label>
           <input id="join-name" autoComplete="name" autoCapitalize="words"
             value={name} onChange={e => setName(e.target.value)} required />
         </div>
+
+        <GoogleButton label="Sign up with Google" beforeRedirect={remember} onError={setError} />
+        <OrDivider />
+
         <div className="form-group">
           <label htmlFor="join-email">Email</label>
           <input id="join-email" type="email" autoComplete="email"
@@ -113,6 +106,6 @@ export default function Join() {
       <p className="muted" style={{ marginTop: '1.25rem', fontSize: '0.85rem' }}>
         Already have an account? <Link to="/login">Log in</Link>
       </p>
-    </>
+    </AuthScreen>
   )
 }

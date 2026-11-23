@@ -4,7 +4,7 @@
 #
 # Persist the database! Mount a volume at /app/data and set:
 #   DATABASE_URL=sqlite:////app/data/fitness.sqlite3
-# (or point DATABASE_URL at Postgres). Also set ADMIN_EMAIL/ADMIN_PASSWORD
+# (or point DATABASE_URL at Postgres). Also set ADMIN_EMAIL
 # (Phase 1-2 friends beta — creates the admin account + first invite code).
 # ---------------------------------------------------------------------------
 
@@ -18,6 +18,11 @@ COPY frontend/ ./
 # STAGING badge without waiting for the runtime /api/ping probe.
 ARG VITE_APP_ENV=""
 ENV VITE_APP_ENV=$VITE_APP_ENV
+# The Supabase project the frontend signs in with (public values, baked in
+# at build time — pass them as build args; see notes/runbooks/SUPABASE.md).
+ARG VITE_SUPABASE_URL=""
+ARG VITE_SUPABASE_PUBLISHABLE_KEY=""
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
 RUN npm run build
 
 
@@ -38,4 +43,4 @@ EXPOSE 8000
 # All three steps are safe to re-run on every deploy. The real database lives
 # on the persistent volume mounted at /app/data and survives redeploys, so no
 # user data is seeded here — that was a one-time bootstrap and is now done.
-CMD ["sh", "-c", "alembic upgrade head && python -m app.seed_admin && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "alembic upgrade head && python -m app.cli.seed_admin && python -m app.cli.seed && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

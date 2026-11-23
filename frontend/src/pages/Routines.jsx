@@ -8,13 +8,13 @@
  */
 import React, { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { apiFetch } from '../api'
-import { parseDecimal } from '../num'
-import ExercisePicker from '../components/ExercisePicker'
-import Modal from '../components/Modal'
-import { Loading, ErrorBox, EmptyState, EmptyNote } from '../components/States'
-import { RankBadge, rankAccent, useExerciseRanks } from '../components/RankBadge'
-import { confirmAction } from '../components/ConfirmSheet'
+import { apiFetch } from '../lib/api'
+import { parseDecimal } from '../lib/num'
+import ExercisePicker from '../components/training/ExercisePicker'
+import Modal from '../components/ui/Modal'
+import { Loading, ErrorBox, EmptyState, EmptyNote } from '../components/ui/States'
+import { RankBadge, rankAccent, useExerciseRanks } from '../components/training/RankBadge'
+import { confirmAction } from '../components/ui/ConfirmSheet'
 
 export default function Routines() {
   const [routines, setRoutines] = useState([])

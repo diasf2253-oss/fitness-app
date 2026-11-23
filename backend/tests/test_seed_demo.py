@@ -4,10 +4,16 @@ and fully removable.
 """
 import pytest
 
-from app import seed_demo
-from app.config import settings
+from app.cli import seed_demo
+from app.core.config import settings
 from app.models import (
-    NutritionDay, Session, Set, Tracker, TrackerLog, User, WeightLog,
+    NutritionDay,
+    Session,
+    Set,
+    Tracker,
+    TrackerLog,
+    User,
+    WeightLog,
 )
 from tests.conftest import TestingSession, _make_user
 
@@ -46,7 +52,7 @@ def test_refuses_a_remote_database(monkeypatch):
 
 
 def test_fills_only_the_demo_account(demo_on):
-    other = _make_user("real@example.com", "testpassword123")
+    other = _make_user("real@example.com")
     seed_demo.seed_demo()
 
     db = TestingSession()
@@ -72,7 +78,7 @@ def test_rerun_is_idempotent_and_reset_removes_everything(demo_on, monkeypatch):
     assert _count(Session) == first          # wiped + refilled, not doubled
     assert _count(User, email=seed_demo.DEMO_EMAIL) == 1
 
-    other = _make_user("real@example.com", "testpassword123")
+    other = _make_user("real@example.com")
     monkeypatch.setattr("sys.argv", ["seed_demo", "--reset"])
     seed_demo.main()
     assert _count(User, email=seed_demo.DEMO_EMAIL) == 0

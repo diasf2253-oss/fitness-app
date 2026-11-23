@@ -7,9 +7,9 @@
  */
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { apiFetch } from '../api'
-import { ErrorBox } from '../components/States'
-import { parseDecimal } from '../num'
+import { apiFetch } from '../lib/api'
+import { ErrorBox } from '../components/ui/States'
+import { parseDecimal } from '../lib/num'
 
 // Local calendar date (toISOString alone would shift near midnight)
 function localToday() {

@@ -2,7 +2,7 @@
 and the adaptive calorie engine."""
 from datetime import date
 
-from app.weight_trend import iso_week_start, weekly_averages
+from app.services.diet.weight_trend import iso_week_start, weekly_averages
 
 
 def test_iso_week_start_is_monday():

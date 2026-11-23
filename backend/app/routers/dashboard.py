@@ -18,17 +18,30 @@ from datetime import date, datetime, time, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session as DBSession
 
-from app.auth import require_auth
-from app.db import get_db
-from app.models import NutritionDay, Session as WorkoutSession, SleepLog, StepsLog, User, WeightLog
-from app.routers.health import DERIVED_SOURCES, real_weight_points, resolved_weight_for
-from app.routers.settings import get_or_create_settings
-from app.routers.stats import session_summary
-from app.routers.streak import streak_snapshot
+from app.core.auth import require_auth
+from app.core.db import get_db
+from app.models import NutritionDay, SleepLog, StepsLog, User, WeightLog
+from app.models import Session as WorkoutSession
 from app.schemas import (
-    DashboardOut, DashboardTargets, DashboardTraining, DashboardWeight,
-    MovingAvgPoint, NutritionToday, RecentPR, SleepPoint, StepsPoint, WeightPoint,
+    DashboardOut,
+    DashboardTargets,
+    DashboardTraining,
+    DashboardWeight,
+    MovingAvgPoint,
+    NutritionToday,
+    RecentPR,
+    SleepPoint,
+    StepsPoint,
+    WeightPoint,
 )
+from app.services.health.store import (
+    DERIVED_SOURCES,
+    real_weight_points,
+    resolved_weight_for,
+)
+from app.services.training.stats import session_summary
+from app.services.training.streak import streak_snapshot
+from app.services.user_settings import get_or_create_settings
 
 router = APIRouter(tags=["dashboard"])
 
@@ -150,7 +163,7 @@ def get_dashboard(
     week_volume = 0.0
     recent_prs: list[RecentPR] = []
     for ws in week_sessions:
-        summary = session_summary(ws.id, db=db, current_user=current_user)
+        summary = session_summary(db, ws, current_user.id)
         week_volume += summary.total_volume_kg
         for pr in summary.prs_hit:
             recent_prs.append(RecentPR(**pr.model_dump(), date=ws.started_at.date()))

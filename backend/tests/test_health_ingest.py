@@ -12,8 +12,7 @@ import os
 
 import pytest
 
-from app.models import StepsLog, WeightLog, SleepLog
-
+from app.models import SleepLog, StepsLog, WeightLog
 from tests.conftest import TestingSession
 
 SAMPLE_PAYLOAD_PATH = os.path.join(os.path.dirname(__file__), "sample_health_payload.json")

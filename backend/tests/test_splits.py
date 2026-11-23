@@ -5,10 +5,7 @@ The load-bearing rules: a split is just a grouping (deleting one must never
 delete training days), splits are per-user, and a template builds real days
 with real exercises.
 """
-from app.auth import hash_password
-from app.models import User
-
-from tests.conftest import TestingSession
+from tests.conftest import TestingSession, _make_user, sign_in
 
 
 def test_split_crud(auth_client):
@@ -82,10 +79,7 @@ def test_unknown_template_is_rejected(auth_client):
 def test_splits_are_per_user(auth_client, client):
     auth_client.post("/api/splits", json={"name": "Mine"})
 
-    db = TestingSession()
-    db.add(User(email="other@example.com", password_hash=hash_password("password123"),
-                name="Other", role="user", status="active"))
-    db.commit(); db.close()
-    client.post("/api/auth/login", json={"email": "other@example.com", "password": "password123"})
+    _make_user("other@example.com", name="Other")
+    sign_in(client, "other@example.com")
 
     assert client.get("/api/splits").json() == []

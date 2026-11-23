@@ -3,10 +3,9 @@ Pydantic v2 schemas for request/response validation.
 We never return raw SQLAlchemy objects from API endpoints — always use these.
 """
 from datetime import date, datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
-
 
 # ---------------------------------------------------------------------------
 # Shared config: enable from_attributes so we can build schemas from ORM rows
@@ -815,23 +814,16 @@ class SyncPushOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 class JoinRequest(BaseModel):
-    code: str
-    name: str
-    email: str
-    password: str = Field(min_length=8)
+    # Email and password aren't here: the caller is already signed in with
+    # Supabase, and the email comes from their verified access token.
+    code: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=200)
 
 
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-    remember: bool = False
-
-
-class ChangePasswordRequest(BaseModel):
-    new_password: str = Field(min_length=8)
-    # Required unless the account is on an admin-issued temp password
-    # (must_change_password) — see routers/auth.py.
-    current_password: Optional[str] = None
+class JoinOut(BaseModel):
+    """The account's status after joining: 'pending' for a new account, or
+    the existing account's status when this login was already linked."""
+    status: str
 
 
 class UpdateMeRequest(BaseModel):
@@ -843,8 +835,7 @@ class UserMeOut(OrmBase):
     email: str
     name: str
     role: str
-    status: str
-    must_change_password: bool
+    status: str          # 'pending' | 'active' | 'disabled'
     ingest_token: str
 
 
@@ -861,20 +852,29 @@ class AdminUserOut(OrmBase):
     status: str
     created_at: datetime
     last_login_at: Optional[datetime] = None
+    login_linked: bool = False   # has signed in through Supabase yet
 
 
 class UserStatusUpdate(BaseModel):
-    status: Optional[str] = None   # 'active' | 'disabled'
-    role: Optional[str] = None     # 'admin' | 'user'
+    # Only values the auth layer understands — a typo would otherwise be
+    # stored and silently lock the person out (require_auth treats anything
+    # but 'active' as disabled).
+    status: Optional[Literal["active", "disabled"]] = None
+    role: Optional[Literal["admin", "user"]] = None
 
 
-class TempPasswordOut(BaseModel):
-    temp_password: str
+class ResetLinkOut(BaseModel):
+    email: str
+    action_link: str
 
 
 class InviteCodeCreate(BaseModel):
-    label: Optional[str] = None
-    max_uses: Optional[int] = None
+    label: Optional[str] = Field(default=None, max_length=60)   # e.g. "gym friends"
+    max_uses: Optional[int] = Field(default=None, ge=1)          # None = unlimited
+
+
+class InviteCodeUpdate(BaseModel):
+    active: bool
 
 
 class InviteCodeOut(OrmBase):

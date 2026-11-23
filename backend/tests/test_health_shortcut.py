@@ -18,7 +18,6 @@ from datetime import date, timedelta
 import pytest
 
 from app.models import SleepLog, StepsLog, WeightLog
-
 from tests.conftest import TestingSession
 
 SAMPLE_PATH = os.path.join(os.path.dirname(__file__), "shortcut_sample_payload.json")

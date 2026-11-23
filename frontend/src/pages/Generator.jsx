@@ -6,11 +6,11 @@
  */
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiFetch } from '../api'
-import { Loading, ErrorBox } from '../components/States'
-import PageHero from '../components/PageHero'
-import WidgetLabel from '../components/WidgetLabel'
-import { confirmAction } from '../components/ConfirmSheet'
+import { apiFetch } from '../lib/api'
+import { Loading, ErrorBox } from '../components/ui/States'
+import PageHero from '../components/ui/PageHero'
+import WidgetLabel from '../components/ui/WidgetLabel'
+import { confirmAction } from '../components/ui/ConfirmSheet'
 
 function statusColor(count, t) {
   if (count < t.low) return 'var(--color-muted)'

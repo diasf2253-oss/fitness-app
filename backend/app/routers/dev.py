@@ -24,12 +24,12 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session as DBSession
 
-from app.auth import require_admin
-from app.config import settings
-from app.db import get_db
+from app.core.auth import require_admin
+from app.core.config import settings
+from app.core.db import get_db
 from app.models import NutritionDay, SleepLog, StepsLog, User, WeightLog
-from app.routers.health import upsert_sleep, upsert_steps, upsert_weight
 from app.schemas import NutritionDayCreate
+from app.services.health.store import upsert_sleep, upsert_steps, upsert_weight
 
 router = APIRouter(prefix="/api/dev", tags=["dev"])
 
@@ -47,7 +47,7 @@ def seed_sample_health(
         # 404, not 403: on a real deployment this endpoint should look absent.
         raise HTTPException(status_code=404, detail="Not Found")
 
-    from app.routers.nutrition import upsert_nutrition
+    from app.services.health.store import upsert_nutrition
 
     user_id = current_user.id
     rng = random.Random(42)  # fixed seed → same data every run

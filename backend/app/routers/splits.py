@@ -14,11 +14,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session as DBSession
 
-from app.auth import require_auth
-from app.db import get_db
+from app.core.auth import require_auth
+from app.core.db import get_db
 from app.models import Exercise, Routine, RoutineExercise, Split, User
 from app.schemas import SplitCreate, SplitOut, SplitUpdate
-from app.split_templates import SPLIT_TEMPLATES
+from app.services.training.split_templates import SPLIT_TEMPLATES
 
 router = APIRouter(prefix="/api/splits", tags=["splits"])
 

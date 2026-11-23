@@ -1,8 +1,11 @@
 """Adaptive calorie engine — anchored weekly-trend step model (pure functions)."""
 from datetime import date, timedelta
 
-from app.calorie_adapt import (
-    adapt_target, carbs_from_target, estimate_maintenance, iso_week_start,
+from app.services.diet.calorie_adapt import (
+    adapt_target,
+    carbs_from_target,
+    estimate_maintenance,
+    iso_week_start,
 )
 
 # Mondays. TODAY is a Tuesday, so its week (Jun 22) is the in-progress one;

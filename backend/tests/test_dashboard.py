@@ -9,12 +9,10 @@ from datetime import date, timedelta
 
 import pytest
 
-from app.config import settings
+from app.core.config import settings
 from app.models import NutritionDay, WeightLog
 from app.routers.dashboard import moving_average_7d
-
 from tests.conftest import TestingSession
-
 
 # ---------------------------------------------------------------------------
 # Manual upsert idempotency

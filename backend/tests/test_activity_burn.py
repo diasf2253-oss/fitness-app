@@ -1,5 +1,5 @@
 """Informational activity-burn estimate (does not feed the calorie target)."""
-from app.activity_burn import activity_kcal
+from app.services.diet.activity_burn import activity_kcal
 
 
 def test_activity_kcal_uses_mets():

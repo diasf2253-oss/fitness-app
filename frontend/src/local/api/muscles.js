@@ -1,6 +1,6 @@
 /**
  * Muscle-group taxonomy + name-based auto-tagging, local-first — mirrors
- * backend/app/muscles.py. Only PRIMARY muscle groups count anywhere.
+ * backend/app/services/training/muscles.py. Only PRIMARY muscle groups count anywhere.
  */
 
 export const MUSCLE_GROUPS = [

@@ -6,11 +6,11 @@
  */
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { apiFetch } from '../api'
-import Modal from '../components/Modal'
-import { Loading, ErrorBox } from '../components/States'
-import { RankBadge, rankAccent, useExerciseRanks } from '../components/RankBadge'
-import { confirmAction } from '../components/ConfirmSheet'
+import { apiFetch } from '../lib/api'
+import Modal from '../components/ui/Modal'
+import { Loading, ErrorBox } from '../components/ui/States'
+import { RankBadge, rankAccent, useExerciseRanks } from '../components/training/RankBadge'
+import { confirmAction } from '../components/ui/ConfirmSheet'
 
 const MUSCLE_OPTIONS = [
   'chest', 'back', 'shoulders', 'biceps', 'triceps',

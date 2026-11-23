@@ -9,9 +9,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../api', () => ({ apiFetch: vi.fn(() => Promise.resolve({})) }))
+vi.mock('../lib/api', () => ({ apiFetch: vi.fn(() => Promise.resolve({})) }))
 
-import { apiFetch } from '../api'
+import { apiFetch } from '../lib/api'
 import { SetRow } from './Workout'
 
 const SET = {

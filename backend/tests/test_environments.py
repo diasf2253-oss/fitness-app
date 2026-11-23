@@ -6,7 +6,7 @@ Staging/production environment plumbing:
 """
 from fastapi.testclient import TestClient
 
-from app.config import Settings, settings
+from app.core.config import Settings, settings
 from app.main import app
 
 client = TestClient(app)
@@ -38,3 +38,12 @@ class TestCorsSettings:
 
     def test_app_env_defaults_to_production(self):
         assert Settings(_env_file=None).app_env == "production"
+
+
+def test_postgres_connections_skip_server_side_prepared_statements():
+    """Supabase's transaction pooler can't keep a prepared statement between
+    requests, so psycopg's automatic preparing must be off for Postgres."""
+    from app.core.db import _connect_args
+    assert _connect_args("postgresql+psycopg://u:p@pooler.supabase.com:6543/postgres") == {
+        "prepare_threshold": None}
+    assert _connect_args("sqlite:///./fitness.sqlite3") == {"check_same_thread": False}

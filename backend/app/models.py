@@ -8,7 +8,7 @@ as TEXT in SQLite and as jsonb in Postgres — no code change needed.
 Sync (multi-device): entity tables carry a `uuid` (globally unique identity —
 integer PKs are device-local and collide across devices) and `updated_at`
 (last-write-wins merge). Date-keyed health tables merge on `date`, so they
-carry `updated_at` only. See app/sync.py.
+carry `updated_at` only. See app/services/sync.py.
 
 Multi-user: every data table below carries a `user_id` FK to `users.id`,
 scoping it to its owner. Two exceptions: `Exercise.user_id` is nullable —
@@ -20,18 +20,27 @@ and `StreakState` used to be hardcoded `id=1` singleton rows; `user_id` is
 now their actual primary key, so "one row per user" is structurally
 enforced rather than a convention.
 """
-from datetime import datetime, date
+import secrets
+from datetime import date, datetime
 from typing import Optional
 from uuid import uuid4
-import secrets
 
 from sqlalchemy import (
-    Boolean, Date, DateTime, Float, ForeignKey,
-    Integer, JSON, String, Text, UniqueConstraint, Index,
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db import Base
+from app.core.db import Base
 
 
 def _new_uuid() -> str:
@@ -68,20 +77,35 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # The Supabase Auth user id (the access token's `sub`) this account signs
+    # in as. NULL until the person's first sign-in through Supabase, when
+    # app/core/auth.py links it by verified email. See app/core/auth.py.
+    supabase_uid: Mapped[Optional[str]] = mapped_column(
+        String(36), unique=True, index=True, nullable=True
+    )
+    # Legacy: argon2 hashes from before Supabase Auth. Nothing reads them any
+    # more (passwords live in Supabase); kept until a cleanup migration drops
+    # this column together with must_change_password and auth_session.
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     # 'admin' | 'user'
     role: Mapped[str] = mapped_column(String(20), default="user", nullable=False)
     # 'pending' | 'active' | 'disabled'
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
-    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # legacy, unused
     # Bearer credential for the Apple Health Shortcut/HAE pushes — separate
-    # from the browser cookie session, since a Shortcut can't hold a cookie.
+    # from the Supabase sign-in, since a Shortcut can't run one.
     ingest_token: Mapped[str] = mapped_column(
         String(64), default=_new_ingest_token, unique=True, index=True, nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    # Despite the name, "last seen": refreshed (hourly) by require_auth.
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    @property
+    def login_linked(self) -> bool:
+        """Whether this account has signed in through Supabase yet."""
+        return self.supabase_uid is not None
 
 
 class InviteCode(Base):
@@ -97,8 +121,10 @@ class InviteCode(Base):
 
 
 class AuthSession(Base):
-    """A logged-in browser session. Table name `auth_session`, not `session`
-    — that name is taken by the workout Session model/table below."""
+    """Legacy: a browser session from the old cookie login. Unused since the
+    switch to Supabase Auth; the table stays until the cleanup migration.
+    Table name `auth_session`, not `session` — that name is taken by the
+    workout Session model/table below."""
     __tablename__ = "auth_session"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -334,7 +360,7 @@ class RoutineNote(SyncMixin, Base):
         DateTime, default=datetime.utcnow, nullable=False
     )
     # Informational session references (no FK, so deleting a session is safe).
-    # Device-local integer ids — excluded from sync (see app/sync.py).
+    # Device-local integer ids — excluded from sync (see app/services/sync.py).
     created_in_session_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     surfaced_in_session_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     # Pending while NULL; set when consumed at the next session of the routine.
@@ -504,7 +530,7 @@ class AppSettings(UpdatedAtMixin, Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True, nullable=False
     )
     # The adaptive calorie anchor — nudged ±a step each completed week by the
-    # weight trend (see app.calorie_adapt). Never recomputed from scratch.
+    # weight trend (see app.services.diet.calorie_adapt). Never recomputed from scratch.
     calorie_target: Mapped[int] = mapped_column(Integer, default=2300)
     protein_target_g: Mapped[int] = mapped_column(Integer, default=180)
     fat_max_g: Mapped[int] = mapped_column(Integer, default=100)
@@ -541,7 +567,7 @@ class AppSettings(UpdatedAtMixin, Base):
 
     # ---- Training ----
     # {muscle: [low, high]} weekly volume-target overrides; null ⇒ defaults in
-    # app.muscles. Read by the sets-per-week analytics and the generator.
+    # app.services.training.muscles. Read by the sets-per-week analytics and the generator.
     volume_targets: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     # {exercise_uuid: "Hammer Strength"} — which brand of machine/cable/smith
     # this user trains on. Lives here, not on Exercise, because seeded exercises

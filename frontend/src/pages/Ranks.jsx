@@ -5,13 +5,13 @@
  * calibrated lift show "unranked" rather than a fake rank.
  */
 import React, { useEffect, useMemo, useState } from 'react'
-import { apiFetch } from '../api'
-import { Loading, ErrorBox } from '../components/States'
-import WidgetLabel from '../components/WidgetLabel'
-import RankEmblem, { overallRank } from '../components/RankEmblem'
+import { apiFetch } from '../lib/api'
+import { Loading, ErrorBox } from '../components/ui/States'
+import WidgetLabel from '../components/ui/WidgetLabel'
+import RankEmblem, { overallRank } from '../components/training/RankEmblem'
 import { IMG_W, IMG_H, MUSCLE_SHAPES } from '../data/muscleShapes'
-import { detectRankUp } from '../rankSignature'
-import { playRankUp } from '../audio'
+import { detectRankUp } from '../lib/rankSignature'
+import { playRankUp } from '../lib/audio'
 
 // Persisted promotion score — compared on each Ranks load to fire the rank-up
 // cue exactly when the ladder actually climbs (device-local; not synced data).

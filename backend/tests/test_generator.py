@@ -3,10 +3,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.generator import arrange, generate, is_compound
 from app.models import Exercise, Routine
-from app.muscles import DEFAULT_VOLUME_TARGETS
-
+from app.services.training.generator import arrange, generate, is_compound
+from app.services.training.muscles import DEFAULT_VOLUME_TARGETS
 from tests.conftest import TestingSession
 
 

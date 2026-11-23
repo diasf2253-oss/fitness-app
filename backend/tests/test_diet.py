@@ -2,7 +2,6 @@
 from datetime import date, timedelta
 
 from app.models import NutritionDay, WeightLog
-
 from tests.conftest import TestingSession
 
 

@@ -16,3 +16,5 @@ scripts/.env.backup
 **/.venv/
 **/node_modules/
 graphify-out/
+# Private notes (runbooks, workbooks)
+notes/

@@ -5,8 +5,8 @@
  * synced data, and ranks need a bodyweight to compute).
  */
 import React, { useState } from 'react'
-import { apiFetch } from '../api'
-import { ErrorBox } from './States'
+import { apiFetch } from '../lib/api'
+import { ErrorBox } from './ui/States'
 
 export default function Onboarding({ onDone }) {
   const [sex, setSex] = useState('male')

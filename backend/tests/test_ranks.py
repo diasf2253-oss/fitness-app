@@ -4,11 +4,16 @@ from datetime import date, datetime, time, timedelta
 import pytest
 
 from app.models import Exercise, Session, SessionExercise, Set, WeightLog
-from app.ranks import (
-    COMMON_ANCHORS, STANDARDS, compute_rank, effective_anchors, epley_1rm,
-    exercise_benchmark, resolve_config, tier_lowers,
+from app.services.training.ranks import (
+    COMMON_ANCHORS,
+    STANDARDS,
+    compute_rank,
+    effective_anchors,
+    epley_1rm,
+    exercise_benchmark,
+    resolve_config,
+    tier_lowers,
 )
-
 from tests.conftest import TestingSession
 
 SQUAT = STANDARDS["squat"]                    # [1.25, 1.50, 1.75, 2.25, 2.75]
@@ -207,7 +212,7 @@ def test_bodyweight_ignores_derived_sources(auth_client):
 def test_exercise_ranks_map_ranked_and_unranked(auth_client):
     """Keyed by exercise id: a logged lift ranks; an untouched one stays
     unranked with the muted colour, so the UI can always look one up."""
-    import app.ranks as R
+    import app.services.training.ranks as R
 
     uid = auth_client.test_user_id
     db = TestingSession()
@@ -236,7 +241,7 @@ def test_exercise_ranks_map_ranked_and_unranked(auth_client):
 
 def test_exercise_ranks_unranked_without_bodyweight(auth_client):
     """Ranks divide by bodyweight — with no real reading nothing can rank."""
-    import app.ranks as R
+    import app.services.training.ranks as R
 
     uid = auth_client.test_user_id
     db = TestingSession()
@@ -258,8 +263,8 @@ def test_exercise_ranks_unranked_without_bodyweight(auth_client):
 def test_adductors_is_a_tracked_rankable_group(auth_client):
     """It used to live in BODY_MAP_EXTRA (drawn but never rankable). It must now
     behave like any other muscle: tracked, listed once, and able to rank."""
-    import app.ranks as R
-    from app.muscles import MUSCLE_GROUPS
+    import app.services.training.ranks as R
+    from app.services.training.muscles import MUSCLE_GROUPS
 
     assert "Adductors" in MUSCLE_GROUPS
     assert "Adductors" not in R.BODY_MAP_EXTRA      # else the body map lists it twice
@@ -287,7 +292,7 @@ def test_adductors_has_weekly_volume_targets(auth_client):
 def test_adductor_names_auto_tag(auth_client):
     """Auto-tagging routes adduction work to the new group — and leaves a sumo
     deadlift alone (it's a posterior-chain lift, not an adductor exercise)."""
-    from app.muscles import suggest_muscle_group
+    from app.services.training.muscles import suggest_muscle_group
 
     assert suggest_muscle_group("Hip Adduction Machine", None) == "Adductors"
     assert suggest_muscle_group("Copenhagen Plank", None) == "Adductors"

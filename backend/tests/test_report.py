@@ -1,10 +1,17 @@
 """Weekly / biweekly report — section assembly, PR detection, graceful gaps."""
 from datetime import date, datetime, time, timedelta
 
-from app.models import Exercise, NutritionDay, Session, SessionExercise, Set, SleepLog, WeightLog
-from app.report import build_report, report_markdown
-from app.weight_trend import iso_week_start
-
+from app.models import (
+    Exercise,
+    NutritionDay,
+    Session,
+    SessionExercise,
+    Set,
+    SleepLog,
+    WeightLog,
+)
+from app.services.diet.weight_trend import iso_week_start
+from app.services.report import build_report, report_markdown
 from tests.conftest import TestingSession
 
 TODAY = date.today()

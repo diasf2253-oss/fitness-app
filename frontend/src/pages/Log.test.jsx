@@ -10,7 +10,7 @@ import React from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../api', () => ({
+vi.mock('../lib/api', () => ({
   apiFetch: vi.fn(path => {
     if (path.startsWith('/api/health/weight/estimate')) {
       return Promise.resolve({ weight_kg: null, estimated: false })
@@ -19,7 +19,7 @@ vi.mock('../api', () => ({
   }),
 }))
 
-import { apiFetch } from '../api'
+import { apiFetch } from '../lib/api'
 import Log from './Log'
 
 function renderLog() {

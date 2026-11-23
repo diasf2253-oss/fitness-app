@@ -11,9 +11,9 @@ import React, { useEffect, useState } from 'react'
 import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { apiFetch } from '../api'
-import { Loading, ErrorBox } from '../components/States'
-import WidgetLabel from '../components/WidgetLabel'
+import { apiFetch } from '../lib/api'
+import { Loading, ErrorBox } from '../components/ui/States'
+import WidgetLabel from '../components/ui/WidgetLabel'
 
 const GRID = 'rgba(241, 234, 217,0.07)'
 const AXIS = '#93a08c'
